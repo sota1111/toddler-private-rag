@@ -1,0 +1,119 @@
+import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import DashboardPage from './pages/DashboardPage';
+import InfoListPage from './pages/InfoListPage';
+import InfoCreatePage from './pages/InfoCreatePage';
+
+const queryClient = new QueryClient();
+
+const NavLink: React.FC<{ to: string; children: React.ReactNode }> = ({ to, children }) => {
+  const location = useLocation();
+  const isActive = location.pathname === to;
+  return (
+    <Link
+      to={to}
+      className={`px-3 py-2 rounded-md text-sm font-medium ${
+        isActive
+          ? 'bg-blue-700 text-white'
+          : 'text-blue-100 hover:bg-blue-600 hover:text-white'
+      } transition-colors`}
+    >
+      {children}
+    </Link>
+  );
+};
+
+const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <nav className="bg-blue-500 shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center">
+              <div className="flex-shrink-0 text-white font-bold text-xl">
+                保育園アシスタント
+              </div>
+              <div className="hidden md:block ml-10 flex items-baseline space-x-4">
+                <NavLink to="/">ダッシュボード</NavLink>
+                <NavLink to="/list">一覧</NavLink>
+                <NavLink to="/create">登録</NavLink>
+              </div>
+            </div>
+            <div className="md:hidden">
+              <button
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                className="text-white hover:text-gray-200 focus:outline-none"
+              >
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  {isMenuOpen ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
+                  )}
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile menu */}
+        {isMenuOpen && (
+          <div className="md:hidden bg-blue-600 px-2 pt-2 pb-3 space-y-1 sm:px-3">
+            <Link
+              to="/"
+              onClick={() => setIsMenuOpen(false)}
+              className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-700"
+            >
+              ダッシュボード
+            </Link>
+            <Link
+              to="/list"
+              onClick={() => setIsMenuOpen(false)}
+              className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-700"
+            >
+              一覧
+            </Link>
+            <Link
+              to="/create"
+              onClick={() => setIsMenuOpen(false)}
+              className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-700"
+            >
+              登録
+            </Link>
+          </div>
+        )}
+      </nav>
+
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        {children}
+      </main>
+      
+      <footer className="bg-white border-t border-gray-200 py-4 mt-10">
+        <div className="text-center text-gray-500 text-sm">
+          &copy; 2026 保育園情報アシスタント MVP
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Router>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/list" element={<InfoListPage />} />
+            <Route path="/create" element={<InfoCreatePage />} />
+          </Routes>
+        </Layout>
+      </Router>
+    </QueryClientProvider>
+  );
+};
+
+export default App;
