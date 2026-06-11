@@ -1,0 +1,39 @@
+import datetime
+from pydantic import BaseModel, ConfigDict
+from typing import Optional
+
+class NurseryInfoBase(BaseModel):
+    title: str
+    info_type: str
+    content: str
+    date: Optional[datetime.date] = None
+    event_date: Optional[datetime.date] = None
+    due_date: Optional[datetime.date] = None
+    items: Optional[str] = None
+    status: Optional[str] = "未対応"
+    priority: Optional[str] = "普通"
+    tags: Optional[str] = None
+    memo: Optional[str] = None
+
+class NurseryInfoCreate(NurseryInfoBase):
+    pass
+
+class NurseryInfoUpdate(BaseModel):
+    title: Optional[str] = None
+    info_type: Optional[str] = None
+    content: Optional[str] = None
+    date: Optional[datetime.date] = None
+    event_date: Optional[datetime.date] = None
+    due_date: Optional[datetime.date] = None
+    items: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    tags: Optional[str] = None
+    memo: Optional[str] = None
+
+class NurseryInfoResponse(NurseryInfoBase):
+    id: int
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
