@@ -50,3 +50,22 @@
 - バックエンド: http://localhost:8000
 - フロントエンド: http://localhost:5173 (Vite 開発サーバー)
 - API ドキュメント: http://localhost:8000/docs
+
+## 認証設定
+
+このアプリは JWT 認証を使用しています。
+
+### 環境変数の設定
+
+`.env.example` をコピーして `.env` を作成し、以下の変数を設定してください：
+
+```env
+AUTH_USERNAME=your_username
+AUTH_PASSWORD=your_password
+AUTH_SECRET_KEY=your_secret_key_at_least_32_chars
+```
+
+### ログイン
+
+アプリにアクセスすると自動的にログイン画面へリダイレクトされます。
+設定した `AUTH_USERNAME` / `AUTH_PASSWORD` でログインしてください。
