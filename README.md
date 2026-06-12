@@ -69,3 +69,56 @@ AUTH_SECRET_KEY=your_secret_key_at_least_32_chars
 
 アプリにアクセスすると自動的にログイン画面へリダイレクトされます。
 設定した `AUTH_USERNAME` / `AUTH_PASSWORD` でログインしてください。
+
+## GCP デプロイ準備
+
+### 概要
+
+このアプリは FastAPI (Backend) + React (Frontend) 構成のプライベート RAG システムであり、Cloud Run にデプロイできます。
+
+**重要**: 保育園資料・個人メモなどのプライベートデータを扱うため、認証・Secret 管理を徹底してください。
+
+### コンテナ化
+
+```bash
+# Backend
+docker build -t toddler-private-rag-backend ./backend
+docker run -p 8000:8000 --env-file .env toddler-private-rag-backend
+
+# Frontend
+docker build -t toddler-private-rag-frontend ./frontend
+docker run -p 8080:8080 toddler-private-rag-frontend
+```
+
+### GCP 実行環境
+
+- **Backend**: Cloud Run (ポート `8000`)
+- **Frontend**: Cloud Run (ポート `8080`) または Firebase Hosting
+
+### データ永続化について
+
+現在 SQLite/VectorDB をローカルで使用しています。Cloud Run はステートレスなため、本番環境では以下を検討してください:
+
+- ドキュメントDB: **Firestore** への移行
+- VectorDB: **Vertex AI Vector Search** または Cloud Run 内の永続ストレージ
+- アップロードファイル: **Cloud Storage** への保存
+
+### プライバシー・セキュリティ
+
+- 保育園資料・個人メモは外部に送信しないこと
+- 外部 LLM API を使用する場合はデータ送信範囲を確認すること
+- 実データなしでもデプロイ準備状態を確認できます（空の状態でも起動可能）
+
+### 環境変数
+
+| 変数名 | 説明 |
+|--------|------|
+| AUTH_USERNAME | 認証ユーザー名 |
+| AUTH_PASSWORD | 認証パスワード（Secret Manager 推奨） |
+| AUTH_SECRET_KEY | JWT署名キー（Secret Manager 推奨） |
+| OPENAI_API_KEY / GEMINI_API_KEY | LLM API キー（Secret Manager 推奨） |
+
+### 注意事項
+
+- 実際の `.env` ファイルは Git 管理対象外 (`.gitignore` 設定済み)
+- 個人情報・保育園資料は `.env` で管理するパスに保存し、コードに直書きしないこと
