@@ -2,24 +2,22 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base, SessionLocal
 from .routers import info
+from .routers import auth as auth_router
 from .seed import seed_data
 from . import models
 
-# Create tables
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="保育園情報アシスタント API")
 
-# CORS settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Startup event to seed data
 @app.on_event("startup")
 def startup_event():
     db = SessionLocal()
@@ -28,6 +26,7 @@ def startup_event():
     finally:
         db.close()
 
+app.include_router(auth_router.router, prefix="/api/auth", tags=["auth"])
 app.include_router(info.router, prefix="/api")
 
 @app.get("/health")
