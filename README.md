@@ -52,6 +52,23 @@
 - API ドキュメント: http://localhost:8000/docs
 
 ## 認証設定
+### GCP Secret Manager セットアップ
+
+本番環境（Cloud Run）では機密情報を Secret Manager で管理します。初回デプロイ前に以下のコマンドでシークレットを作成してください。
+
+```bash
+# パスワードの作成
+echo -n "your-password" | gcloud secrets create rag-auth-password --data-file=- --project=YOUR_PROJECT_ID
+
+# JWT署名キーの作成
+echo -n "your-secret-key" | gcloud secrets create rag-auth-secret-key --data-file=- --project=YOUR_PROJECT_ID
+
+# Cloud Run サービスアカウントへの権限付与
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+  --member="serviceAccount:YOUR_PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+```
+
 
 このアプリは JWT 認証を使用しています。
 
