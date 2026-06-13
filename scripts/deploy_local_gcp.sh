@@ -34,7 +34,16 @@ gcloud builds submit ./backend \
   --tag="${IMAGE}:latest" \
   --timeout=600s
 
+
+# Secret Manager: 初回デプロイ前に以下を実行してください
+# echo -n "value" | gcloud secrets create rag-auth-password --data-file=- --project=$PROJECT_ID
+# echo -n "value" | gcloud secrets create rag-auth-secret-key --data-file=- --project=$PROJECT_ID
+# gcloud projects add-iam-policy-binding $PROJECT_ID \
+#   --member="serviceAccount:YOUR_PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+#   --role="roles/secretmanager.secretAccessor"
+
 gcloud run deploy "${SERVICE_NAME}" \
+  --set-secrets="AUTH_PASSWORD=rag-auth-password:latest,AUTH_SECRET_KEY=rag-auth-secret-key:latest" \
   --image="${IMAGE}:latest" \
   --project="${PROJECT_ID}" \
   --region="${REGION}" \
