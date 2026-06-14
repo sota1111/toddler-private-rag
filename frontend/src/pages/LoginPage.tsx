@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/useAuth'
 export default function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -15,10 +15,19 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      await login(username, password)
+      await login(email, password)
       navigate('/')
-    } catch {
-      setError('ユーザー名またはパスワードが正しくありません')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : ''
+      if (msg.includes('auth/invalid-credential') || msg.includes('auth/wrong-password') || msg.includes('auth/user-not-found')) {
+        setError('メールアドレスまたはパスワードが正しくありません')
+      } else if (msg.includes('auth/too-many-requests')) {
+        setError('ログイン試行が多すぎます。しばらく待ってから再試行してください')
+      } else if (msg.includes('許可されていません')) {
+        setError('このメールアドレスは許可されていません')
+      } else {
+        setError('ログインに失敗しました')
+      }
     } finally {
       setLoading(false)
     }
@@ -30,13 +39,14 @@ export default function LoginPage() {
         <h2 className="text-2xl font-bold text-center text-gray-900">ログイン</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">ユーザー名</label>
+            <label className="block text-sm font-medium text-gray-700">メールアドレス</label>
             <input
-              type="text"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
               required
               className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder="your-email@example.com"
             />
           </div>
           <div>

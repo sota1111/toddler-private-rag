@@ -27,7 +27,7 @@ const NavLink: React.FC<{ to: string; children: React.ReactNode }> = ({ to, chil
 };
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated, username, logout } = useAuth();
+  const { isAuthenticated, email, logout } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (
@@ -50,7 +50,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             <div className="hidden md:flex items-center space-x-3">
               {isAuthenticated && (
                 <>
-                  <span className="text-blue-100 text-sm">{username}</span>
+                  <span className="text-blue-100 text-sm">{email}</span>
                   <button onClick={logout} className="text-blue-100 hover:text-white text-sm px-3 py-1 rounded hover:bg-blue-600">ログアウト</button>
                 </>
               )}
