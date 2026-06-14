@@ -1,18 +1,9 @@
 import axios from 'axios';
 import type { NurseryInfo, NurseryInfoCreate } from '../types';
 
-const TOKEN_KEY = 'auth_token';
-
 const api = axios.create({
   baseURL: '/api',
-});
-
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem(TOKEN_KEY);
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
+  withCredentials: true,
 });
 
 export const getInfoList = async (params?: { q?: string; info_type?: string; status?: string; tag?: string }): Promise<NurseryInfo[]> => {
