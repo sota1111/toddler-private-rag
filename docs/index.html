@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Toddler Private RAG — Demo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #333; line-height: 1.6; }
+    .hero {
+      background: linear-gradient(135deg, #6a1b9a 0%, #4a148c 100%);
+      color: white;
+      padding: 80px 24px 60px;
+      text-align: center;
+    }
+    .hero h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 700; margin-bottom: 16px; }
+    .hero p { font-size: clamp(1rem, 2.5vw, 1.25rem); opacity: 0.9; max-width: 600px; margin: 0 auto 32px; }
+    .badge { display: inline-block; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); border-radius: 20px; padding: 6px 16px; font-size: 0.85rem; margin: 4px; }
+    .btn {
+      display: inline-block;
+      background: white;
+      color: #6a1b9a;
+      text-decoration: none;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 1rem;
+      margin-top: 16px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+    .features { padding: 60px 24px; max-width: 1000px; margin: 0 auto; }
+    .features h2 { text-align: center; font-size: 1.8rem; margin-bottom: 40px; color: #222; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px; }
+    .card {
+      background: #f8f9fa;
+      border-radius: 12px;
+      padding: 28px 24px;
+      border-left: 4px solid #6a1b9a;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+    .card .icon { font-size: 2rem; margin-bottom: 12px; }
+    .card h3 { font-size: 1rem; font-weight: 600; margin-bottom: 8px; }
+    .card p { font-size: 0.9rem; color: #666; }
+    .tech { background: #f0f4f8; padding: 40px 24px; text-align: center; }
+    .tech h2 { font-size: 1.4rem; margin-bottom: 20px; color: #555; }
+    .tech-badge {
+      display: inline-block;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 20px;
+      padding: 6px 16px;
+      font-size: 0.85rem;
+      margin: 4px;
+      color: #444;
+    }
+    footer { text-align: center; padding: 24px; color: #999; font-size: 0.85rem; }
+    footer a { color: #6a1b9a; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Toddler Private RAG</h1>
+    <p>保育園・育児情報に特化したプライベートRAGアシスタント。家庭内データを活用して育児をAIがサポート。</p>
+    <div><span class="badge">🤖 AI アシスタント</span><span class="badge">🔒 プライベート</span><span class="badge">RAG</span></div>
+    <br>
+    <a href="https://github.com/sota1111/toddler-private-rag" class="btn" target="_blank" rel="noopener">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle;margin-right:6px"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+      View on GitHub
+    </a>
+  </div>
+  <section class="features">
+    <h2>主な機能</h2>
+    <div class="grid">
+            <div class="card">
+        <div class="icon">🤖</div>
+        <h3>育児特化AIアシスタント</h3>
+        <p>保育園・育児に関する質問にAIが的確に回答</p>
+      </div>
+      <div class="card">
+        <div class="icon">🔒</div>
+        <h3>プライベートデータ保護</h3>
+        <p>家庭内データをローカル処理してプライバシーを完全保護</p>
+      </div>
+      <div class="card">
+        <div class="icon">📖</div>
+        <h3>知識ベース構築</h3>
+        <p>保育園の連絡帳・お知らせを自動でRAGデータベースに追加</p>
+      </div>
+      <div class="card">
+        <div class="icon">💬</div>
+        <h3>自然言語質問応答</h3>
+        <p>「今日の持ち物は？」など自然な質問に即答</p>
+      </div>
+    </div>
+  </section>
+  <div class="tech">
+    <h2>技術スタック</h2>
+    <span class="tech-badge">TypeScript</span> <span class="tech-badge">RAG</span> <span class="tech-badge">Vector Database</span> <span class="tech-badge">LLM</span> <span class="tech-badge">Privacy-First</span>
+  </div>
+  <footer>
+    <p>Built with ❤️ · <a href="https://github.com/sota1111/toddler-private-rag" target="_blank">GitHub</a></p>
+  </footer>
+</body>
+</html>
