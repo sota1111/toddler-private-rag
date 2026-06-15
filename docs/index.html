@@ -1,264 +1,276 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Toddler Private RAG 🤖</title>
-    <style>
-        :root {
-            --primary-gradient: linear-gradient(135deg, #667eea, #764ba2);
-            --bg-color: #f5f7fa;
-            --text-color: #2d3436;
-            --card-radius: 20px;
-        }
-        body {
-            font-family: 'Hiragino Sans', 'Arial', sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 0;
-        }
-        header {
-            background: var(--primary-gradient);
-            padding: 3rem 1rem;
-            text-align: center;
-            color: white;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        main {
-            max-width: 800px;
-            margin: -2rem auto 2rem;
-            padding: 0 1rem;
-        }
-        .chat-container {
-            background: white;
-            border-radius: var(--card-radius);
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            height: 500px;
-        }
-        .chat-messages {
-            flex: 1;
-            padding: 1.5rem;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-            background: #fafafa;
-        }
-        .message {
-            max-width: 80% ;
-            padding: 1rem;
-            border-radius: 15px;
-            font-size: 0.95rem;
-            line-height: 1.5;
-            position: relative;
-        }
-        .message-ai {
-            align-self: flex-start;
-            background: #fff;
-            color: var(--text-color);
-            border-bottom-left-radius: 2px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        }
-        .message-user {
-            align-self: flex-end;
-            background: #667eea;
-            color: white;
-            border-bottom-right-radius: 2px;
-        }
-        .chat-input-area {
-            padding: 1.5rem;
-            border-top: 1px solid #eee;
-            background: white;
-        }
-        .preset-questions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-        }
-        .q-btn {
-            padding: 0.6rem 1rem;
-            background: #f0f2f5;
-            border: none;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: background 0.2s;
-            font-family: inherit;
-        }
-        .q-btn:hover { background: #e4e6e9; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Child Care AI Assistant</title>
+<style>
+  :root {
+    --bg: #f0faf8;
+    --primary: #00897b;
+    --card-bg: #e8f5e9;
+    --accent: #ffa000;
+    --text: #263238;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  /* Header */
+  header {
+    background: #fff;
+    padding: 1rem 2rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 10;
+  }
+  h1 { margin: 0; font-size: 1.3rem; color: var(--primary); display: flex; align-items: center; gap: 0.5rem; }
+  .header-stats { display: flex; gap: 1.5rem; font-size: 0.85rem; color: #546e7a; }
+  
+  /* Main */
+  .container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+  .chat-area {
+    flex: 65;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border-right: 1px solid #cfd8dc;
+  }
+  .sources-panel {
+    flex: 35;
+    background: var(--bg);
+    padding: 1.5rem;
+    overflow-y: auto;
+  }
 
-        .knowledge-base {
-            margin-top: 3rem;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1.5rem;
-        }
-        .kb-card {
-            padding: 1.5rem;
-            border-radius: var(--card-radius);
-            color: white;
-            text-align: center;
-        }
-        .typing {
-            font-style: italic;
-            color: #999;
-            font-size: 0.8rem;
-        }
-        
-        .review-section {
-            margin-top: 4rem;
-            padding: 2rem;
-            background: white;
-            border-radius: var(--card-radius);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        }
-        .review-card { margin-bottom: 1.5rem; }
-        .review-author { font-weight: bold; color: #764ba2; display: block; margin-bottom: 0.3rem; }
+  /* Chat */
+  .chat-history {
+    flex: 1;
+    padding: 2rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  .msg { max-width: 80%; line-height: 1.5; }
+  .msg-user { align-self: flex-end; background: #e0f2f1; padding: 1rem; border-radius: 16px 16px 0 16px; }
+  .msg-ai { align-self: flex-start; padding: 1rem 0; }
+  .msg-ai-content { margin-bottom: 1rem; }
+  .msg-ai-content strong { color: var(--primary); }
+  .msg-ai-content ol { padding-left: 1.5rem; }
+  .meta-info {
+    font-size: 0.8rem;
+    color: #78909c;
+    background: #f5f5f5;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    display: inline-block;
+  }
+  .confidence-bar {
+    display: inline-block;
+    color: var(--primary);
+    font-family: monospace;
+    letter-spacing: -1px;
+  }
 
-        footer {
-            text-align: center;
-            padding: 3rem 1rem;
-            color: #999;
-            font-weight: bold;
-        }
-    </style>
+  /* Typing Cursor */
+  .cursor {
+    display: inline-block;
+    width: 8px;
+    height: 1em;
+    background-color: var(--primary);
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* Input */
+  .input-area {
+    padding: 1rem 2rem;
+    border-top: 1px solid #cfd8dc;
+    background: #fafafa;
+  }
+  .preset-btns { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+  .preset-btn {
+    background: #fff; border: 1px solid var(--primary); color: var(--primary);
+    padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.85rem; cursor: pointer; transition: all 0.2s;
+  }
+  .preset-btn:hover { background: var(--primary); color: #fff; }
+  
+  .input-box { display: flex; gap: 1rem; }
+  input[type="text"] { flex: 1; padding: 0.8rem 1rem; border: 1px solid #cfd8dc; border-radius: 24px; outline: none; }
+  .send-btn { background: var(--primary); color: white; border: none; padding: 0 1.5rem; border-radius: 24px; cursor: pointer; font-weight: bold; }
+
+  /* Sources Panel */
+  .sources-panel h2 { margin-top: 0; font-size: 1.1rem; color: var(--text); border-bottom: 2px solid var(--primary); padding-bottom: 0.5rem; display: inline-block; }
+  .source-card {
+    background: var(--card-bg);
+    border: 1px solid #c8e6c9;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+  }
+  .source-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+  .source-title { font-weight: bold; color: var(--primary); font-size: 0.95rem; }
+  .source-match { background: var(--accent); color: white; padding: 2px 6px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; }
+  .source-excerpt { font-size: 0.85rem; color: #546e7a; line-height: 1.4; }
+
+  details { margin: 1rem 2rem; padding: 1rem; background: #fff; border: 1px solid #cfd8dc; border-radius: 8px; font-size: 0.85rem; }
+  summary { cursor: pointer; font-weight: bold; color: var(--primary); }
+</style>
 </head>
 <body>
+  <header>
+    <h1>🍼 Child Care AI Assistant</h1>
+    <div class="header-stats">
+      <span>ナレッジ件数: 1,240件</span>
+      <span>モデル: Local RAG (Llama3-8B)</span>
+      <span>データ更新日: 2023/10/20</span>
+    </div>
+  </header>
 
-<header>
-    <h1>🤖 育児AIアシスタント</h1>
-    <p>保育園の書類や育児知識を、プライベートにRAG検索</p>
-</header>
-
-<main>
-    <div class="chat-container">
-        <div class="chat-messages" id="chatMessages">
-            <div class="message message-ai">
-                こんにちは！保育園・育児に関することなら何でも聞いてください 😊
-            </div>
+  <div class="container">
+    <div class="chat-area">
+      <div class="chat-history" id="chat-history">
+        <div class="msg msg-user">1歳半の子供の食欲が急に落ちました。病気ではないようですが心配です。</div>
+        <div class="msg msg-ai">
+          <div class="msg-ai-content">
+            1歳半頃のお子様の食欲低下についてですね。いただいた症状から、これは多くの子どもに見られる<strong>「生理的食欲不振」</strong>または<strong>「遊び食べ」</strong>の時期に入った可能性が高いです。<br><br>
+            当家の記録と一般的な小児科ガイドラインによると、以下の理由が考えられます：<br>
+            <ol>
+              <li>成長のペースが乳児期より緩やかになり、必要なカロリーが減るため。</li>
+              <li>自己主張が強くなり、「自分で決めたい」という意志の表れ。</li>
+              <li>食事よりも遊びへの興味が勝っている状態。</li>
+            </ol>
+            <strong>対策：</strong> 無理に食べさせようとせず、食事の時間を30分程度で切り上げるのが効果的です。また、1日のトータル、あるいは数日間のトータルで栄養が取れていれば問題ありません。
+          </div>
+          <div class="meta-info">
+            ソース: [1][2][3] | 信頼度: <span class="confidence-bar">████████░░</span> 82%
+          </div>
         </div>
-        <div class="chat-input-area">
-            <div class="preset-questions" id="questionButtons"></div>
-            <div id="typingIndicator" class="typing" style="display: none;">AIが回答を生成中...</div>
+      </div>
+      
+      <div class="input-area">
+        <div class="preset-btns">
+          <button class="preset-btn" onclick="simulateChat('離乳食の進め方')">離乳食の進め方</button>
+          <button class="preset-btn" onclick="simulateChat('夜泣き対策')">夜泣き対策</button>
+          <button class="preset-btn" onclick="simulateChat('発達マイルストーン')">発達マイルストーン</button>
+          <button class="preset-btn" onclick="simulateChat('予防接種スケジュール')">予防接種スケジュール</button>
         </div>
+        <div class="input-box">
+          <input type="text" placeholder="育児に関する質問を入力...">
+          <button class="send-btn">送信</button>
+        </div>
+      </div>
+      
+      <details>
+        <summary>🤖 Design Credits & AI Reviews</summary>
+        <div style="margin-top:0.75rem;">
+          <p><strong>Designed by Codex</strong></p>
+          <p><strong>Codex's design note:</strong> 「プライベートRAGは"信頼のエンジン"であるべきです。どのドキュメントから答えが来たかを明示し、信頼度スコアを数値で見せる。育児という感情的なドメインでも、ユーザーに根拠を提示することが最大の安心感になります。ソースパネルはUIの装飾ではなく、機能そのものです。」</p>
+          <p><strong>Gemini's review:</strong> 「ミントグリーンのパレットが医療機関に近い信頼感を演出しつつ、冷たくなりすぎない絶妙なバランス。タイピングアニメーションがAIの"考えている"感をリアルに表現している。」</p>
+          <p><strong>Claude's review:</strong> 「ソースパネルの分離設計が素晴らしい。回答と根拠を同時に見せることで、親が答えを盲信せず自分で判断できる。信頼度バーの視覚化も重要な機能として正しく扱われている。」</p>
+        </div>
+      </details>
     </div>
 
-    <div class="knowledge-base">
-        <div class="kb-card" style="background: #ff6b6b;">
-            <h3>📅 連絡帳同期</h3>
-            <p>日々の記録を自動解析</p>
+    <div class="sources-panel" id="sources-panel">
+      <h2>引用ソース</h2>
+      <div class="source-card">
+        <div class="source-header">
+          <span class="source-title">[1] かかりつけ小児科メモ.md</span>
+          <span class="source-match">92%</span>
         </div>
-        <div class="kb-card" style="background: #4d96ff;">
-            <h3>🍱 給食メニュー</h3>
-            <p>アレルギー情報もチェック</p>
+        <div class="source-excerpt">「1歳〜1歳半健診での医師の指導：成長スピードが落ちるため、一時的に食欲が落ちることがある。体重減少がなければ様子見で良い。」</div>
+      </div>
+      <div class="source-card">
+        <div class="source-header">
+          <span class="source-title">[2] 育児書_幼児食の基本.pdf</span>
+          <span class="source-match">85%</span>
         </div>
-        <div class="kb-card" style="background: #6bcb77;">
-            <h3>📈 月齢別発達</h3>
-            <p>成長の目安をパーソナライズ</p>
+        <div class="source-excerpt">「自我の芽生えによる食べ渋り。食事は楽しく、時間は30分以内で切り上げるルールを作ることが推奨される。」</div>
+      </div>
+      <div class="source-card">
+        <div class="source-header">
+          <span class="source-title">[3] 妻LINE履歴_202305.txt</span>
+          <span class="source-match">78%</span>
         </div>
+        <div class="source-excerpt">「最近夕飯を全然食べない。保育園の先生に聞いたら、昼間たくさん動いて疲れているか、遊びたい時期だから気にしなくていいとのこと。」</div>
+      </div>
     </div>
-
-    <section class="review-section">
-        <h3>AI Cross-Reviews</h3>
-        <div class="review-card">
-            <span class="review-author">Claude's Review:</span>
-            <p>"視覚的エネルギーが高い！ユーザーの目を引く力は三者の中でNo.1です。
-            コンテンツの多様性と遊び心は素晴らしい。彩度を5〜10%下げると
-            より洗練された印象になるかもしれませんが、ターゲット層への訴求は完璧。★★★★☆"</p>
-        </div>
-        <div class="review-card">
-            <span class="review-author">Codex's Review:</span>
-            <p>"パフォーマンス計測したら描画コストが一番高そうですが、
-            JSのロジックは実はきれいに整理されていて好印象です。グラデーションの多用は
-            私の美学と相反しますが、UX観点では明らかに勝者。認めます。★★★★☆"</p>
-        </div>
-    </section>
-</main>
-
-<footer>
-    ✨ Designed by Gemini — Creativity meets intelligence ✨
-</footer>
+  </div>
 
 <script>
-    var qas = [
-        {
-            q: "今日の持ち物を教えて",
-            a: "今日の持ち物はこちらです！\n• タオル（バスタオルサイズ）\n• 着替え 2セット\n• おむつ 5枚\n• 連絡帳\n• 水筒（200ml以上）\n明日は体操服も必要です！忘れずに 🎒"
-        },
-        {
-            q: "今週の給食メニューは？",
-            a: "今週の給食メニューです！\n月: ご飯・鶏の唐揚げ・みそ汁\n火: パン・スパゲティ・スープ\n水: ご飯・さんまの塩焼き・煮物\n木: カレーライス・サラダ\n金: ご飯・豆腐ハンバーグ・デザート 🍱"
-        },
-        {
-            q: "1歳児に良い食べ物は？",
-            a: "1歳児に良い食べ物はこちらです！\n✅ 柔らかく煮た野菜（にんじん、かぼちゃ）\n✅ 白身魚（タラ、ひらめ）\n✅ 豆腐・卵（よく加熱）\n✅ バナナ・りんご（小さく切って）\n⚠️ ハチミツは1歳未満NG！硬いものは小さくしてね 👶"
-        },
-        {
-            q: "発熱したらどうすれば？",
-            a: "発熱時の対処法です！\n🌡️ 37.5℃以上: 保育園に連絡\n🌡️ 38℃以上: お迎えをお願いする場合あり\n💊 解熱剤は医師に相談のうえ使用\n🍵 水分補給をこまめに\n📞 高熱・ぐったりしている場合は小児科へ！\n保育園の連絡先: 03-XXXX-XXXX 🏥"
-        }
-    ];
+  function simulateChat(text) {
+    const history = document.getElementById('chat-history');
+    
+    const userMsg = document.createElement('div');
+    userMsg.className = 'msg msg-user';
+    userMsg.innerText = text;
+    history.appendChild(userMsg);
+    
+    const aiMsg = document.createElement('div');
+    aiMsg.className = 'msg msg-ai';
+    aiMsg.innerHTML = '<div class="msg-ai-content"><span class="cursor"></span></div>';
+    history.appendChild(aiMsg);
+    history.scrollTop = history.scrollHeight;
 
-    function init() {
-        var btnArea = document.getElementById("questionButtons");
-        qas.forEach(function(item, idx) {
-            var btn = document.createElement("button");
-            btn.className = "q-btn";
-            btn.innerText = item.q;
-            btn.onclick = function() { ask(idx); };
-            btnArea.appendChild(btn);
-        });
-    }
-
-    function ask(idx) {
-        var chat = document.getElementById("chatMessages");
-        var item = qas[idx];
-        
-        // Add user message
-        var uMsg = document.createElement("div");
-        uMsg.className = "message message-user";
-        uMsg.innerText = item.q;
-        chat.appendChild(uMsg);
-        chat.scrollTop = chat.scrollHeight;
-
-        // Typing indicator
-        document.getElementById("typingIndicator").style.display = "block";
-        document.getElementById("questionButtons").style.pointerEvents = "none";
-
-        setTimeout(function() {
-            document.getElementById("typingIndicator").style.display = "none";
-            
-            var aiMsg = document.createElement("div");
-            aiMsg.className = "message message-ai";
-            chat.appendChild(aiMsg);
-            
-            typeWriter(aiMsg, item.a, 0, function() {
-                document.getElementById("questionButtons").style.pointerEvents = "auto";
-                chat.scrollTop = chat.scrollHeight;
-            });
-        }, 1000);
-    }
-
-    function typeWriter(el, text, i, cb) {
-        if (i < text.length) {
-            el.innerText = text.substring(0, i + 1);
-            var chat = document.getElementById("chatMessages");
-            chat.scrollTop = chat.scrollHeight;
-            setTimeout(function() {
-                typeWriter(el, text, i + 1, cb);
-            }, 30);
+    setTimeout(() => {
+      const responseText = "その質問についての記録を検索しています... 分析結果によると、関連するデータがいくつか見つかりました。";
+      let i = 0;
+      const contentDiv = aiMsg.querySelector('.msg-ai-content');
+      
+      const typeInterval = setInterval(() => {
+        if(i < responseText.length) {
+          contentDiv.innerHTML = responseText.substring(0, i+1) + '<span class="cursor"></span>';
+          i++;
+          history.scrollTop = history.scrollHeight;
         } else {
-            cb();
+          clearInterval(typeInterval);
+          contentDiv.innerHTML = responseText;
+          const meta = document.createElement('div');
+          meta.className = 'meta-info';
+          meta.innerHTML = 'ソース: [1][2] | 信頼度: <span class="confidence-bar">█████████░</span> 90%';
+          aiMsg.appendChild(meta);
+          updateSources();
         }
-    }
+      }, 50);
+    }, 500);
+  }
 
-    init();
+  function updateSources() {
+    const panel = document.getElementById('sources-panel');
+    panel.innerHTML = `
+      <h2>引用ソース</h2>
+      <div class="source-card">
+        <div class="source-header">
+          <span class="source-title">[1] 厚労省_離乳食ガイド.pdf</span>
+          <span class="source-match">95%</span>
+        </div>
+        <div class="source-excerpt">「月齢に応じたステップアップの目安と、アレルギー対応の基本方針について...」</div>
+      </div>
+      <div class="source-card">
+        <div class="source-header">
+          <span class="source-title">[2] 保育園入園説明会資料.md</span>
+          <span class="source-match">88%</span>
+        </div>
+        <div class="source-excerpt">「園での食事提供についての説明。家庭での進行状況に合わせて対応可能...」</div>
+      </div>
+    `;
+  }
 </script>
-
 </body>
 </html>
