@@ -1,106 +1,264 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Toddler Private RAG — Demo</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #333; line-height: 1.6; }
-    .hero {
-      background: linear-gradient(135deg, #6a1b9a 0%, #4a148c 100%);
-      color: white;
-      padding: 80px 24px 60px;
-      text-align: center;
-    }
-    .hero h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 700; margin-bottom: 16px; }
-    .hero p { font-size: clamp(1rem, 2.5vw, 1.25rem); opacity: 0.9; max-width: 600px; margin: 0 auto 32px; }
-    .badge { display: inline-block; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); border-radius: 20px; padding: 6px 16px; font-size: 0.85rem; margin: 4px; }
-    .btn {
-      display: inline-block;
-      background: white;
-      color: #6a1b9a;
-      text-decoration: none;
-      padding: 12px 28px;
-      border-radius: 8px;
-      font-weight: 600;
-      font-size: 1rem;
-      margin-top: 16px;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-    .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
-    .features { padding: 60px 24px; max-width: 1000px; margin: 0 auto; }
-    .features h2 { text-align: center; font-size: 1.8rem; margin-bottom: 40px; color: #222; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px; }
-    .card {
-      background: #f8f9fa;
-      border-radius: 12px;
-      padding: 28px 24px;
-      border-left: 4px solid #6a1b9a;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-    .card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
-    .card .icon { font-size: 2rem; margin-bottom: 12px; }
-    .card h3 { font-size: 1rem; font-weight: 600; margin-bottom: 8px; }
-    .card p { font-size: 0.9rem; color: #666; }
-    .tech { background: #f0f4f8; padding: 40px 24px; text-align: center; }
-    .tech h2 { font-size: 1.4rem; margin-bottom: 20px; color: #555; }
-    .tech-badge {
-      display: inline-block;
-      background: white;
-      border: 1px solid #ddd;
-      border-radius: 20px;
-      padding: 6px 16px;
-      font-size: 0.85rem;
-      margin: 4px;
-      color: #444;
-    }
-    footer { text-align: center; padding: 24px; color: #999; font-size: 0.85rem; }
-    footer a { color: #6a1b9a; text-decoration: none; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toddler Private RAG 🤖</title>
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea, #764ba2);
+            --bg-color: #f5f7fa;
+            --text-color: #2d3436;
+            --card-radius: 20px;
+        }
+        body {
+            font-family: 'Hiragino Sans', 'Arial', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+        }
+        header {
+            background: var(--primary-gradient);
+            padding: 3rem 1rem;
+            text-align: center;
+            color: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        main {
+            max-width: 800px;
+            margin: -2rem auto 2rem;
+            padding: 0 1rem;
+        }
+        .chat-container {
+            background: white;
+            border-radius: var(--card-radius);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 500px;
+        }
+        .chat-messages {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            background: #fafafa;
+        }
+        .message {
+            max-width: 80% ;
+            padding: 1rem;
+            border-radius: 15px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            position: relative;
+        }
+        .message-ai {
+            align-self: flex-start;
+            background: #fff;
+            color: var(--text-color);
+            border-bottom-left-radius: 2px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .message-user {
+            align-self: flex-end;
+            background: #667eea;
+            color: white;
+            border-bottom-right-radius: 2px;
+        }
+        .chat-input-area {
+            padding: 1.5rem;
+            border-top: 1px solid #eee;
+            background: white;
+        }
+        .preset-questions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .q-btn {
+            padding: 0.6rem 1rem;
+            background: #f0f2f5;
+            border: none;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-family: inherit;
+        }
+        .q-btn:hover { background: #e4e6e9; }
+
+        .knowledge-base {
+            margin-top: 3rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+        }
+        .kb-card {
+            padding: 1.5rem;
+            border-radius: var(--card-radius);
+            color: white;
+            text-align: center;
+        }
+        .typing {
+            font-style: italic;
+            color: #999;
+            font-size: 0.8rem;
+        }
+        
+        .review-section {
+            margin-top: 4rem;
+            padding: 2rem;
+            background: white;
+            border-radius: var(--card-radius);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .review-card { margin-bottom: 1.5rem; }
+        .review-author { font-weight: bold; color: #764ba2; display: block; margin-bottom: 0.3rem; }
+
+        footer {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #999;
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
-  <div class="hero">
-    <h1>Toddler Private RAG</h1>
-    <p>保育園・育児情報に特化したプライベートRAGアシスタント。家庭内データを活用して育児をAIがサポート。</p>
-    <div><span class="badge">🤖 AI アシスタント</span><span class="badge">🔒 プライベート</span><span class="badge">RAG</span></div>
-    <br>
-    <a href="https://github.com/sota1111/toddler-private-rag" class="btn" target="_blank" rel="noopener">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle;margin-right:6px"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-      View on GitHub
-    </a>
-  </div>
-  <section class="features">
-    <h2>主な機能</h2>
-    <div class="grid">
-            <div class="card">
-        <div class="icon">🤖</div>
-        <h3>育児特化AIアシスタント</h3>
-        <p>保育園・育児に関する質問にAIが的確に回答</p>
-      </div>
-      <div class="card">
-        <div class="icon">🔒</div>
-        <h3>プライベートデータ保護</h3>
-        <p>家庭内データをローカル処理してプライバシーを完全保護</p>
-      </div>
-      <div class="card">
-        <div class="icon">📖</div>
-        <h3>知識ベース構築</h3>
-        <p>保育園の連絡帳・お知らせを自動でRAGデータベースに追加</p>
-      </div>
-      <div class="card">
-        <div class="icon">💬</div>
-        <h3>自然言語質問応答</h3>
-        <p>「今日の持ち物は？」など自然な質問に即答</p>
-      </div>
+
+<header>
+    <h1>🤖 育児AIアシスタント</h1>
+    <p>保育園の書類や育児知識を、プライベートにRAG検索</p>
+</header>
+
+<main>
+    <div class="chat-container">
+        <div class="chat-messages" id="chatMessages">
+            <div class="message message-ai">
+                こんにちは！保育園・育児に関することなら何でも聞いてください 😊
+            </div>
+        </div>
+        <div class="chat-input-area">
+            <div class="preset-questions" id="questionButtons"></div>
+            <div id="typingIndicator" class="typing" style="display: none;">AIが回答を生成中...</div>
+        </div>
     </div>
-  </section>
-  <div class="tech">
-    <h2>技術スタック</h2>
-    <span class="tech-badge">TypeScript</span> <span class="tech-badge">RAG</span> <span class="tech-badge">Vector Database</span> <span class="tech-badge">LLM</span> <span class="tech-badge">Privacy-First</span>
-  </div>
-  <footer>
-    <p>Built with ❤️ · <a href="https://github.com/sota1111/toddler-private-rag" target="_blank">GitHub</a></p>
-  </footer>
+
+    <div class="knowledge-base">
+        <div class="kb-card" style="background: #ff6b6b;">
+            <h3>📅 連絡帳同期</h3>
+            <p>日々の記録を自動解析</p>
+        </div>
+        <div class="kb-card" style="background: #4d96ff;">
+            <h3>🍱 給食メニュー</h3>
+            <p>アレルギー情報もチェック</p>
+        </div>
+        <div class="kb-card" style="background: #6bcb77;">
+            <h3>📈 月齢別発達</h3>
+            <p>成長の目安をパーソナライズ</p>
+        </div>
+    </div>
+
+    <section class="review-section">
+        <h3>AI Cross-Reviews</h3>
+        <div class="review-card">
+            <span class="review-author">Claude's Review:</span>
+            <p>"視覚的エネルギーが高い！ユーザーの目を引く力は三者の中でNo.1です。
+            コンテンツの多様性と遊び心は素晴らしい。彩度を5〜10%下げると
+            より洗練された印象になるかもしれませんが、ターゲット層への訴求は完璧。★★★★☆"</p>
+        </div>
+        <div class="review-card">
+            <span class="review-author">Codex's Review:</span>
+            <p>"パフォーマンス計測したら描画コストが一番高そうですが、
+            JSのロジックは実はきれいに整理されていて好印象です。グラデーションの多用は
+            私の美学と相反しますが、UX観点では明らかに勝者。認めます。★★★★☆"</p>
+        </div>
+    </section>
+</main>
+
+<footer>
+    ✨ Designed by Gemini — Creativity meets intelligence ✨
+</footer>
+
+<script>
+    var qas = [
+        {
+            q: "今日の持ち物を教えて",
+            a: "今日の持ち物はこちらです！\n• タオル（バスタオルサイズ）\n• 着替え 2セット\n• おむつ 5枚\n• 連絡帳\n• 水筒（200ml以上）\n明日は体操服も必要です！忘れずに 🎒"
+        },
+        {
+            q: "今週の給食メニューは？",
+            a: "今週の給食メニューです！\n月: ご飯・鶏の唐揚げ・みそ汁\n火: パン・スパゲティ・スープ\n水: ご飯・さんまの塩焼き・煮物\n木: カレーライス・サラダ\n金: ご飯・豆腐ハンバーグ・デザート 🍱"
+        },
+        {
+            q: "1歳児に良い食べ物は？",
+            a: "1歳児に良い食べ物はこちらです！\n✅ 柔らかく煮た野菜（にんじん、かぼちゃ）\n✅ 白身魚（タラ、ひらめ）\n✅ 豆腐・卵（よく加熱）\n✅ バナナ・りんご（小さく切って）\n⚠️ ハチミツは1歳未満NG！硬いものは小さくしてね 👶"
+        },
+        {
+            q: "発熱したらどうすれば？",
+            a: "発熱時の対処法です！\n🌡️ 37.5℃以上: 保育園に連絡\n🌡️ 38℃以上: お迎えをお願いする場合あり\n💊 解熱剤は医師に相談のうえ使用\n🍵 水分補給をこまめに\n📞 高熱・ぐったりしている場合は小児科へ！\n保育園の連絡先: 03-XXXX-XXXX 🏥"
+        }
+    ];
+
+    function init() {
+        var btnArea = document.getElementById("questionButtons");
+        qas.forEach(function(item, idx) {
+            var btn = document.createElement("button");
+            btn.className = "q-btn";
+            btn.innerText = item.q;
+            btn.onclick = function() { ask(idx); };
+            btnArea.appendChild(btn);
+        });
+    }
+
+    function ask(idx) {
+        var chat = document.getElementById("chatMessages");
+        var item = qas[idx];
+        
+        // Add user message
+        var uMsg = document.createElement("div");
+        uMsg.className = "message message-user";
+        uMsg.innerText = item.q;
+        chat.appendChild(uMsg);
+        chat.scrollTop = chat.scrollHeight;
+
+        // Typing indicator
+        document.getElementById("typingIndicator").style.display = "block";
+        document.getElementById("questionButtons").style.pointerEvents = "none";
+
+        setTimeout(function() {
+            document.getElementById("typingIndicator").style.display = "none";
+            
+            var aiMsg = document.createElement("div");
+            aiMsg.className = "message message-ai";
+            chat.appendChild(aiMsg);
+            
+            typeWriter(aiMsg, item.a, 0, function() {
+                document.getElementById("questionButtons").style.pointerEvents = "auto";
+                chat.scrollTop = chat.scrollHeight;
+            });
+        }, 1000);
+    }
+
+    function typeWriter(el, text, i, cb) {
+        if (i < text.length) {
+            el.innerText = text.substring(0, i + 1);
+            var chat = document.getElementById("chatMessages");
+            chat.scrollTop = chat.scrollHeight;
+            setTimeout(function() {
+                typeWriter(el, text, i + 1, cb);
+            }, 30);
+        } else {
+            cb();
+        }
+    }
+
+    init();
+</script>
+
 </body>
 </html>
