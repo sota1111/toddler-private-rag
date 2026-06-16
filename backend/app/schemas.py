@@ -1,6 +1,16 @@
 import datetime
 from pydantic import BaseModel, ConfigDict
-from typing import Optional
+from typing import Optional, List
+
+class AttachmentResponse(BaseModel):
+    id: int
+    info_id: int
+    original_filename: str
+    mime_type: str
+    file_size: int
+    created_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 class NurseryInfoBase(BaseModel):
     title: str
@@ -35,5 +45,6 @@ class NurseryInfoResponse(NurseryInfoBase):
     id: int
     created_at: datetime.datetime
     updated_at: datetime.datetime
+    attachments: List[AttachmentResponse] = []
 
     model_config = ConfigDict(from_attributes=True)

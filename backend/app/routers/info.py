@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import List, Optional
 from datetime import date, timedelta
-from .. import models, schemas
+from .. import models, schemas, storage
 from ..database import get_db
 from ..routers.auth import get_current_user
 
@@ -110,6 +110,10 @@ def delete_info(id: int, db: Session = Depends(get_db), current_user: str = Depe
     if db_info is None:
         raise HTTPException(status_code=404, detail="Info not found")
     
+    # Delete physical files
+    for attachment in db_info.attachments:
+        storage.delete_file(attachment.stored_filename)
+
     db.delete(db_info)
     db.commit()
     return {"message": "Successfully deleted"}

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from .database import engine, Base, SessionLocal
-from .routers import info
+from .routers import info, attachments
 from .routers import auth as auth_router
 from .seed import seed_data
 from . import models
@@ -29,6 +29,7 @@ def startup_event():
         db.close()
 
 app.include_router(auth_router.router, prefix="/api/auth", tags=["auth"])
+app.include_router(attachments.router, prefix="/api")
 app.include_router(info.router, prefix="/api")
 
 @app.get("/health")
