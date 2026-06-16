@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 import os
-from .. import models, schemas, storage
+from .. import models, schemas, storage, ocr
 from ..database import get_db
 from ..routers.auth import get_current_user
 
@@ -50,13 +50,17 @@ async def upload_attachment(
     with open(file_path, "wb") as f:
         f.write(content)
 
+    # Extract OCR text
+    ocr_text = ocr.extract_text(file_path, content_type)
+
     # Create Attachment row
     db_attachment = models.Attachment(
         info_id=info_id,
         stored_filename=stored_filename,
         original_filename=file.filename,
         mime_type=content_type,
-        file_size=file_size
+        file_size=file_size,
+        ocr_text=ocr_text
     )
     db.add(db_attachment)
     db.commit()

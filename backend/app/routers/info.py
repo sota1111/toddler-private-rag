@@ -65,7 +65,8 @@ def list_info(
             or_(
                 models.NurseryInfo.title.ilike(search),
                 models.NurseryInfo.content.ilike(search),
-                models.NurseryInfo.tags.ilike(search)
+                models.NurseryInfo.tags.ilike(search),
+                models.NurseryInfo.attachments.any(models.Attachment.ocr_text.ilike(search))
             )
         )
     
