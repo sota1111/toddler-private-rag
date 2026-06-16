@@ -112,8 +112,9 @@ def delete_info(id: int, db: Session = Depends(get_db), current_user: str = Depe
         raise HTTPException(status_code=404, detail="Info not found")
     
     # Delete physical files
+    backend = storage.get_storage()
     for attachment in db_info.attachments:
-        storage.delete_file(attachment.stored_filename)
+        backend.delete(attachment.object_key or attachment.stored_filename)
 
     db.delete(db_info)
     db.commit()

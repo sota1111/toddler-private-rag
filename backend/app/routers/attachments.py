@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 import os
 from .. import models, schemas, storage, ocr
@@ -43,20 +43,27 @@ async def upload_attachment(
         )
 
     # Save to storage
-    storage.ensure_upload_dir()
+    backend = storage.get_storage()
     stored_filename = storage.generate_stored_filename(file.filename)
-    file_path = storage.get_file_path(stored_filename)
+    object_key = storage.build_object_key(stored_filename)
     
-    with open(file_path, "wb") as f:
-        f.write(content)
+    backend.save(object_key, content, content_type)
 
     # Extract OCR text
-    ocr_text = ocr.extract_text(file_path, content_type)
+    ocr_path = backend.local_path_for_ocr(object_key, content)
+    try:
+        ocr_text = ocr.extract_text(ocr_path, content_type)
+    finally:
+        # If GCS, local_path_for_ocr creates a temp file that should be deleted
+        if backend.name == "gcs" and ocr_path.exists():
+            os.remove(ocr_path)
 
     # Create Attachment row
     db_attachment = models.Attachment(
         info_id=info_id,
         stored_filename=stored_filename,
+        object_key=object_key,
+        storage_backend=backend.name,
         original_filename=file.filename,
         mime_type=content_type,
         file_size=file_size,
@@ -78,7 +85,18 @@ def get_attachment_file(
     if not db_attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
-    file_path = storage.get_file_path(db_attachment.stored_filename)
+    if db_attachment.storage_backend == "gcs":
+        backend = storage.get_storage()
+        # Ensure we are using GCSStorage
+        if isinstance(backend, storage.GCSStorage):
+            url = backend.generate_signed_url(db_attachment.object_key, db_attachment.mime_type)
+            return RedirectResponse(url=url)
+        else:
+            # Fallback if config is inconsistent, though unlikely
+            raise HTTPException(status_code=500, detail="Storage configuration mismatch")
+
+    # Local storage (default)
+    file_path = storage.get_file_path(db_attachment.stored_filename or db_attachment.object_key)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found on disk")
 
@@ -99,7 +117,8 @@ def delete_attachment(
         raise HTTPException(status_code=404, detail="Attachment not found")
 
     # Delete physical file
-    storage.delete_file(db_attachment.stored_filename)
+    backend = storage.get_storage()
+    backend.delete(db_attachment.object_key or db_attachment.stored_filename)
 
     # Delete DB row
     db.delete(db_attachment)
