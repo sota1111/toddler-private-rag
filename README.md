@@ -57,11 +57,11 @@
 本番環境（Cloud Run）では機密情報を Secret Manager で管理します。初回デプロイ前に以下のコマンドでシークレットを作成してください。
 
 ```bash
-# パスワードの作成
-echo -n "your-password" | gcloud secrets create rag-auth-password --data-file=- --project=YOUR_PROJECT_ID
+# セッション署名シークレットの作成
+echo -n "your-random-32+chars" | gcloud secrets create rag-auth-secret --data-file=- --project=YOUR_PROJECT_ID
 
-# JWT署名キーの作成
-echo -n "your-secret-key" | gcloud secrets create rag-auth-secret-key --data-file=- --project=YOUR_PROJECT_ID
+# 許可メールアドレスの作成
+echo -n "you@example.com,other@example.com" | gcloud secrets create rag-allowed-emails --data-file=- --project=YOUR_PROJECT_ID
 
 # Cloud Run サービスアカウントへの権限付与
 gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
@@ -69,23 +69,23 @@ gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
   --role="roles/secretmanager.secretAccessor"
 ```
 
-
-このアプリは JWT 認証を使用しています。
+このアプリは **Firebase認証 + 署名付きセッションcookie** を使用しています。
 
 ### 環境変数の設定
 
-`.env.example` をコピーして `.env` を作成し、以下の変数を設定してください：
+`.env.example` をコピーして `.env` を作成し、必要な変数を設定してください。
 
-```env
-AUTH_USERNAME=your_username
-AUTH_PASSWORD=your_password
-AUTH_SECRET_KEY=your_secret_key_at_least_32_chars
-```
+主な環境変数:
+- `APP_ENV`: `local` または `production`
+- `AUTH_SECRET`: セッションcookie署名用
+- `ALLOWED_USER_EMAILS`: ログインを許可するメールアドレス（カンマ区切り）
+- `GOOGLE_CLOUD_PROJECT`: GCPプロジェクトID
+- `VITE_FIREBASE_*`: フロントエンド用Firebase設定
 
 ### ログイン
 
 アプリにアクセスすると自動的にログイン画面へリダイレクトされます。
-設定した `AUTH_USERNAME` / `AUTH_PASSWORD` でログインしてください。
+Firebaseでログイン後、そのメールアドレスが `ALLOWED_USER_EMAILS` に含まれている場合のみアクセスが許可されます。
 
 ## GCP デプロイ準備
 
@@ -114,25 +114,34 @@ docker run -p 8080:8080 toddler-private-rag-frontend
 
 ### データ永続化について
 
-現在 SQLite/VectorDB をローカルで使用しています。Cloud Run はステートレスなため、本番環境では以下を検討してください:
+現在 SQLite/VectorDB をローカルで使用しています。Cloud Run はステートレスなため、本番環境での永続化には以下の変数を使用します（移行で段階導入予定）:
 
-- ドキュメントDB: **Firestore** への移行
-- VectorDB: **Vertex AI Vector Search** または Cloud Run 内の永続ストレージ
-- アップロードファイル: **Cloud Storage** への保存
+| 変数名 | 説明 |
+|--------|------|
+| DATABASE_TYPE | メタデータ永続化先 (`sqlite` / `firestore`) |
+| FIRESTORE_DATABASE | Firestore データベース名 |
+| GCS_BUCKET_NAME | アップロードファイル保存先の Cloud Storage バケット名 |
+
+現状のコードはローカル sqlite/ファイル既定で動作し、これらの変数は永続化層の導入後に有効化されます。
 
 ### プライバシー・セキュリティ
 
 - 保育園資料・個人メモは外部に送信しないこと
 - 外部 LLM API を使用する場合はデータ送信範囲を確認すること
 - 実データなしでもデプロイ準備状態を確認できます（空の状態でも起動可能）
+- **本番環境 (`APP_ENV=production`) では、起動時のサンプルデータの投入 (seed) は行われません。**
 
 ### 環境変数
 
 | 変数名 | 説明 |
 |--------|------|
-| AUTH_USERNAME | 認証ユーザー名 |
-| AUTH_PASSWORD | 認証パスワード（Secret Manager 推奨） |
-| AUTH_SECRET_KEY | JWT署名キー（Secret Manager 推奨） |
+| APP_ENV | 実行環境 `local` / `production`（productionでcookie secure有効・seed無効） |
+| AUTH_SECRET | セッションcookie署名シークレット（Secret Manager管理） |
+| ALLOWED_USER_EMAILS | ログイン許可メール（カンマ区切り, Secret Manager管理推奨） |
+| GOOGLE_CLOUD_PROJECT | Firebase Admin / GCPプロジェクトID |
+| VITE_FIREBASE_* | フロントエンド用Firebase設定 |
+| CORS_ORIGINS | 許可するフロントエンドOrigin（カンマ区切り） |
+| DATABASE_TYPE / FIRESTORE_DATABASE / GCS_BUCKET_NAME | 本番永続化設定（移行で導入予定） |
 | OPENAI_API_KEY / GEMINI_API_KEY | LLM API キー（Secret Manager 推奨） |
 
 ### 注意事項

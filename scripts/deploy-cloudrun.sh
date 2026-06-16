@@ -23,13 +23,17 @@ gcloud builds submit ./backend \
   --tag="${BACKEND_IMAGE}" \
   --timeout=600s
 
+# Secret Manager: 以下のシークレットが作成済みであることを前提としています
+# rag-auth-secret, rag-allowed-emails
+
 gcloud run deploy "${BACKEND_SERVICE}" \
   --image="${BACKEND_IMAGE}" \
   --project="${PROJECT_ID}" \
   --region="${REGION}" \
   --platform=managed \
   --allow-unauthenticated \
-  --set-env-vars="CORS_ORIGINS=https://${FRONTEND_SERVICE}-${PROJECT_ID}.a.run.app" \
+  --set-secrets="AUTH_SECRET=rag-auth-secret:latest,ALLOWED_USER_EMAILS=rag-allowed-emails:latest" \
+  --set-env-vars="APP_ENV=production,CORS_ORIGINS=https://${FRONTEND_SERVICE}-${PROJECT_ID}.a.run.app" \
   --memory=512Mi \
   --timeout=300 \
   --quiet
