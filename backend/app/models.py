@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Text, Date, DateTime
+from sqlalchemy import Column, Integer, String, Text, Date, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
 
@@ -19,3 +20,19 @@ class NurseryInfo(Base):
     memo = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+    attachments = relationship("Attachment", back_populates="info", cascade="all, delete-orphan")
+
+class Attachment(Base):
+    __tablename__ = "attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    info_id = Column(Integer, ForeignKey("nursery_info.id"), index=True, nullable=False)
+    stored_filename = Column(String, nullable=False)
+    original_filename = Column(String, nullable=False)
+    mime_type = Column(String, nullable=False)
+    file_size = Column(Integer, nullable=False)
+    ocr_text = Column(Text, nullable=True, default=None)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    info = relationship("NurseryInfo", back_populates="attachments")
