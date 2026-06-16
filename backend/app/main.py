@@ -22,6 +22,8 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_event():
+    if os.getenv("APP_ENV", "local").lower() == "production":
+        return
     db = SessionLocal()
     try:
         seed_data(db)
