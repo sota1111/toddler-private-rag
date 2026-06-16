@@ -6,8 +6,10 @@ from .routers import info, attachments
 from .routers import auth as auth_router
 from .seed import seed_data
 from . import models
+from .repository import get_database_type
 
-models.Base.metadata.create_all(bind=engine)
+if get_database_type() != "firestore":
+    models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="保育園情報アシスタント API")
 
@@ -22,11 +24,13 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_event():
-    db = SessionLocal()
-    try:
-        seed_data(db)
-    finally:
-        db.close()
+    if get_database_type() != "firestore":
+        db = SessionLocal()
+        try:
+            seed_data(db)
+        finally:
+            db.close()
+
 
 app.include_router(auth_router.router, prefix="/api/auth", tags=["auth"])
 app.include_router(attachments.router, prefix="/api")

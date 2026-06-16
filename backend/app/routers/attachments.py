@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse, RedirectResponse
-from sqlalchemy.orm import Session
 import os
-from .. import models, schemas, storage, ocr
-from ..database import get_db
+from .. import schemas, storage, ocr
+from ..repository import AttachmentRepository, get_attachment_repository
 from ..routers.auth import get_current_user
 
 router = APIRouter(
@@ -17,12 +16,11 @@ ALLOWED_CONTENT_TYPES = ["image/*", "application/pdf"]
 async def upload_attachment(
     info_id: int,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
+    repo: AttachmentRepository = Depends(get_attachment_repository),
     current_user: str = Depends(get_current_user)
 ):
     # Verify NurseryInfo exists
-    db_info = db.query(models.NurseryInfo).filter(models.NurseryInfo.id == info_id).first()
-    if not db_info:
+    if not repo.info_exists(info_id):
         raise HTTPException(status_code=404, detail="NurseryInfo not found")
 
     # Validate content type
@@ -59,29 +57,26 @@ async def upload_attachment(
             os.remove(ocr_path)
 
     # Create Attachment row
-    db_attachment = models.Attachment(
+    db_attachment = repo.create(
         info_id=info_id,
         stored_filename=stored_filename,
-        object_key=object_key,
-        storage_backend=backend.name,
         original_filename=file.filename,
         mime_type=content_type,
         file_size=file_size,
+        storage_backend=backend.name,
+        object_key=object_key,
         ocr_text=ocr_text
     )
-    db.add(db_attachment)
-    db.commit()
-    db.refresh(db_attachment)
 
     return db_attachment
 
 @router.get("/attachments/{att_id}/file")
 def get_attachment_file(
     att_id: int,
-    db: Session = Depends(get_db),
+    repo: AttachmentRepository = Depends(get_attachment_repository),
     current_user: str = Depends(get_current_user)
 ):
-    db_attachment = db.query(models.Attachment).filter(models.Attachment.id == att_id).first()
+    db_attachment = repo.get(att_id)
     if not db_attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
@@ -109,10 +104,10 @@ def get_attachment_file(
 @router.delete("/attachments/{att_id}")
 def delete_attachment(
     att_id: int,
-    db: Session = Depends(get_db),
+    repo: AttachmentRepository = Depends(get_attachment_repository),
     current_user: str = Depends(get_current_user)
 ):
-    db_attachment = db.query(models.Attachment).filter(models.Attachment.id == att_id).first()
+    db_attachment = repo.get(att_id)
     if not db_attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
@@ -121,7 +116,7 @@ def delete_attachment(
     backend.delete(db_attachment.object_key or db_attachment.stored_filename)
 
     # Delete DB row
-    db.delete(db_attachment)
-    db.commit()
+    repo.delete(att_id)
 
     return {"message": "Successfully deleted"}
+
