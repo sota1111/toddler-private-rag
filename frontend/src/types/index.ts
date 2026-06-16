@@ -1,3 +1,12 @@
+export interface Attachment {
+  id: number;
+  info_id: number;
+  original_filename: string;
+  mime_type: string;
+  file_size: number;
+  created_at: string;
+}
+
 export interface NurseryInfo {
   id: number
   title: string
@@ -13,6 +22,7 @@ export interface NurseryInfo {
   memo?: string
   created_at: string
   updated_at: string
+  attachments?: Attachment[]
 }
 
 export interface NurseryInfoCreate {

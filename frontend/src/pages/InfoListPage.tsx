@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getInfoList } from '../api';
+import { getInfoList, getAttachmentFileUrl } from '../api';
 
 const INFO_TYPES = ["すべて", "資料", "掲示", "行事", "持ち物", "提出物", "お知らせ", "給食", "休園変更"];
 const STATUS_TYPES = ["すべて", "未対応", "対応済み", "確認済み"];
@@ -39,7 +39,7 @@ const InfoListPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4">
+    <div className="max-w-5xl mx-auto px-4 pb-12">
       <h1 className="text-2xl font-bold mb-6 text-gray-800">情報一覧</h1>
 
       <div className="bg-white p-4 rounded-lg shadow-sm mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -96,6 +96,14 @@ const InfoListPage: React.FC = () => {
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(item.priority)}`}>
                       {item.priority}
                     </span>
+                    {item.attachments && item.attachments.length > 0 && (
+                      <span className="inline-flex items-center text-xs text-gray-500">
+                        <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
+                        </svg>
+                        {item.attachments.length}
+                      </span>
+                    )}
                   </div>
                   <h3 className="text-lg font-bold text-gray-900">{item.title}</h3>
                   <div className="mt-1 text-sm text-gray-500 space-x-4">
@@ -128,6 +136,42 @@ const InfoListPage: React.FC = () => {
                     <div className="mt-4">
                       <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">メモ</p>
                       <p className="text-sm text-gray-600 italic">{item.memo}</p>
+                    </div>
+                  )}
+                  {item.attachments && item.attachments.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">添付ファイル</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                        {item.attachments.map((att) => (
+                          <div key={att.id} className="relative group" onClick={(e) => e.stopPropagation()}>
+                            {att.mime_type.startsWith('image/') ? (
+                              <div className="aspect-square bg-gray-200 rounded-md overflow-hidden border border-gray-300">
+                                <img 
+                                  src={getAttachmentFileUrl(att.id)} 
+                                  alt={att.original_filename}
+                                  className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                  loading="lazy"
+                                  onClick={() => window.open(getAttachmentFileUrl(att.id), '_blank')}
+                                />
+                              </div>
+                            ) : (
+                              <a 
+                                href={getAttachmentFileUrl(att.id)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="aspect-square flex flex-col items-center justify-center bg-white rounded-md border border-gray-300 p-2 hover:bg-gray-50 transition-colors"
+                              >
+                                <svg className="w-8 h-8 text-gray-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                                </svg>
+                                <span className="text-[10px] text-gray-600 text-center line-clamp-2 break-all px-1">
+                                  {att.original_filename}
+                                </span>
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                   {item.tags && (
