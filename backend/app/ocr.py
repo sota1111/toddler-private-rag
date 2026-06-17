@@ -11,7 +11,7 @@ def extract_text(file_path: Union[str, Path], mime_type: str) -> str:
     """
     file_path = Path(file_path)
     if not file_path.exists():
-        logger.warning("OCR source file not found")
+        logger.warning("OCR target file not found")
         return ""
 
     try:
@@ -23,7 +23,7 @@ def extract_text(file_path: Union[str, Path], mime_type: str) -> str:
             logger.warning(f"Unsupported mime type for OCR: {mime_type}")
             return ""
     except Exception as e:
-        logger.warning("OCR extraction failed: %s", type(e).__name__)
+        logger.warning(f"OCR extraction failed (ext={file_path.suffix}): {type(e).__name__}")
         return ""
 
 def _extract_from_image(file_path: Path) -> str:
@@ -46,7 +46,7 @@ def _extract_from_image(file_path: Path) -> str:
         
         return text.strip()
     except Exception as e:
-        logger.warning("Image OCR failed: %s", type(e).__name__)
+        logger.warning(f"Image OCR failed: {type(e).__name__}")
         return ""
 
 def _extract_from_pdf(file_path: Path) -> str:
@@ -65,7 +65,7 @@ def _extract_from_pdf(file_path: Path) -> str:
         if text:
             return text
     except Exception as e:
-        logger.warning("PDF text extraction failed, falling back to OCR: %s", type(e).__name__)
+        logger.warning(f"PDF text extraction failed, falling back to OCR: {type(e).__name__}")
 
     # 2. Fallback to OCR if no embedded text found
     try:
@@ -77,7 +77,7 @@ def _extract_from_pdf(file_path: Path) -> str:
         try:
             pages = convert_from_path(file_path)
         except Exception as e:
-            logger.warning("Failed to convert PDF to images: %s", type(e).__name__)
+            logger.warning(f"Failed to convert PDF to images: {type(e).__name__}")
             return text # Return whatever was gathered (likely "")
 
         ocr_text = ""
@@ -96,5 +96,5 @@ def _extract_from_pdf(file_path: Path) -> str:
         logger.warning("OCR libraries (pdf2image/pytesseract) not installed for PDF OCR")
         return text
     except Exception as e:
-        logger.warning("PDF OCR failed: %s", type(e).__name__)
+        logger.warning(f"PDF OCR failed: {type(e).__name__}")
         return text

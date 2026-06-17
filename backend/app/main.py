@@ -24,13 +24,14 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_event():
+    if os.getenv("APP_ENV", "local").lower() == "production":
+        return
     if get_database_type() != "firestore":
         db = SessionLocal()
         try:
             seed_data(db)
         finally:
             db.close()
-
 
 app.include_router(auth_router.router, prefix="/api/auth", tags=["auth"])
 app.include_router(attachments.router, prefix="/api")
