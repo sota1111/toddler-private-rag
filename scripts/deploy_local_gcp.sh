@@ -38,12 +38,13 @@ gcloud builds submit ./backend \
 # Secret Manager: 初回デプロイ前に以下を実行してください
 # echo -n "value" | gcloud secrets create rag-auth-secret --data-file=- --project=$PROJECT_ID
 # echo -n "value" | gcloud secrets create rag-allowed-emails --data-file=- --project=$PROJECT_ID
+# echo -n "value" | gcloud secrets create rag-firebase-api-key --data-file=- --project=$PROJECT_ID
 # gcloud projects add-iam-policy-binding $PROJECT_ID \
 #   --member="serviceAccount:YOUR_PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
 #   --role="roles/secretmanager.secretAccessor"
 
 gcloud run deploy "${SERVICE_NAME}" \
-  --set-secrets="AUTH_SECRET=rag-auth-secret:latest,ALLOWED_USER_EMAILS=rag-allowed-emails:latest" \
+  --set-secrets="AUTH_SECRET=rag-auth-secret:latest,ALLOWED_USER_EMAILS=rag-allowed-emails:latest,FIREBASE_API_KEY=rag-firebase-api-key:latest" \
   --set-env-vars="APP_ENV=production" \
   --image="${IMAGE}:latest" \
   --project="${PROJECT_ID}" \
