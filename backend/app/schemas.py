@@ -1,6 +1,6 @@
 import datetime
 from pydantic import BaseModel, ConfigDict
-from typing import Optional, List
+from typing import Optional, List, Union
 
 class AttachmentResponse(BaseModel):
     id: int
@@ -48,3 +48,27 @@ class NurseryInfoResponse(NurseryInfoBase):
     attachments: List[AttachmentResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# --- RAG (ベクトル検索＋LLM回答生成) ---
+
+class RagQuery(BaseModel):
+    query: str
+    top_k: int = 4
+
+
+class RagSource(BaseModel):
+    info_id: Optional[Union[int, str]] = None
+    title: str
+    source: str
+    score: float
+
+
+class RagSearchResponse(BaseModel):
+    query: str
+    sources: List[RagSource] = []
+
+
+class RagAnswer(BaseModel):
+    answer: str
+    sources: List[RagSource] = []

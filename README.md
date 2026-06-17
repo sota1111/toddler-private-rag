@@ -6,6 +6,24 @@
 - **ダッシュボード**: 明日の持ち物、今週の行事、未対応の提出物をクイックビュー
 - **情報一覧**: キーワードや種別、ステータスによる検索・フィルタリング
 - **情報登録**: 新しい情報の登録（OCR/RAG連携のベースとなる入力機能）
+- **RAG（ベクトル検索＋LLM回答生成）**: 埋め込みベースのベクトル検索で関連情報を取得し、LLMで質問に回答
+
+## RAG（ベクトル検索＋LLM回答生成）
+
+登録情報（タイトル・本文・添付のOCRテキスト）をチャンク化して埋め込み、コサイン類似度で
+関連チャンクを検索し、その結果をコンテキストにLLMで回答を生成します。
+
+### エンドポイント（要認証）
+- `POST /api/info/ask` — `{"query": "...", "top_k": 4}` → `{"answer": "...", "sources": [...]}`
+- `GET /api/info/search?q=...&top_k=4` — ベクトル検索のみ（出典チャンクを返す）
+
+### Provider 設定（環境変数）
+- `EMBEDDING_PROVIDER` / `LLM_PROVIDER`: `fake`（既定）| `gemini`
+- 既定の `fake` は決定論的でAPIキー不要。オフラインで動作し、テストにも使用します。
+- `gemini` を使う場合は `GEMINI_API_KEY`（または `GOOGLE_API_KEY`）を設定し、
+  `google-generativeai` をインストールしてください（SDKは遅延インポートのため未導入でも起動は可能）。
+- ベクトルストアはインプロセス（純Pythonのコサイン類似度）で追加インフラ不要、
+  sqlite / firestore いずれのバックエンドでも動作します。
 
 ## 技術スタック
 - **Frontend**: React (TypeScript), Vite, Tailwind CSS, TanStack Query
