@@ -24,7 +24,8 @@ gcloud builds submit ./backend \
   --timeout=600s
 
 # Secret Manager: 以下のシークレットが作成済みであることを前提としています
-# rag-auth-secret, rag-allowed-emails
+# rag-auth-secret, rag-allowed-emails, rag-firebase-api-key
+#   rag-firebase-api-key: Firebase Web API key（サーバサイドREST認証 accounts:signInWithPassword 用）
 
 gcloud run deploy "${BACKEND_SERVICE}" \
   --image="${BACKEND_IMAGE}" \
@@ -32,7 +33,7 @@ gcloud run deploy "${BACKEND_SERVICE}" \
   --region="${REGION}" \
   --platform=managed \
   --allow-unauthenticated \
-  --set-secrets="AUTH_SECRET=rag-auth-secret:latest,ALLOWED_USER_EMAILS=rag-allowed-emails:latest" \
+  --set-secrets="AUTH_SECRET=rag-auth-secret:latest,ALLOWED_USER_EMAILS=rag-allowed-emails:latest,FIREBASE_API_KEY=rag-firebase-api-key:latest" \
   --set-env-vars="APP_ENV=production,CORS_ORIGINS=https://${FRONTEND_SERVICE}-${PROJECT_ID}.a.run.app" \
   --memory=512Mi \
   --timeout=300 \
