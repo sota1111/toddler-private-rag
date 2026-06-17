@@ -32,6 +32,8 @@ class Attachment(Base):
     original_filename = Column(String, nullable=False)
     mime_type = Column(String, nullable=False)
     file_size = Column(Integer, nullable=False)
+    storage_backend = Column(String, nullable=False, server_default="local")
+    object_key = Column(String, nullable=True)
     ocr_text = Column(Text, nullable=True, default=None)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

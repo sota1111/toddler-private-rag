@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
+from fastapi.responses import FileResponse, RedirectResponse
 import os
-from .. import models, schemas, storage, ocr
-from ..database import get_db
+from .. import schemas, storage, ocr
+from ..repository import AttachmentRepository, get_attachment_repository
 from ..routers.auth import get_current_user
 
 router = APIRouter(
@@ -17,12 +16,11 @@ ALLOWED_CONTENT_TYPES = ["image/*", "application/pdf"]
 async def upload_attachment(
     info_id: int,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
+    repo: AttachmentRepository = Depends(get_attachment_repository),
     current_user: str = Depends(get_current_user)
 ):
     # Verify NurseryInfo exists
-    db_info = db.query(models.NurseryInfo).filter(models.NurseryInfo.id == info_id).first()
-    if not db_info:
+    if not repo.info_exists(info_id):
         raise HTTPException(status_code=404, detail="NurseryInfo not found")
 
     # Validate content type
@@ -43,42 +41,57 @@ async def upload_attachment(
         )
 
     # Save to storage
-    storage.ensure_upload_dir()
+    backend = storage.get_storage()
     stored_filename = storage.generate_stored_filename(file.filename)
-    file_path = storage.get_file_path(stored_filename)
+    object_key = storage.build_object_key(stored_filename)
     
-    with open(file_path, "wb") as f:
-        f.write(content)
+    backend.save(object_key, content, content_type)
 
     # Extract OCR text
-    ocr_text = ocr.extract_text(file_path, content_type)
+    ocr_path = backend.local_path_for_ocr(object_key, content)
+    try:
+        ocr_text = ocr.extract_text(ocr_path, content_type)
+    finally:
+        # If GCS, local_path_for_ocr creates a temp file that should be deleted
+        if backend.name == "gcs" and ocr_path.exists():
+            os.remove(ocr_path)
 
     # Create Attachment row
-    db_attachment = models.Attachment(
+    db_attachment = repo.create(
         info_id=info_id,
         stored_filename=stored_filename,
         original_filename=file.filename,
         mime_type=content_type,
         file_size=file_size,
+        storage_backend=backend.name,
+        object_key=object_key,
         ocr_text=ocr_text
     )
-    db.add(db_attachment)
-    db.commit()
-    db.refresh(db_attachment)
 
     return db_attachment
 
 @router.get("/attachments/{att_id}/file")
 def get_attachment_file(
     att_id: int,
-    db: Session = Depends(get_db),
+    repo: AttachmentRepository = Depends(get_attachment_repository),
     current_user: str = Depends(get_current_user)
 ):
-    db_attachment = db.query(models.Attachment).filter(models.Attachment.id == att_id).first()
+    db_attachment = repo.get(att_id)
     if not db_attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
-    file_path = storage.get_file_path(db_attachment.stored_filename)
+    if db_attachment.storage_backend == "gcs":
+        backend = storage.get_storage()
+        # Ensure we are using GCSStorage
+        if isinstance(backend, storage.GCSStorage):
+            url = backend.generate_signed_url(db_attachment.object_key, db_attachment.mime_type)
+            return RedirectResponse(url=url)
+        else:
+            # Fallback if config is inconsistent, though unlikely
+            raise HTTPException(status_code=500, detail="Storage configuration mismatch")
+
+    # Local storage (default)
+    file_path = storage.get_file_path(db_attachment.stored_filename or db_attachment.object_key)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found on disk")
 
@@ -91,18 +104,19 @@ def get_attachment_file(
 @router.delete("/attachments/{att_id}")
 def delete_attachment(
     att_id: int,
-    db: Session = Depends(get_db),
+    repo: AttachmentRepository = Depends(get_attachment_repository),
     current_user: str = Depends(get_current_user)
 ):
-    db_attachment = db.query(models.Attachment).filter(models.Attachment.id == att_id).first()
+    db_attachment = repo.get(att_id)
     if not db_attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
     # Delete physical file
-    storage.delete_file(db_attachment.stored_filename)
+    backend = storage.get_storage()
+    backend.delete(db_attachment.object_key or db_attachment.stored_filename)
 
     # Delete DB row
-    db.delete(db_attachment)
-    db.commit()
+    repo.delete(att_id)
 
     return {"message": "Successfully deleted"}
+
