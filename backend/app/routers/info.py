@@ -3,11 +3,51 @@ from typing import List, Optional
 from .. import schemas, storage
 from ..repository import InfoRepository, get_info_repository
 from ..routers.auth import get_current_user
+from ..rag.service import get_rag_service
 
 router = APIRouter(
     prefix="/info",
     tags=["info"],
 )
+
+
+# NOTE: declared before the "/{id}" route so the literal paths take precedence.
+@router.post("/ask", response_model=schemas.RagAnswer)
+def ask_info(
+    payload: schemas.RagQuery,
+    repo: InfoRepository = Depends(get_info_repository),
+    current_user: str = Depends(get_current_user),
+):
+    """ベクトル検索で関連情報を取得し、LLMで回答を生成する (RAG)。"""
+    service = get_rag_service(repo)
+    result = service.answer(payload.query, top_k=payload.top_k)
+    return schemas.RagAnswer(
+        answer=result.answer,
+        sources=[
+            schemas.RagSource(info_id=s.info_id, title=s.title, source=s.source, score=s.score)
+            for s in result.sources
+        ],
+    )
+
+
+@router.get("/search", response_model=schemas.RagSearchResponse)
+def vector_search_info(
+    q: str = Query(..., description="検索クエリ"),
+    top_k: int = 4,
+    repo: InfoRepository = Depends(get_info_repository),
+    current_user: str = Depends(get_current_user),
+):
+    """埋め込みベースのベクトル検索のみを実行し、関連チャンク（出典）を返す。"""
+    service = get_rag_service(repo)
+    sources = service.search(q, top_k=top_k)
+    return schemas.RagSearchResponse(
+        query=q,
+        sources=[
+            schemas.RagSource(info_id=s.info_id, title=s.title, source=s.source, score=s.score)
+            for s in sources
+        ],
+    )
+
 
 @router.post("/", response_model=schemas.NurseryInfoResponse)
 def create_info(info: schemas.NurseryInfoCreate, repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
