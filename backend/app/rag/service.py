@@ -23,6 +23,7 @@ class Source:
     source: str
     score: float
     text: str
+    filename: Optional[str] = None
 
 
 @dataclass
@@ -63,7 +64,14 @@ class RagService:
     def search(self, query: str, top_k: int = 4) -> List[Source]:
         hits = self._search_chunks(query, top_k=top_k)
         return [
-            Source(info_id=c.info_id, title=c.title, source=c.source, score=score, text=c.text)
+            Source(
+                info_id=c.info_id,
+                title=c.title,
+                source=c.source,
+                score=score,
+                text=c.text,
+                filename=c.filename,
+            )
             for c, score in hits
         ]
 

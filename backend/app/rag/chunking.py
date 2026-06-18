@@ -5,7 +5,7 @@ text chunks suitable for embedding.
 """
 
 from dataclasses import dataclass
-from typing import Any, Iterable, List
+from typing import Any, Iterable, List, Optional
 
 
 @dataclass
@@ -14,6 +14,7 @@ class Chunk:
     title: str
     text: str
     source: str  # "content" | "ocr"
+    filename: Optional[str] = None  # attachment original filename for "ocr" chunks
 
 
 def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]:
@@ -61,7 +62,10 @@ def build_documents(infos: Iterable[Any], chunk_size: int = 500, overlap: int = 
 
         for attachment in getattr(info, "attachments", None) or []:
             ocr_text = getattr(attachment, "ocr_text", None)
+            filename = getattr(attachment, "original_filename", None)
             for piece in chunk_text(ocr_text or "", chunk_size, overlap):
-                documents.append(Chunk(info_id=info_id, title=title, text=piece, source="ocr"))
+                documents.append(
+                    Chunk(info_id=info_id, title=title, text=piece, source="ocr", filename=filename)
+                )
 
     return documents

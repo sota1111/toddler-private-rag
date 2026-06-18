@@ -87,6 +87,25 @@ def test_build_documents_includes_content_and_ocr():
     assert all(isinstance(d, Chunk) for d in docs)
 
 
+def test_build_documents_ocr_chunks_carry_filename():
+    class FakeAtt:
+        ocr_text = "OCRから抽出した持ち物リスト"
+        original_filename = "おたより_2026-06.pdf"
+
+    class FakeInfo:
+        id = 1
+        title = "遠足のお知らせ"
+        content = "来週の遠足について"
+        attachments = [FakeAtt()]
+
+    docs = build_documents([FakeInfo()])
+    ocr_chunks = [d for d in docs if d.source == "ocr"]
+    content_chunks = [d for d in docs if d.source == "content"]
+    assert ocr_chunks and all(d.filename == "おたより_2026-06.pdf" for d in ocr_chunks)
+    # content chunks have no attachment filename
+    assert content_chunks and all(d.filename is None for d in content_chunks)
+
+
 # --- embeddings ---
 
 def test_fake_embedding_deterministic_and_dimension():
@@ -162,6 +181,23 @@ def test_ask_endpoint_returns_answer_and_sources():
     assert len(data["sources"]) >= 1
     # The most relevant source should be the 遠足 info.
     assert data["sources"][0]["info_id"] == id1
+
+
+def test_ask_endpoint_sources_include_citation_label():
+    _seed("遠足のお知らせ", "行事", "来週の遠足では お弁当 水筒 レジャーシート を持参してください")
+
+    resp = client.post("/api/info/ask", json={"query": "遠足の持ち物", "top_k": 3})
+    assert resp.status_code == 200
+    sources = resp.json()["sources"]
+    assert sources
+    for s in sources:
+        # citation metadata is present for every source
+        assert "filename" in s and "label" in s
+        assert s["label"]
+    # content-sourced citations fall back to the info title
+    content_sources = [s for s in sources if s["source"] == "content"]
+    assert content_sources
+    assert content_sources[0]["label"] == content_sources[0]["title"]
 
 
 def test_vector_search_endpoint():

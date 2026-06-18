@@ -8,6 +8,7 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import InfoListPage from './pages/InfoListPage';
 import InfoCreatePage from './pages/InfoCreatePage';
+import AskPage from './pages/AskPage';
 
 const queryClient = new QueryClient();
 
@@ -41,6 +42,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 {isAuthenticated && (
                   <>
                     <NavLink to="/">ダッシュボード</NavLink>
+                    <NavLink to="/ask">質問</NavLink>
                     <NavLink to="/list">一覧</NavLink>
                     <NavLink to="/create">登録</NavLink>
                   </>
@@ -71,6 +73,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         {isMenuOpen && isAuthenticated && (
           <div className="md:hidden bg-blue-600 px-2 pt-2 pb-3 space-y-1 sm:px-3">
             <Link to="/" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-700">ダッシュボード</Link>
+            <Link to="/ask" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-700">質問</Link>
             <Link to="/list" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-700">一覧</Link>
             <Link to="/create" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-700">登録</Link>
             <button onClick={() => { logout(); setIsMenuOpen(false); }} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-700">ログアウト</button>
@@ -94,6 +97,7 @@ const App: React.FC = () => {
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+              <Route path="/ask" element={<ProtectedRoute><AskPage /></ProtectedRoute>} />
               <Route path="/list" element={<ProtectedRoute><InfoListPage /></ProtectedRoute>} />
               <Route path="/create" element={<ProtectedRoute><InfoCreatePage /></ProtectedRoute>} />
               <Route path="*" element={<Navigate to="/" replace />} />
