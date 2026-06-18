@@ -63,11 +63,15 @@ class AttachmentRepository(abc.ABC):
     def create(self, *, info_id: Union[int, str], stored_filename: str, 
                original_filename: str, mime_type: str, file_size: int, 
                storage_backend: str, object_key: Optional[str], 
-               ocr_text: Optional[str]) -> Any:
+               ocr_text: Optional[str], ocr_status: str = "pending") -> Any:
         pass
 
     @abc.abstractmethod
     def get(self, att_id: Union[int, str]) -> Optional[Any]:
+        pass
+
+    @abc.abstractmethod
+    def set_ocr_result(self, att_id: Union[int, str], *, ocr_text: Optional[str], ocr_status: str) -> None:
         pass
 
     @abc.abstractmethod
@@ -184,7 +188,7 @@ class SqliteAttachmentRepository(AttachmentRepository):
     def create(self, *, info_id: Union[int, str], stored_filename: str, 
                original_filename: str, mime_type: str, file_size: int, 
                storage_backend: str, object_key: Optional[str], 
-               ocr_text: Optional[str]) -> models.Attachment:
+               ocr_text: Optional[str], ocr_status: str = "pending") -> models.Attachment:
         db_attachment = models.Attachment(
             info_id=int(info_id),
             stored_filename=stored_filename,
@@ -193,7 +197,8 @@ class SqliteAttachmentRepository(AttachmentRepository):
             file_size=file_size,
             storage_backend=storage_backend,
             object_key=object_key,
-            ocr_text=ocr_text
+            ocr_text=ocr_text,
+            ocr_status=ocr_status
         )
         self.db.add(db_attachment)
         self.db.commit()
@@ -202,6 +207,13 @@ class SqliteAttachmentRepository(AttachmentRepository):
 
     def get(self, att_id: Union[int, str]) -> Optional[models.Attachment]:
         return self.db.query(models.Attachment).filter(models.Attachment.id == int(att_id)).first()
+
+    def set_ocr_result(self, att_id: Union[int, str], *, ocr_text: Optional[str], ocr_status: str) -> None:
+        db_attachment = self.get(att_id)
+        if db_attachment:
+            db_attachment.ocr_text = ocr_text
+            db_attachment.ocr_status = ocr_status
+            self.db.commit()
 
     def delete(self, att_id: Union[int, str]) -> bool:
         db_attachment = self.get(att_id)
@@ -226,6 +238,7 @@ class FirestoreAttachment:
     storage_backend: str
     object_key: Optional[str]
     ocr_text: Optional[str]
+    ocr_status: str
     created_at: datetime.datetime
 
 @dataclass
@@ -301,6 +314,7 @@ def _att_doc_to_obj(doc_id: str, data: dict) -> FirestoreAttachment:
         storage_backend=data.get("storage_backend", "local"),
         object_key=data.get("object_key"),
         ocr_text=data.get("ocr_text"),
+        ocr_status=data.get("ocr_status", "pending"),
         created_at=data.get("created_at") or datetime.datetime.now()
     )
 
@@ -509,7 +523,7 @@ class FirestoreAttachmentRepository(AttachmentRepository):
     def create(self, *, info_id: Union[int, str], stored_filename: str, 
                original_filename: str, mime_type: str, file_size: int, 
                storage_backend: str, object_key: Optional[str], 
-               ocr_text: Optional[str]) -> FirestoreAttachment:
+               ocr_text: Optional[str], ocr_status: str = "pending") -> FirestoreAttachment:
         now = datetime.datetime.now(datetime.timezone.utc)
         doc_data = {
             "info_id": str(info_id),
@@ -520,6 +534,7 @@ class FirestoreAttachmentRepository(AttachmentRepository):
             "storage_backend": storage_backend,
             "object_key": object_key,
             "ocr_text": ocr_text,
+            "ocr_status": ocr_status,
             "created_at": now
         }
         _, doc_ref = self.db.collection("attachments").add(doc_data)
@@ -531,6 +546,14 @@ class FirestoreAttachmentRepository(AttachmentRepository):
         if not doc.exists:
             return None
         return _att_doc_to_obj(doc.id, doc.to_dict())
+
+    def set_ocr_result(self, att_id: Union[int, str], *, ocr_text: Optional[str], ocr_status: str) -> None:
+        doc_ref = self.db.collection("attachments").document(str(att_id))
+        if doc_ref.get().exists:
+            doc_ref.update({
+                "ocr_text": ocr_text,
+                "ocr_status": ocr_status
+            })
 
     def delete(self, att_id: Union[int, str]) -> bool:
         doc_ref = self.db.collection("attachments").document(str(att_id))
@@ -553,4 +576,13 @@ def get_info_repository(db: Session = Depends(database.get_db)) -> InfoRepositor
 def get_attachment_repository(db: Session = Depends(database.get_db)) -> AttachmentRepository:
     if get_database_type() == "firestore":
         return FirestoreAttachmentRepository()
+    return SqliteAttachmentRepository(db)
+
+def get_attachment_repo_standalone() -> Any:
+    """Helper for background tasks where Depends() cannot be used."""
+    if get_database_type() == "firestore":
+        return FirestoreAttachmentRepository()
+    
+    # For SQLite, we need a session
+    db = database.SessionLocal()
     return SqliteAttachmentRepository(db)

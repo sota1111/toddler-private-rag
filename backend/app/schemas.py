@@ -3,11 +3,12 @@ from pydantic import BaseModel, ConfigDict
 from typing import Optional, List, Union
 
 class AttachmentResponse(BaseModel):
-    id: int
-    info_id: int
+    id: Union[int, str]
+    info_id: Union[int, str]
     original_filename: str
     mime_type: str
     file_size: int
+    ocr_status: str = "pending"
     created_at: datetime.datetime
 
     model_config = ConfigDict(from_attributes=True)

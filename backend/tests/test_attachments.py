@@ -10,7 +10,7 @@ from pathlib import Path
 from app.main import app
 from app.database import Base, get_db
 from app.routers.auth import get_current_user
-from app import storage, models
+from app import storage, models, database
 
 # Test database setup
 SQLALCHEMY_DATABASE_URL = "sqlite://"
@@ -31,13 +31,17 @@ def override_get_db():
 def override_get_current_user():
     return "test_user"
 
-app.dependency_overrides[get_db] = override_get_db
-app.dependency_overrides[get_current_user] = override_get_current_user
-
 @pytest.fixture(autouse=True)
-def setup_and_teardown(tmp_path):
+def setup_and_teardown(tmp_path, monkeypatch):
     # Setup
     Base.metadata.create_all(bind=engine)
+    # Patch SessionLocal so process_ocr uses the same in-memory DB
+    monkeypatch.setattr(database, "SessionLocal", TestingSessionLocal)
+    
+    # Dependency overrides
+    monkeypatch.setitem(app.dependency_overrides, get_db, override_get_db)
+    monkeypatch.setitem(app.dependency_overrides, get_current_user, override_get_current_user)
+    
     test_upload_dir = tmp_path / "uploads"
     os.makedirs(test_upload_dir, exist_ok=True)
     

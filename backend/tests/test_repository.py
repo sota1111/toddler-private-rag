@@ -42,6 +42,7 @@ def test_matches_query():
                 original_filename="o1.png", mime_type="image/png",
                 file_size=100, storage_backend="local",
                 object_key=None, ocr_text="Found this word",
+                ocr_status="done",
                 created_at=datetime.datetime.now()
             )
         ]
