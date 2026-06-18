@@ -1,5 +1,5 @@
 import datetime
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 from typing import Optional, List, Union
 
 class AttachmentResponse(BaseModel):
@@ -75,3 +75,21 @@ class RagSearchResponse(BaseModel):
 class RagAnswer(BaseModel):
     answer: str
     sources: List[RagSource] = []
+
+
+# --- OCR 構造化抽出結果 ---
+
+class DocumentExtraction(BaseModel):
+    """OCR抽出結果を型安全に表す構造化スキーマ。"""
+    raw_text: str = ""                       # 抽出された生テキスト（既存 ocr_text 相当）
+    char_count: int = 0                      # raw_text の文字数
+    is_empty: bool = True                    # 抽出テキストが空（空白のみ含む）か
+    detected_dates: List[str] = []           # テキストから検出した日付文字列（ISO等の正規化文字列）
+    detected_items: List[str] = []           # テキストから検出した持ち物/箇条書き項目候補
+
+    @model_validator(mode="after")
+    def derive_fields(self) -> "DocumentExtraction":
+        stripped = self.raw_text.strip()
+        self.char_count = len(self.raw_text)
+        self.is_empty = not stripped
+        return self
