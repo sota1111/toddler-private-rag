@@ -4,6 +4,7 @@ import os
 import logging
 from typing import Optional
 from .. import schemas, storage, ocr
+from ..privacy import redact_pii
 from ..repository import AttachmentRepository, get_attachment_repository, get_attachment_repo_standalone, SqliteAttachmentRepository
 from ..routers.auth import get_current_user
 
@@ -27,7 +28,10 @@ async def process_ocr(
         ocr_text = ocr.extract_text(ocr_path, content_type)
         # 構造化抽出を生成（将来的に detected_dates 等を活用可能にするため）
         structured = ocr.build_extraction(ocr_text)
-        repo.set_ocr_result(att_id, ocr_text=structured.raw_text, ocr_status="done")
+        
+        # PIIをマスクしてから保存
+        safe_text = redact_pii(structured.raw_text)
+        repo.set_ocr_result(att_id, ocr_text=safe_text, ocr_status="done")
     except Exception as e:
         logger.error(f"OCR failed for attachment {att_id}: {str(e)}")
         repo.set_ocr_result(att_id, ocr_text=None, ocr_status="failed")
