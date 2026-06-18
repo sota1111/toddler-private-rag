@@ -28,6 +28,7 @@ const InfoCreatePage: React.FC = () => {
   });
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -89,6 +90,39 @@ const InfoCreatePage: React.FC = () => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       setSelectedFiles(Array.from(e.target.files));
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isSubmitting) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (isSubmitting) return;
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = Array.from(e.dataTransfer.files);
+      const acceptedFiles = files.filter(file => 
+        file.type.startsWith('image/') || file.type === 'application/pdf'
+      );
+      
+      if (acceptedFiles.length > 0) {
+        setSelectedFiles(prev => [...prev, ...acceptedFiles]);
+      }
     }
   };
 
@@ -247,8 +281,18 @@ const InfoCreatePage: React.FC = () => {
           ></textarea>
         </div>
 
-        <div className="border-t border-gray-200 pt-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">添付ファイル (画像またはPDF)</label>
+        <div 
+          className={`pt-4 px-2 pb-2 rounded-md transition-colors ${
+            isDragging ? 'bg-blue-50 border-2 border-dashed border-blue-400' : 'border-t border-gray-200'
+          }`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            添付ファイル (画像またはPDF)
+            {isDragging && <span className="ml-2 text-blue-600 font-bold">ここにドロップして追加</span>}
+          </label>
           <input
             type="file"
             multiple
