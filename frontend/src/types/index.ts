@@ -38,3 +38,17 @@ export interface NurseryInfoCreate {
   tags?: string
   memo?: string
 }
+
+export interface RagSource {
+  info_id?: number | string | null
+  title: string
+  source: string // "content" | "ocr"
+  score: number
+  filename?: string | null
+  label?: string | null
+}
+
+export interface RagAnswer {
+  answer: string
+  sources: RagSource[]
+}

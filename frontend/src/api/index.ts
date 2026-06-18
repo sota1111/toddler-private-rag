@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { NurseryInfo, NurseryInfoCreate, Attachment } from '../types';
+import type { NurseryInfo, NurseryInfoCreate, Attachment, RagAnswer } from '../types';
 
 const api = axios.create({
   baseURL: '/api',
@@ -47,6 +47,11 @@ export const getWeekly = async (): Promise<NurseryInfo[]> => {
 
 export const getPending = async (): Promise<NurseryInfo[]> => {
   const response = await api.get('/info/pending');
+  return response.data;
+};
+
+export const askInfo = async (query: string, top_k = 4): Promise<RagAnswer> => {
+  const response = await api.post<RagAnswer>('/info/ask', { query, top_k });
   return response.data;
 };
 

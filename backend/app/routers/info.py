@@ -11,6 +11,24 @@ router = APIRouter(
 )
 
 
+def _source_label(source) -> str:
+    """出典の表示用ラベルを生成する (タイトル + 添付ファイル名)。"""
+    if source.source == "ocr" and source.filename:
+        return f"{source.title}（添付: {source.filename}）"
+    return source.title
+
+
+def _to_rag_source(source) -> schemas.RagSource:
+    return schemas.RagSource(
+        info_id=source.info_id,
+        title=source.title,
+        source=source.source,
+        score=source.score,
+        filename=source.filename,
+        label=_source_label(source),
+    )
+
+
 # NOTE: declared before the "/{id}" route so the literal paths take precedence.
 @router.post("/ask", response_model=schemas.RagAnswer)
 def ask_info(
@@ -23,10 +41,7 @@ def ask_info(
     result = service.answer(payload.query, top_k=payload.top_k)
     return schemas.RagAnswer(
         answer=result.answer,
-        sources=[
-            schemas.RagSource(info_id=s.info_id, title=s.title, source=s.source, score=s.score)
-            for s in result.sources
-        ],
+        sources=[_to_rag_source(s) for s in result.sources],
     )
 
 
@@ -42,10 +57,7 @@ def vector_search_info(
     sources = service.search(q, top_k=top_k)
     return schemas.RagSearchResponse(
         query=q,
-        sources=[
-            schemas.RagSource(info_id=s.info_id, title=s.title, source=s.source, score=s.score)
-            for s in sources
-        ],
+        sources=[_to_rag_source(s) for s in sources],
     )
 
 
