@@ -1,12 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
+import logging
 from .database import engine, Base, SessionLocal
 from .routers import info, attachments
 from .routers import auth as auth_router
 from .seed import seed_data
 from . import models
 from .repository import get_database_type
+
+logger = logging.getLogger(__name__)
 
 if get_database_type() != "firestore":
     models.Base.metadata.create_all(bind=engine)
@@ -24,6 +27,25 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_event():
+    # Auth configuration check
+    auth_secret = os.getenv("AUTH_SECRET")
+    firebase_api_key = os.getenv("FIREBASE_WEB_API_KEY") or os.getenv("FIREBASE_API_KEY")
+    allowed_emails = os.getenv("ALLOWED_USER_EMAILS")
+
+    missing = False
+    if not firebase_api_key:
+        logger.warning("FIREBASE_WEB_API_KEY / FIREBASE_API_KEY not configured")
+        missing = True
+    if not auth_secret:
+        logger.warning("AUTH_SECRET not configured")
+        missing = True
+    if not allowed_emails:
+        logger.warning("ALLOWED_USER_EMAILS not configured")
+        missing = True
+
+    if not missing:
+        logger.info("auth config OK")
+
     if os.getenv("APP_ENV", "local").lower() == "production":
         return
     if get_database_type() != "firestore":

@@ -185,7 +185,8 @@ docker run -p 8080:8080 toddler-private-rag-frontend
 | 変数名 | 説明 | 既定・例 |
 |--------|------|----------|
 | `APP_ENV` | 実行環境。`production` で cookie secure 有効・起動時 seed 無効 | `local` |
-| `FIREBASE_API_KEY` | Firebase Web API key。backend がサーバサイドREST認証に使用（本番は `rag-firebase-api-key`） | `your-firebase-web-api-key` |
+| `FIREBASE_WEB_API_KEY` | Firebase Web API key（推奨名・優先、本番は `rag-firebase-api-key`） | `your-firebase-web-api-key` |
+| `FIREBASE_API_KEY` | Firebase Web API key（後方互換の fallback 名） | `your-firebase-web-api-key` |
 | `ALLOWED_USER_EMAILS` | ログインを許可するメール（カンマ区切り、本番は Secret Manager 推奨） | `you@example.com` |
 | `AUTH_SECRET` | セッションcookie署名シークレット（32文字以上推奨、本番は `rag-auth-secret`） | `your-random-secret-key-here` |
 | `GOOGLE_CLOUD_PROJECT` | Firebase Admin / GCP プロジェクトID | `your-gcp-project-id` |
