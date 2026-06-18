@@ -245,6 +245,38 @@ GCP_PROJECT_ID=your-project-id bash scripts/deploy-cloudrun.sh
 backend は `APP_ENV=production`（cookie secure 有効・起動時 seed 無効）で起動し、
 シークレットは Secret Manager から注入されます。
 
+### 3. GitHub Actions による自動デプロイ
+
+`main` への push（および `workflow_dispatch` 手動実行）をトリガーに、
+`.github/workflows/deploy-cloudrun.yml` が backend → frontend の順に
+Docker build → Artifact Registry push → Cloud Run deploy を実行します。
+認証は Workload Identity Federation（WIF）を使用し、JSON キーは使用しません
+（`permissions: contents: read` / `id-token: write`）。
+
+#### 必要な GitHub Actions Secrets
+
+リポジトリの Settings > Secrets and variables > Actions に以下を設定します。
+
+| Secret | 説明 / 値の例 |
+|---|---|
+| `GCP_PROJECT_ID` | GCP プロジェクト ID |
+| `GCP_PROJECT_NUMBER` | GCP プロジェクト番号（Cloud Run URL / WIF 用） |
+| `GCP_REGION` | `asia-northeast1` |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | WIF プロバイダのリソースパス |
+| `GCP_SERVICE_ACCOUNT` | デプロイ用サービスアカウント email |
+| `ARTIFACT_REGISTRY_REPOSITORY` | Artifact Registry リポジトリ名（例: `toddler-rag-registry`） |
+| `CLOUD_RUN_SERVICE_BACKEND` | `toddler-private-rag-backend` |
+| `CLOUD_RUN_SERVICE_FRONTEND` | `toddler-private-rag-frontend` |
+
+#### 必要な GCP Secret Manager シークレット（GitHub Secrets ではない）
+
+backend のデプロイ時に `--set-secrets` で注入されます。上記「1. Secret Manager の
+シークレット作成」で作成済みであることが前提です。
+
+- `rag-auth-secret`（`AUTH_SECRET`）
+- `rag-allowed-emails`（`ALLOWED_USER_EMAILS`）
+- `rag-firebase-api-key`（`FIREBASE_API_KEY`）
+
 ### データ永続化について
 
 ローカルでは SQLite + ローカルファイル保存が既定です。Cloud Run はステートレスなため、
