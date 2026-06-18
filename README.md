@@ -203,14 +203,15 @@ docker run -p 8080:8080 toddler-private-rag-frontend
 | `LLM_PROVIDER` | 回答生成プロバイダ | `fake`（既定）/ `gemini` |
 | `GEMINI_API_KEY` | `gemini` プロバイダ利用時のみ必要（`GOOGLE_API_KEY` でも可） | （未設定） |
 
-> 注: フロントエンド用 Firebase 設定が必要な構成では `VITE_FIREBASE_*` をフロントのビルド環境に設定します。
-
 ## 認証
 
 このアプリは **Firebase（メール/パスワード）+ 署名付きセッションcookie** を使用します。
-ブラウザは Firebase と直接通信せず、backend が Identity Toolkit REST
-（`accounts:signInWithPassword`）でメール/パスワードを照合します。照合後、HMAC署名された
-`auth_token` cookie を発行し、以降のAPIアクセスを認可します。
+
+### 責務の分離
+- **Backend (API)**: **API 専用**であり、`/login` UI は持ちません（設計上正しい）。認証の実体として、Identity Toolkit REST (`accounts:signInWithPassword`) を用いたメール/パスワードの照合、`ALLOWED_USER_EMAILS` による許可判定、および HMAC 署名セッションcookie (`auth_token`) の発行・検証を担います。
+- **Frontend (SPA)**: 同梱の React アプリケーションが `/login` 画面および認証フローの UI を提供します。
+
+ブラウザ（Frontend）は Firebase SDK を使用せず、直接 Firebase と通信することもありません。すべての認証処理は backend の `/api/auth/session` を経由してサーバーサイドで完結します。
 ログインしたメールアドレスが `ALLOWED_USER_EMAILS` に含まれている場合のみアクセスが許可されます。
 
 ## GCP デプロイ
