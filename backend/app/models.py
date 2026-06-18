@@ -35,6 +35,7 @@ class Attachment(Base):
     storage_backend = Column(String, nullable=False, server_default="local")
     object_key = Column(String, nullable=True)
     ocr_text = Column(Text, nullable=True, default=None)
+    ocr_status = Column(String(20), nullable=False, server_default="pending")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     info = relationship("NurseryInfo", back_populates="attachments")

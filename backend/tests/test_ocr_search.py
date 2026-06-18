@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from app.main import app
 from app.database import Base, get_db
-from app import models
+from app import models, database
 from pathlib import Path
 import os
 import shutil
@@ -20,8 +20,10 @@ engine = create_engine(
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 @pytest.fixture
-def db():
+def db(monkeypatch):
     Base.metadata.create_all(bind=engine)
+    # Patch SessionLocal so process_ocr uses the same in-memory DB
+    monkeypatch.setattr(database, "SessionLocal", TestingSessionLocal)
     db = TestingSessionLocal()
     try:
         yield db

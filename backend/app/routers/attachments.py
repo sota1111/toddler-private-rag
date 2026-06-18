@@ -1,9 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from fastapi.responses import FileResponse, RedirectResponse
 import os
+import logging
+from typing import Optional
 from .. import schemas, storage, ocr
-from ..repository import AttachmentRepository, get_attachment_repository
+from ..repository import AttachmentRepository, get_attachment_repository, get_attachment_repo_standalone, SqliteAttachmentRepository
 from ..routers.auth import get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     tags=["attachments"],
@@ -12,9 +16,31 @@ router = APIRouter(
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 ALLOWED_CONTENT_TYPES = ["image/*", "application/pdf"]
 
+async def process_ocr(
+    att_id: int, 
+    ocr_path: str, 
+    content_type: str, 
+    cleanup_local: bool = False
+):
+    repo = get_attachment_repo_standalone()
+    try:
+        ocr_text = ocr.extract_text(ocr_path, content_type)
+        repo.set_ocr_result(att_id, ocr_text=ocr_text, ocr_status="done")
+    except Exception as e:
+        logger.error(f"OCR failed for attachment {att_id}: {str(e)}")
+        repo.set_ocr_result(att_id, ocr_text=None, ocr_status="failed")
+    finally:
+        if cleanup_local and os.path.exists(ocr_path):
+            os.remove(ocr_path)
+        
+        # Close session if SQLite
+        if isinstance(repo, SqliteAttachmentRepository):
+            repo.db.close()
+
 @router.post("/info/{info_id}/attachments", response_model=schemas.AttachmentResponse)
 async def upload_attachment(
     info_id: int,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     repo: AttachmentRepository = Depends(get_attachment_repository),
     current_user: str = Depends(get_current_user)
@@ -47,16 +73,7 @@ async def upload_attachment(
     
     backend.save(object_key, content, content_type)
 
-    # Extract OCR text
-    ocr_path = backend.local_path_for_ocr(object_key, content)
-    try:
-        ocr_text = ocr.extract_text(ocr_path, content_type)
-    finally:
-        # If GCS, local_path_for_ocr creates a temp file that should be deleted
-        if backend.name == "gcs" and ocr_path.exists():
-            os.remove(ocr_path)
-
-    # Create Attachment row
+    # Create Attachment row FIRST (pending)
     db_attachment = repo.create(
         info_id=info_id,
         stored_filename=stored_filename,
@@ -65,7 +82,22 @@ async def upload_attachment(
         file_size=file_size,
         storage_backend=backend.name,
         object_key=object_key,
-        ocr_text=ocr_text
+        ocr_text=None,
+        ocr_status="pending"
+    )
+
+    # Prepare OCR (but don't run it yet)
+    ocr_path = backend.local_path_for_ocr(object_key, content)
+    
+    # Schedule OCR as background task
+    # If backend is GCS, ocr_path is a temp file that should be cleaned up
+    cleanup_local = (backend.name == "gcs")
+    background_tasks.add_task(
+        process_ocr, 
+        db_attachment.id, 
+        str(ocr_path), 
+        content_type, 
+        cleanup_local
     )
 
     return db_attachment
