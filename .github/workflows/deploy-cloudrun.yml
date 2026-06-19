@@ -81,11 +81,20 @@ jobs:
         env:
           IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }}
         run: |
+          BACKEND_URL=$(gcloud run services describe ${{ secrets.CLOUD_RUN_SERVICE_BACKEND }} \
+            --region ${{ secrets.GCP_REGION }} \
+            --project ${{ secrets.GCP_PROJECT_ID }} \
+            --format 'value(status.url)')
+          if [ -z "$BACKEND_URL" ]; then
+            echo "ERROR: backend URL not resolved" >&2
+            exit 1
+          fi
           gcloud run deploy ${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }} \
             --image "$IMAGE:${{ github.sha }}" \
             --region ${{ secrets.GCP_REGION }} \
             --project ${{ secrets.GCP_PROJECT_ID }} \
             --platform managed \
             --allow-unauthenticated \
+            --set-env-vars "BACKEND_URL=$BACKEND_URL" \
             --memory 256Mi \
             --timeout 300
