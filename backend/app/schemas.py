@@ -93,3 +93,17 @@ class DocumentExtraction(BaseModel):
         self.char_count = len(self.raw_text)
         self.is_empty = not stripped
         return self
+
+
+# --- 写真のみ登録: OCR からの登録ドラフト (SOT-829 / SOT-831) ---
+
+class InfoExtractDraft(BaseModel):
+    """画像をOCR・構造化して得た登録フォーム用ドラフト（DB未保存）。"""
+    title: str
+    info_type: str
+    content: str
+    items: Optional[str] = None
+    date: Optional[str] = None                # ISO "YYYY-MM-DD" に正規化できた場合のみ
+    raw_text: str = ""
+    detected_dates: List[str] = []
+    detected_items: List[str] = []
