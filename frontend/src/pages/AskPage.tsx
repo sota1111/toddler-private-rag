@@ -59,7 +59,18 @@ const AskPage: React.FC = () => {
       )}
 
       {isLoading && (
-        <div className="text-center py-10 text-gray-500">回答を生成しています...</div>
+        <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+          <span className="h-8 w-8 mb-3 rounded-full border-2 border-gray-200 border-t-blue-500 animate-spin" aria-hidden />
+          <p className="text-sm">回答を生成しています...</p>
+        </div>
+      )}
+
+      {!isLoading && !result && !error && (
+        <div className="text-center py-12 text-gray-400">
+          <div className="text-4xl mb-2" aria-hidden>💬</div>
+          <p className="text-sm">登録済みの保育園情報をもとにお答えします。</p>
+          <p className="text-xs mt-1">上の入力欄から質問してみましょう。</p>
+        </div>
       )}
 
       {!isLoading && result && (

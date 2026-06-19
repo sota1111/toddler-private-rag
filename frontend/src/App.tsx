@@ -33,11 +33,14 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <nav className="bg-blue-500 shadow-lg">
+      <nav className="bg-gradient-to-r from-blue-600 to-indigo-600 shadow-md sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center">
-              <div className="flex-shrink-0 text-white font-bold text-xl">保育園アシスタント</div>
+              <div className="flex-shrink-0 flex items-center gap-2 text-white font-bold text-xl">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-lg" aria-hidden>🏫</span>
+                保育園アシスタント
+              </div>
               <div className="hidden md:flex ml-10 items-baseline space-x-4">
                 {isAuthenticated && (
                   <>
