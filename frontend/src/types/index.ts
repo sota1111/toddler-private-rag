@@ -39,6 +39,17 @@ export interface NurseryInfoCreate {
   memo?: string
 }
 
+export interface InfoExtractDraft {
+  title: string
+  info_type: string
+  content: string
+  items?: string | null
+  date?: string | null
+  raw_text: string
+  detected_dates: string[]
+  detected_items: string[]
+}
+
 export interface RagSource {
   info_id?: number | string | null
   title: string

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { NurseryInfo, NurseryInfoCreate, Attachment, RagAnswer } from '../types';
+import type { NurseryInfo, NurseryInfoCreate, Attachment, RagAnswer, InfoExtractDraft } from '../types';
 
 const api = axios.create({
   baseURL: '/api',
@@ -20,6 +20,17 @@ export const uploadAttachment = async (infoId: number, file: File): Promise<Atta
   const formData = new FormData();
   formData.append('file', file);
   const response = await api.post<Attachment>(`/info/${infoId}/attachments`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};
+
+export const extractInfoDraft = async (file: File): Promise<InfoExtractDraft> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await api.post<InfoExtractDraft>('/info/extract', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
