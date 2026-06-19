@@ -45,6 +45,11 @@ BACKEND_URL=$(gcloud run services describe "${BACKEND_SERVICE}" \
 
 echo "Backend URL: ${BACKEND_URL:-N/A}"
 
+if [ -z "${BACKEND_URL}" ]; then
+  echo "ERROR: backend URL not resolved; cannot configure frontend /api proxy" >&2
+  exit 1
+fi
+
 # Frontend: Cloud Build でビルド & デプロイ
 echo "--- Frontend ---"
 gcloud builds submit ./frontend \
@@ -58,7 +63,7 @@ gcloud run deploy "${FRONTEND_SERVICE}" \
   --region="${REGION}" \
   --platform=managed \
   --allow-unauthenticated \
-  --set-env-vars="VITE_API_BASE_URL=${BACKEND_URL}" \
+  --set-env-vars="BACKEND_URL=${BACKEND_URL}" \
   --memory=256Mi \
   --timeout=300 \
   --quiet
