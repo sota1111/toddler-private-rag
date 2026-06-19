@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createInfo, uploadAttachment } from '../api';
+import { createInfo, uploadAttachment, extractInfoDraft } from '../api';
 import type { NurseryInfoCreate } from '../types';
 
 const INFO_TYPES = ["資料", "掲示", "行事", "持ち物", "提出物", "お知らせ", "給食", "休園変更"];
@@ -32,6 +32,12 @@ const InfoCreatePage: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // 写真から自動入力 (SOT-829)
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractNotice, setExtractNotice] = useState<string | null>(null);
+  const [extractError, setExtractError] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: createInfo,
@@ -93,6 +99,47 @@ const InfoCreatePage: React.FC = () => {
     }
   };
 
+  // 写真をアップロードしてOCR・構造化し、フォームを自動入力する (SOT-829)
+  const handlePhotoExtract = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // input をリセットして同じファイルでも再選択できるようにする
+    if (photoInputRef.current) photoInputRef.current.value = '';
+    if (!file) return;
+
+    setIsExtracting(true);
+    setExtractError(null);
+    setExtractNotice(null);
+
+    try {
+      const draft = await extractInfoDraft(file);
+      setFormData(prev => ({
+        ...prev,
+        title: draft.title || prev.title,
+        // 推定種別が選択肢に存在する場合のみ採用
+        info_type: INFO_TYPES.includes(draft.info_type) ? draft.info_type : prev.info_type,
+        content: draft.content || prev.content,
+        items: draft.items || prev.items,
+        date: draft.date || prev.date,
+      }));
+      // 解析した写真はそのまま添付として保持
+      setSelectedFiles(prev => (prev.includes(file) ? prev : [...prev, file]));
+      setExtractNotice('写真から内容を自動入力しました。内容を確認・修正して登録してください。');
+    } catch (error: unknown) {
+      console.error('Failed to extract from photo', error);
+      let msg = '写真の解析に失敗しました。お手数ですが手入力で登録してください。';
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 413) {
+          msg = '画像サイズが大きすぎます (最大10MB)。別の画像でお試しください。';
+        } else if (error.response?.status === 400) {
+          msg = 'この形式の画像には対応していません。画像ファイルを選択してください。';
+        }
+      }
+      setExtractError(msg);
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -139,6 +186,47 @@ const InfoCreatePage: React.FC = () => {
       <h1 className="text-2xl font-bold mb-6 text-gray-800">情報登録</h1>
       
       <form onSubmit={handleSubmit} className="bg-white shadow-md rounded-lg p-6 space-y-4">
+        {/* 写真から自動入力 (SOT-832) */}
+        <div className="border border-dashed border-blue-300 bg-blue-50 rounded-lg p-4">
+          <h2 className="text-sm font-semibold text-blue-800">写真から自動入力</h2>
+          <p className="mt-1 text-xs text-gray-600">
+            掲示物の写真をアップロードすると、内容を解析して下のフォームを自動入力します。自動入力後に内容を確認・修正してから登録できます。
+          </p>
+          <input
+            type="file"
+            accept="image/*"
+            ref={photoInputRef}
+            onChange={handlePhotoExtract}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => photoInputRef.current?.click()}
+            disabled={isExtracting || isSubmitting}
+            className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md shadow-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isExtracting ? (
+              <>
+                <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                解析中…
+              </>
+            ) : (
+              "写真を選択して自動入力"
+            )}
+          </button>
+          {extractNotice && (
+            <p className="mt-2 text-sm text-green-700">{extractNotice}</p>
+          )}
+          {extractError && (
+            <p className="mt-2 text-sm text-red-600">
+              {extractError}（このまま手入力で登録できます）
+            </p>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-gray-700">タイトル *</label>
