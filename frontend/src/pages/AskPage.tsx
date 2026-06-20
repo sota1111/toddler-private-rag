@@ -77,7 +77,7 @@ const AskPage: React.FC = () => {
         <div className="space-y-6">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
             <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">回答</h2>
-            <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">{result.answer}</p>
+            <p className="text-gray-800 whitespace-pre-wrap leading-relaxed break-words">{result.answer}</p>
           </div>
 
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
