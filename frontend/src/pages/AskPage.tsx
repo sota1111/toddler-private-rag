@@ -26,7 +26,7 @@ const AskPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 pb-12">
+    <div className="w-full lg:max-w-3xl lg:mx-auto pb-12">
       <h1 className="text-2xl font-bold mb-6 text-gray-800">質問する</h1>
 
       <form onSubmit={handleSubmit} className="bg-white p-4 rounded-lg shadow-sm mb-6">

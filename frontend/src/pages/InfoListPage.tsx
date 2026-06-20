@@ -39,7 +39,7 @@ const InfoListPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 pb-12">
+    <div className="w-full lg:max-w-6xl lg:mx-auto pb-12">
       <h1 className="text-2xl font-bold mb-6 text-gray-800">情報一覧</h1>
 
       <div className="bg-white p-4 rounded-lg shadow-sm mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -38,7 +38,7 @@ const DashboardPage: React.FC = () => {
   const pendingQuery = useQuery({ queryKey: ['pending'], queryFn: getPending });
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="w-full lg:max-w-6xl lg:mx-auto">
       <h1 className="text-2xl font-bold mb-6 text-gray-800">ダッシュボード</h1>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

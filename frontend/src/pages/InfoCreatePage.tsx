@@ -182,7 +182,7 @@ const InfoCreatePage: React.FC = () => {
   const isSubmitting = mutation.isPending || isUploading;
 
   return (
-    <div className="max-w-3xl mx-auto px-4 pb-12">
+    <div className="w-full lg:max-w-3xl lg:mx-auto pb-12">
       <h1 className="text-2xl font-bold mb-6 text-gray-800">情報登録</h1>
       
       <form onSubmit={handleSubmit} className="bg-white shadow-md rounded-lg p-6 space-y-4">

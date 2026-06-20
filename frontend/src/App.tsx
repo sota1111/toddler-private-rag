@@ -83,7 +83,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           </div>
         )}
       </nav>
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">{children}</main>
+      <main className="max-w-7xl mx-auto py-6 px-4 lg:px-8">{children}</main>
       <footer className="bg-white border-t border-gray-200 py-4 mt-10">
         <div className="text-center text-gray-500 text-sm">&copy; 2026 保育園情報アシスタント MVP</div>
       </footer>
