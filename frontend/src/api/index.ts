@@ -16,6 +16,10 @@ export const createInfo = async (data: NurseryInfoCreate): Promise<NurseryInfo> 
   return response.data;
 };
 
+export const deleteInfo = async (id: number): Promise<void> => {
+  await api.delete(`/info/${id}`);
+};
+
 export const uploadAttachment = async (infoId: number, file: File): Promise<Attachment> => {
   const formData = new FormData();
   formData.append('file', file);
