@@ -3,6 +3,9 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } f
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './contexts/AuthContext';
 import { useAuth } from './contexts/useAuth';
+import { I18nProvider } from './i18n/I18nContext';
+import { useI18n } from './i18n/useI18n';
+import LanguageToggle from './components/LanguageToggle';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -29,6 +32,7 @@ const NavLink: React.FC<{ to: string; children: React.ReactNode }> = ({ to, chil
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, email, logout } = useAuth();
+  const { t } = useI18n();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (
@@ -39,53 +43,56 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             <div className="flex items-center">
               <div className="flex-shrink-0 flex items-center gap-2 text-white font-bold text-xl">
                 <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-lg" aria-hidden>🏫</span>
-                保育園アシスタント
+                {t('app.title')}
               </div>
               <div className="hidden md:flex ml-10 items-baseline space-x-4">
                 {isAuthenticated && (
                   <>
-                    <NavLink to="/">ダッシュボード</NavLink>
-                    <NavLink to="/ask">質問</NavLink>
-                    <NavLink to="/list">一覧</NavLink>
-                    <NavLink to="/create">登録</NavLink>
+                    <NavLink to="/">{t('nav.dashboard')}</NavLink>
+                    <NavLink to="/ask">{t('nav.ask')}</NavLink>
+                    <NavLink to="/list">{t('nav.list')}</NavLink>
+                    <NavLink to="/create">{t('nav.create')}</NavLink>
                   </>
                 )}
               </div>
             </div>
-            <div className="hidden md:flex items-center space-x-3">
+            <div className="flex items-center gap-2 md:gap-3">
+              <LanguageToggle />
               {isAuthenticated && (
-                <>
+                <div className="hidden md:flex items-center space-x-3">
                   <span className="text-blue-100 text-sm">{email}</span>
-                  <button onClick={logout} className="text-blue-100 hover:text-white text-sm px-3 py-1 rounded hover:bg-blue-600">ログアウト</button>
-                </>
+                  <button onClick={logout} className="text-blue-100 hover:text-white text-sm px-3 py-1 rounded hover:bg-blue-600">{t('nav.logout')}</button>
+                </div>
               )}
-            </div>
-            <div className="md:hidden">
-              <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="text-white hover:text-gray-200 focus:outline-none">
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  {isMenuOpen ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
-                  )}
-                </svg>
-              </button>
+              {isAuthenticated && (
+                <div className="md:hidden">
+                  <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="text-white hover:text-gray-200 focus:outline-none">
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      {isMenuOpen ? (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      ) : (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
+                      )}
+                    </svg>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
         {isMenuOpen && isAuthenticated && (
           <div className="md:hidden bg-blue-600 px-2 pt-2 pb-3 space-y-1 sm:px-3">
-            <Link to="/" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-700">ダッシュボード</Link>
-            <Link to="/ask" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-700">質問</Link>
-            <Link to="/list" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-700">一覧</Link>
-            <Link to="/create" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-700">登録</Link>
-            <button onClick={() => { logout(); setIsMenuOpen(false); }} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-700">ログアウト</button>
+            <Link to="/" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-700">{t('nav.dashboard')}</Link>
+            <Link to="/ask" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-700">{t('nav.ask')}</Link>
+            <Link to="/list" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-700">{t('nav.list')}</Link>
+            <Link to="/create" onClick={() => setIsMenuOpen(false)} className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-700">{t('nav.create')}</Link>
+            <button onClick={() => { logout(); setIsMenuOpen(false); }} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-700">{t('nav.logout')}</button>
           </div>
         )}
       </nav>
       <main className="max-w-7xl mx-auto py-6 px-4 lg:px-8">{children}</main>
       <footer className="bg-white border-t border-gray-200 py-4 mt-10">
-        <div className="text-center text-gray-500 text-sm">&copy; 2026 保育園情報アシスタント MVP</div>
+        <div className="text-center text-gray-500 text-sm">{t('footer.copyright')}</div>
       </footer>
     </div>
   );
@@ -94,20 +101,22 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <Router>
-          <Layout>
-            <Routes>
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-              <Route path="/ask" element={<ProtectedRoute><AskPage /></ProtectedRoute>} />
-              <Route path="/list" element={<ProtectedRoute><InfoListPage /></ProtectedRoute>} />
-              <Route path="/create" element={<ProtectedRoute><InfoCreatePage /></ProtectedRoute>} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Layout>
-        </Router>
-      </AuthProvider>
+      <I18nProvider>
+        <AuthProvider>
+          <Router>
+            <Layout>
+              <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+                <Route path="/ask" element={<ProtectedRoute><AskPage /></ProtectedRoute>} />
+                <Route path="/list" element={<ProtectedRoute><InfoListPage /></ProtectedRoute>} />
+                <Route path="/create" element={<ProtectedRoute><InfoCreatePage /></ProtectedRoute>} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Layout>
+          </Router>
+        </AuthProvider>
+      </I18nProvider>
     </QueryClientProvider>
   );
 };

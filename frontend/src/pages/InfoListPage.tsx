@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getInfoList, getAttachmentFileUrl, deleteInfo } from '../api';
+import { useI18n } from '../i18n/useI18n';
 
 const INFO_TYPES = ["すべて", "資料", "掲示", "行事", "持ち物", "提出物", "お知らせ", "給食", "休園変更"];
 const STATUS_TYPES = ["すべて", "未対応", "対応済み", "確認済み"];
 
 const InfoListPage: React.FC = () => {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [infoType, setInfoType] = useState('すべて');
   const [status, setStatus] = useState('すべて');
@@ -37,7 +39,7 @@ const InfoListPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['pending'] });
     },
     onError: () => {
-      setDeleteError('削除に失敗しました。時間をおいて再度お試しください。');
+      setDeleteError(t('list.deleteError'));
     },
     onSettled: () => {
       setDeletingId(null);
@@ -47,7 +49,7 @@ const InfoListPage: React.FC = () => {
   const handleDelete = (e: React.MouseEvent, id: number, title: string) => {
     e.stopPropagation();
     if (deleteMutation.isPending) return;
-    if (window.confirm(`「${title}」を削除しますか？`)) {
+    if (window.confirm(t('list.confirmDelete', { title }))) {
       deleteMutation.mutate(id);
     }
   };
@@ -72,21 +74,21 @@ const InfoListPage: React.FC = () => {
 
   return (
     <div className="w-full lg:max-w-6xl lg:mx-auto pb-12">
-      <h1 className="text-2xl font-bold mb-6 text-gray-800">情報一覧</h1>
+      <h1 className="text-2xl font-bold mb-6 text-gray-800">{t('list.title')}</h1>
 
       <div className="bg-white p-4 rounded-lg shadow-sm mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">キーワード検索</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('list.keyword')}</label>
           <input
             type="text"
             className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
-            placeholder="タイトルや内容..."
+            placeholder={t('list.keywordPlaceholder')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">種別</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('list.type')}</label>
           <select
             className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
             value={infoType}
@@ -96,7 +98,7 @@ const InfoListPage: React.FC = () => {
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">ステータス</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('list.status')}</label>
           <select
             className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
             value={status}
@@ -114,14 +116,14 @@ const InfoListPage: React.FC = () => {
       )}
 
       {isLoading ? (
-        <div className="text-center py-10 text-gray-500">読み込み中...</div>
+        <div className="text-center py-10 text-gray-500">{t('common.loading')}</div>
       ) : !items || items.length === 0 ? (
-        <div className="text-center py-10 text-gray-400">該当する情報がありません。</div>
+        <div className="text-center py-10 text-gray-400">{t('list.empty')}</div>
       ) : (
         <div className="space-y-4">
           {items.map((item) => (
-            <div 
-              key={item.id} 
+            <div
+              key={item.id}
               className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden cursor-pointer hover:border-blue-300 transition-colors"
               onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
             >
@@ -145,8 +147,8 @@ const InfoListPage: React.FC = () => {
                   </div>
                   <h3 className="text-lg font-bold text-gray-900">{item.title}</h3>
                   <div className="mt-1 text-sm text-gray-500 space-x-4">
-                    {item.date && <span>日付: {item.date}</span>}
-                    {item.due_date && <span className="text-red-500 font-semibold">期限: {item.due_date}</span>}
+                    {item.date && <span>{t('list.dateLabel')}{item.date}</span>}
+                    {item.due_date && <span className="text-red-500 font-semibold">{t('list.dueLabel')}{item.due_date}</span>}
                   </div>
                 </div>
                 <div className="mt-2 sm:mt-0 flex items-center space-x-2">
@@ -159,14 +161,14 @@ const InfoListPage: React.FC = () => {
                     disabled={deletingId === item.id}
                     className="text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1 rounded-md disabled:text-gray-400 disabled:hover:bg-transparent transition-colors"
                   >
-                    {deletingId === item.id ? '削除中…' : '削除'}
+                    {deletingId === item.id ? t('list.deleting') : t('list.delete')}
                   </button>
                   <div className="text-gray-400">
                     {expandedId === item.id ? '▲' : '▼'}
                   </div>
                 </div>
               </div>
-              
+
               {expandedId === item.id && (
                 <div className="px-4 pb-4 border-t border-gray-100 bg-gray-50 pt-4 animate-fadeIn">
                   <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap break-words">
@@ -174,26 +176,26 @@ const InfoListPage: React.FC = () => {
                   </div>
                   {item.items && (
                     <div className="mt-4 p-2 bg-blue-50 rounded border border-blue-100">
-                      <p className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-1">持ち物</p>
+                      <p className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-1">{t('list.itemsHeading')}</p>
                       <p className="text-sm text-blue-900 break-words">{item.items}</p>
                     </div>
                   )}
                   {item.memo && (
                     <div className="mt-4">
-                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">メモ</p>
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">{t('list.memoHeading')}</p>
                       <p className="text-sm text-gray-600 italic break-words">{item.memo}</p>
                     </div>
                   )}
                   {item.attachments && item.attachments.length > 0 && (
                     <div className="mt-4">
-                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">添付ファイル</p>
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">{t('list.attachmentsHeading')}</p>
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                         {item.attachments.map((att) => (
                           <div key={att.id} className="relative group" onClick={(e) => e.stopPropagation()}>
                             {att.mime_type.startsWith('image/') ? (
                               <div className="aspect-square bg-gray-200 rounded-md overflow-hidden border border-gray-300">
-                                <img 
-                                  src={getAttachmentFileUrl(att.id)} 
+                                <img
+                                  src={getAttachmentFileUrl(att.id)}
                                   alt={att.original_filename}
                                   className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
                                   loading="lazy"
@@ -201,7 +203,7 @@ const InfoListPage: React.FC = () => {
                                 />
                               </div>
                             ) : (
-                              <a 
+                              <a
                                 href={getAttachmentFileUrl(att.id)}
                                 target="_blank"
                                 rel="noopener noreferrer"
