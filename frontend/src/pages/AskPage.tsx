@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { askInfo } from '../api';
 import type { RagAnswer } from '../types';
+import { useI18n } from '../i18n/useI18n';
 
 const AskPage: React.FC = () => {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<RagAnswer | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -18,7 +20,7 @@ const AskPage: React.FC = () => {
       const data = await askInfo(q);
       setResult(data);
     } catch {
-      setError('回答の取得に失敗しました。時間をおいて再度お試しください。');
+      setError(t('ask.error'));
       setResult(null);
     } finally {
       setIsLoading(false);
@@ -27,17 +29,17 @@ const AskPage: React.FC = () => {
 
   return (
     <div className="w-full lg:max-w-3xl lg:mx-auto pb-12">
-      <h1 className="text-2xl font-bold mb-6 text-gray-800">質問する</h1>
+      <h1 className="text-2xl font-bold mb-6 text-gray-800">{t('ask.title')}</h1>
 
       <form onSubmit={handleSubmit} className="bg-white p-4 rounded-lg shadow-sm mb-6">
         <label htmlFor="ask-query" className="block text-sm font-medium text-gray-700 mb-1">
-          保育園の情報について質問してください
+          {t('ask.label')}
         </label>
         <textarea
           id="ask-query"
           rows={3}
           className="w-full border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2"
-          placeholder="例: 来週の遠足の持ち物は？"
+          placeholder={t('ask.placeholder')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -47,7 +49,7 @@ const AskPage: React.FC = () => {
             disabled={isLoading || !query.trim()}
             className="px-4 py-2 rounded-md text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
           >
-            {isLoading ? '回答中...' : '送信'}
+            {isLoading ? t('ask.submitting') : t('ask.submit')}
           </button>
         </div>
       </form>
@@ -61,29 +63,29 @@ const AskPage: React.FC = () => {
       {isLoading && (
         <div className="flex flex-col items-center justify-center py-12 text-gray-500">
           <span className="h-8 w-8 mb-3 rounded-full border-2 border-gray-200 border-t-blue-500 animate-spin" aria-hidden />
-          <p className="text-sm">回答を生成しています...</p>
+          <p className="text-sm">{t('ask.generating')}</p>
         </div>
       )}
 
       {!isLoading && !result && !error && (
         <div className="text-center py-12 text-gray-400">
           <div className="text-4xl mb-2" aria-hidden>💬</div>
-          <p className="text-sm">登録済みの保育園情報をもとにお答えします。</p>
-          <p className="text-xs mt-1">上の入力欄から質問してみましょう。</p>
+          <p className="text-sm">{t('ask.emptyMain')}</p>
+          <p className="text-xs mt-1">{t('ask.emptySub')}</p>
         </div>
       )}
 
       {!isLoading && result && (
         <div className="space-y-6">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-            <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">回答</h2>
+            <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">{t('ask.answer')}</h2>
             <p className="text-gray-800 whitespace-pre-wrap leading-relaxed break-words">{result.answer}</p>
           </div>
 
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-            <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">出典</h2>
+            <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">{t('ask.sources')}</h2>
             {result.sources.length === 0 ? (
-              <p className="text-sm text-gray-400">出典はありません。</p>
+              <p className="text-sm text-gray-400">{t('ask.noSources')}</p>
             ) : (
               <ul className="space-y-2">
                 {result.sources.map((s, i) => (
@@ -99,12 +101,12 @@ const AskPage: React.FC = () => {
                             : 'bg-blue-100 text-blue-800'
                         }`}
                       >
-                        {s.source === 'ocr' ? '添付' : '本文'}
+                        {s.source === 'ocr' ? t('ask.attached') : t('ask.body')}
                       </span>
                       <span className="text-sm text-gray-800 truncate">{s.label || s.title}</span>
                     </div>
                     <span className="text-xs text-gray-500 whitespace-nowrap">
-                      関連度 {s.score.toFixed(2)}
+                      {t('ask.relevance')} {s.score.toFixed(2)}
                     </span>
                   </li>
                 ))}

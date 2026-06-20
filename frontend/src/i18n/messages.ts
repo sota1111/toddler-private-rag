@@ -1,0 +1,218 @@
+import type { Lang } from './i18nContextValue'
+
+export type Messages = Record<string, string>
+
+export const messages: Record<Lang, Messages> = {
+  ja: {
+    // nav / shell
+    'app.title': '保育園アシスタント',
+    'nav.dashboard': 'ダッシュボード',
+    'nav.ask': '質問',
+    'nav.list': '一覧',
+    'nav.create': '登録',
+    'nav.logout': 'ログアウト',
+    'footer.copyright': '© 2026 保育園情報アシスタント MVP',
+
+    // common
+    'common.loading': '読み込み中...',
+    'common.noData': 'データなし',
+
+    // login
+    'login.title': 'ログイン',
+    'login.email': 'メールアドレス',
+    'login.password': 'パスワード',
+    'login.submit': 'ログイン',
+    'login.submitting': 'ログイン中...',
+    'login.failed': 'ログインに失敗しました',
+
+    // dashboard
+    'dashboard.title': 'ダッシュボード',
+    'dashboard.tomorrow': '明日の持ち物',
+    'dashboard.weekly': '今週の行事',
+    'dashboard.pending': '未対応の提出物',
+    'dashboard.itemsLabel': '持物: ',
+    'dashboard.dueLabel': '期限: ',
+
+    // ask
+    'ask.title': '質問する',
+    'ask.label': '保育園の情報について質問してください',
+    'ask.placeholder': '例: 来週の遠足の持ち物は？',
+    'ask.submit': '送信',
+    'ask.submitting': '回答中...',
+    'ask.error': '回答の取得に失敗しました。時間をおいて再度お試しください。',
+    'ask.generating': '回答を生成しています...',
+    'ask.emptyMain': '登録済みの保育園情報をもとにお答えします。',
+    'ask.emptySub': '上の入力欄から質問してみましょう。',
+    'ask.answer': '回答',
+    'ask.sources': '出典',
+    'ask.noSources': '出典はありません。',
+    'ask.attached': '添付',
+    'ask.body': '本文',
+    'ask.relevance': '関連度',
+
+    // list
+    'list.title': '情報一覧',
+    'list.keyword': 'キーワード検索',
+    'list.keywordPlaceholder': 'タイトルや内容...',
+    'list.type': '種別',
+    'list.status': 'ステータス',
+    'list.deleteError': '削除に失敗しました。時間をおいて再度お試しください。',
+    'list.empty': '該当する情報がありません。',
+    'list.delete': '削除',
+    'list.deleting': '削除中…',
+    'list.dateLabel': '日付: ',
+    'list.dueLabel': '期限: ',
+    'list.itemsHeading': '持ち物',
+    'list.memoHeading': 'メモ',
+    'list.attachmentsHeading': '添付ファイル',
+    'list.confirmDelete': '「{title}」を削除しますか？',
+
+    // create
+    'create.title': '情報登録',
+    'create.photoHeading': '写真から自動入力',
+    'create.photoDesc':
+      '掲示物の写真をアップロードすると、内容を解析して下のフォームを自動入力します。自動入力後に内容を確認・修正してから登録できます。',
+    'create.photoAnalyzing': '解析中…',
+    'create.photoButton': '写真を選択して自動入力',
+    'create.photoErrorSuffix': '（このまま手入力で登録できます）',
+    'create.extractSuccess':
+      '写真から内容を自動入力しました。内容を確認・修正して登録してください。',
+    'create.extractFailDefault':
+      '写真の解析に失敗しました。お手数ですが手入力で登録してください。',
+    'create.extractFail413':
+      '画像サイズが大きすぎます (最大10MB)。別の画像でお試しください。',
+    'create.extractFail400':
+      'この形式の画像には対応していません。画像ファイルを選択してください。',
+    'create.fieldTitle': 'タイトル *',
+    'create.fieldType': '種別 *',
+    'create.fieldStatus': 'ステータス',
+    'create.fieldPriority': '優先度',
+    'create.fieldDate': '日付',
+    'create.fieldEventDate': '行事日',
+    'create.fieldDueDate': '提出期限',
+    'create.fieldContent': '内容 *',
+    'create.fieldItems': '持ち物',
+    'create.itemsPlaceholder': 'お弁当, 水筒, ...',
+    'create.fieldTags': 'タグ (カンマ区切り)',
+    'create.tagsPlaceholder': '遠足, 重要, ...',
+    'create.fieldMemo': 'メモ',
+    'create.fieldAttachments': '添付ファイル (画像またはPDF)',
+    'create.dropHint': 'ここにドロップして追加',
+    'create.cancel': 'キャンセル',
+    'create.submitting': '登録中...',
+    'create.uploading': 'アップロード中 ({current}/{total})',
+    'create.submit': '登録する',
+    'create.uploadPartialFail': '一部のファイルのアップロードに失敗しました:',
+    'create.uploadErr413': '(ファイルサイズが大きすぎます)',
+    'create.uploadErr400': '(サポートされていない形式です)',
+    'create.uploadErrGeneric': '(エラーが発生しました)',
+    'create.backToList': '一覧へ戻る',
+    'create.genericError': 'エラーが発生しました。もう一度お試しください。',
+  },
+  en: {
+    // nav / shell
+    'app.title': 'Nursery Assistant',
+    'nav.dashboard': 'Dashboard',
+    'nav.ask': 'Ask',
+    'nav.list': 'List',
+    'nav.create': 'Add',
+    'nav.logout': 'Log out',
+    'footer.copyright': '© 2026 Nursery Info Assistant MVP',
+
+    // common
+    'common.loading': 'Loading...',
+    'common.noData': 'No data',
+
+    // login
+    'login.title': 'Log in',
+    'login.email': 'Email address',
+    'login.password': 'Password',
+    'login.submit': 'Log in',
+    'login.submitting': 'Logging in...',
+    'login.failed': 'Login failed',
+
+    // dashboard
+    'dashboard.title': 'Dashboard',
+    'dashboard.tomorrow': "Tomorrow's items",
+    'dashboard.weekly': "This week's events",
+    'dashboard.pending': 'Pending submissions',
+    'dashboard.itemsLabel': 'Items: ',
+    'dashboard.dueLabel': 'Due: ',
+
+    // ask
+    'ask.title': 'Ask a question',
+    'ask.label': 'Ask about the nursery information',
+    'ask.placeholder': 'e.g. What to bring for next week’s field trip?',
+    'ask.submit': 'Send',
+    'ask.submitting': 'Answering...',
+    'ask.error': 'Failed to get an answer. Please try again later.',
+    'ask.generating': 'Generating an answer...',
+    'ask.emptyMain': 'Answers are based on the registered nursery information.',
+    'ask.emptySub': 'Try asking a question in the field above.',
+    'ask.answer': 'Answer',
+    'ask.sources': 'Sources',
+    'ask.noSources': 'No sources.',
+    'ask.attached': 'Attachment',
+    'ask.body': 'Text',
+    'ask.relevance': 'Relevance',
+
+    // list
+    'list.title': 'Information list',
+    'list.keyword': 'Keyword search',
+    'list.keywordPlaceholder': 'Title or content...',
+    'list.type': 'Type',
+    'list.status': 'Status',
+    'list.deleteError': 'Failed to delete. Please try again later.',
+    'list.empty': 'No matching information.',
+    'list.delete': 'Delete',
+    'list.deleting': 'Deleting…',
+    'list.dateLabel': 'Date: ',
+    'list.dueLabel': 'Due: ',
+    'list.itemsHeading': 'Items',
+    'list.memoHeading': 'Memo',
+    'list.attachmentsHeading': 'Attachments',
+    'list.confirmDelete': 'Delete “{title}”?',
+
+    // create
+    'create.title': 'Add information',
+    'create.photoHeading': 'Auto-fill from photo',
+    'create.photoDesc':
+      'Upload a photo of a notice to analyze it and auto-fill the form below. You can review and edit before saving.',
+    'create.photoAnalyzing': 'Analyzing…',
+    'create.photoButton': 'Select a photo to auto-fill',
+    'create.photoErrorSuffix': ' (You can still enter the details manually)',
+    'create.extractSuccess':
+      'Auto-filled from the photo. Please review and edit before saving.',
+    'create.extractFailDefault':
+      'Failed to analyze the photo. Please enter the details manually.',
+    'create.extractFail413':
+      'The image is too large (max 10MB). Please try another image.',
+    'create.extractFail400':
+      'This image format is not supported. Please select an image file.',
+    'create.fieldTitle': 'Title *',
+    'create.fieldType': 'Type *',
+    'create.fieldStatus': 'Status',
+    'create.fieldPriority': 'Priority',
+    'create.fieldDate': 'Date',
+    'create.fieldEventDate': 'Event date',
+    'create.fieldDueDate': 'Due date',
+    'create.fieldContent': 'Content *',
+    'create.fieldItems': 'Items',
+    'create.itemsPlaceholder': 'Lunch box, water bottle, ...',
+    'create.fieldTags': 'Tags (comma-separated)',
+    'create.tagsPlaceholder': 'Field trip, important, ...',
+    'create.fieldMemo': 'Memo',
+    'create.fieldAttachments': 'Attachments (image or PDF)',
+    'create.dropHint': 'Drop here to add',
+    'create.cancel': 'Cancel',
+    'create.submitting': 'Saving...',
+    'create.uploading': 'Uploading ({current}/{total})',
+    'create.submit': 'Save',
+    'create.uploadPartialFail': 'Some files failed to upload:',
+    'create.uploadErr413': '(File too large)',
+    'create.uploadErr400': '(Unsupported format)',
+    'create.uploadErrGeneric': '(An error occurred)',
+    'create.backToList': 'Back to list',
+    'create.genericError': 'An error occurred. Please try again.',
+  },
+}
