@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getInfoList, getAttachmentFileUrl } from '../api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getInfoList, getAttachmentFileUrl, deleteInfo } from '../api';
 
 const INFO_TYPES = ["すべて", "資料", "掲示", "行事", "持ち物", "提出物", "お知らせ", "給食", "休園変更"];
 const STATUS_TYPES = ["すべて", "未対応", "対応済み", "確認済み"];
@@ -10,6 +10,10 @@ const InfoListPage: React.FC = () => {
   const [infoType, setInfoType] = useState('すべて');
   const [status, setStatus] = useState('すべて');
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const queryClient = useQueryClient();
 
   const { data: items, isLoading } = useQuery({
     queryKey: ['info', query, infoType, status],
@@ -19,6 +23,34 @@ const InfoListPage: React.FC = () => {
       status: status === 'すべて' ? undefined : status,
     }),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteInfo,
+    onMutate: (id: number) => {
+      setDeletingId(id);
+      setDeleteError(null);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['info'] });
+      queryClient.invalidateQueries({ queryKey: ['tomorrow'] });
+      queryClient.invalidateQueries({ queryKey: ['weekly'] });
+      queryClient.invalidateQueries({ queryKey: ['pending'] });
+    },
+    onError: () => {
+      setDeleteError('削除に失敗しました。時間をおいて再度お試しください。');
+    },
+    onSettled: () => {
+      setDeletingId(null);
+    },
+  });
+
+  const handleDelete = (e: React.MouseEvent, id: number, title: string) => {
+    e.stopPropagation();
+    if (deleteMutation.isPending) return;
+    if (window.confirm(`「${title}」を削除しますか？`)) {
+      deleteMutation.mutate(id);
+    }
+  };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -75,6 +107,12 @@ const InfoListPage: React.FC = () => {
         </div>
       </div>
 
+      {deleteError && (
+        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+          {deleteError}
+        </div>
+      )}
+
       {isLoading ? (
         <div className="text-center py-10 text-gray-500">読み込み中...</div>
       ) : !items || items.length === 0 ? (
@@ -115,6 +153,14 @@ const InfoListPage: React.FC = () => {
                   <span className={`px-3 py-1 rounded-full text-sm font-bold ${getStatusColor(item.status)}`}>
                     {item.status}
                   </span>
+                  <button
+                    type="button"
+                    onClick={(e) => handleDelete(e, item.id, item.title)}
+                    disabled={deletingId === item.id}
+                    className="text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1 rounded-md disabled:text-gray-400 disabled:hover:bg-transparent transition-colors"
+                  >
+                    {deletingId === item.id ? '削除中…' : '削除'}
+                  </button>
                   <div className="text-gray-400">
                     {expandedId === item.id ? '▲' : '▼'}
                   </div>
