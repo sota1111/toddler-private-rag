@@ -123,19 +123,19 @@ const InfoListPage: React.FC = () => {
               
               {expandedId === item.id && (
                 <div className="px-4 pb-4 border-t border-gray-100 bg-gray-50 pt-4 animate-fadeIn">
-                  <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap">
+                  <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap break-words">
                     {item.content}
                   </div>
                   {item.items && (
                     <div className="mt-4 p-2 bg-blue-50 rounded border border-blue-100">
                       <p className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-1">持ち物</p>
-                      <p className="text-sm text-blue-900">{item.items}</p>
+                      <p className="text-sm text-blue-900 break-words">{item.items}</p>
                     </div>
                   )}
                   {item.memo && (
                     <div className="mt-4">
                       <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">メモ</p>
-                      <p className="text-sm text-gray-600 italic">{item.memo}</p>
+                      <p className="text-sm text-gray-600 italic break-words">{item.memo}</p>
                     </div>
                   )}
                   {item.attachments && item.attachments.length > 0 && (
