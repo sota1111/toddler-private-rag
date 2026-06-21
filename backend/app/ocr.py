@@ -13,39 +13,43 @@ logger = logging.getLogger(__name__)
 def _gemini_ocr_enabled() -> bool:
     """Whether to attempt Gemini vision OCR for images.
 
-    Enabled when a Gemini API key is present and OCR_PROVIDER is not explicitly
-    set to a non-Gemini engine. Falls back to local Tesseract otherwise.
+    Enabled when an AI client is available (Vertex AI mode on, or a Gemini API key
+    present) and OCR_PROVIDER is not explicitly set to a non-Gemini engine. Falls
+    back to local Tesseract otherwise.
     """
-    if not (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")):
+    from .ai_client import gemini_available
+
+    if not gemini_available():
         return False
     return os.getenv("OCR_PROVIDER", "").strip().lower() not in ("tesseract", "fake", "local")
 
 
 def _extract_from_image_gemini(file_path: Path) -> str:
-    """Extract text from an image using Gemini vision.
+    """Extract text from an image using Gemini vision via Vertex AI (or API-key fallback).
 
-    Returns an empty string on any failure (missing key/SDK, network error, etc.)
+    Returns an empty string on any failure (missing client/SDK, network error, etc.)
     so the caller can fall back to local OCR.
     """
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        return ""
+    from .ai_client import get_genai_client, get_model_name, with_retry
+
     try:
-        import google.generativeai as genai  # type: ignore
         from PIL import Image
     except ImportError:
-        logger.warning("google-generativeai/Pillow not installed; skipping Gemini OCR")
+        logger.warning("Pillow not installed; skipping Gemini OCR")
         return ""
 
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-2.0-flash"))
+        client = get_genai_client()
         img = Image.open(file_path)
         prompt = (
             "この画像に含まれる文字をそのまま日本語/英語ですべて書き起こしてください。"
             "説明や前置きは不要で、本文テキストのみ返してください。"
         )
-        response = model.generate_content([prompt, img])
+        response = with_retry(
+            lambda: client.models.generate_content(
+                model=get_model_name(), contents=[prompt, img]
+            )
+        )
         return (getattr(response, "text", "") or "").strip()
     except Exception as e:
         logger.warning(f"Gemini OCR failed, falling back to local OCR: {type(e).__name__}")

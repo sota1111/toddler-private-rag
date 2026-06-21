@@ -90,31 +90,11 @@ class FakeLLMProvider(LLMProvider):
         return f"「{question}」について、関連情報に基づくと: {excerpt}"
 
 
-# --- Real (Gemini) implementations — SDK imported lazily ---
-
-def _gemini_api_key() -> str:
-    key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if not key:
-        raise RuntimeError(
-            "GEMINI_API_KEY (or GOOGLE_API_KEY) is not set; cannot use the gemini provider. "
-            "Set EMBEDDING_PROVIDER/LLM_PROVIDER=fake for offline use."
-        )
-    return key
-
-
-def _import_genai():
-    try:
-        import google.generativeai as genai  # type: ignore
-    except ImportError as exc:  # pragma: no cover - exercised only when SDK absent
-        raise RuntimeError(
-            "google-generativeai is not installed; the gemini provider is unavailable. "
-            "Install it or use EMBEDDING_PROVIDER/LLM_PROVIDER=fake."
-        ) from exc
-    return genai
+# --- Real (Gemini) implementations — Vertex AI via google-genai, SDK imported lazily ---
 
 
 class GeminiEmbeddingProvider(EmbeddingProvider):
-    def __init__(self, model: str = "models/text-embedding-004", dimension: int = 768):
+    def __init__(self, model: str = "text-embedding-004", dimension: int = 768):
         self._model = model
         self._dimension = dimension
 
@@ -123,50 +103,60 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         return self._dimension
 
     def embed(self, texts: List[str]) -> List[List[float]]:
-        genai = _import_genai()
-        genai.configure(api_key=_gemini_api_key())
+        from ..ai_client import get_genai_client, with_retry
+
+        client = get_genai_client()
         vectors: List[List[float]] = []
         for text in texts:
-            result = genai.embed_content(model=self._model, content=text)
-            vectors.append(list(result["embedding"]))
+            result = with_retry(
+                lambda t=text: client.models.embed_content(model=self._model, contents=t)
+            )
+            vectors.append(list(result.embeddings[0].values))
         return vectors
 
 
 class GeminiLLMProvider(LLMProvider):
     def __init__(self, model: str | None = None):
-        self._model = model or os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        from ..ai_client import get_model_name
+
+        self._model = model or get_model_name()
 
     def generate(self, question: str, contexts: List[str]) -> str:
-        genai = _import_genai()
-        genai.configure(api_key=_gemini_api_key())
+        from ..ai_client import get_genai_client, with_retry
+
+        client = get_genai_client()
         context_block = "\n\n".join(f"- {c}" for c in contexts)
         prompt = (
             "あなたは保育園情報アシスタントです。以下のコンテキストのみに基づいて、"
             "日本語で簡潔に質問へ回答してください。コンテキストに無いことは推測しないでください。\n\n"
             f"# コンテキスト\n{context_block}\n\n# 質問\n{question}\n\n# 回答"
         )
-        model = genai.GenerativeModel(self._model)
-        response = model.generate_content(prompt)
+        response = with_retry(
+            lambda: client.models.generate_content(model=self._model, contents=prompt)
+        )
         return (getattr(response, "text", "") or "").strip()
 
 
-# --- Factories (env-selected; default = gemini when a key is present, else fake) ---
+# --- Factories (env-selected; default = gemini when AI client available, else fake) ---
 
-def _gemini_key_present() -> bool:
-    return bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
+def _gemini_available() -> bool:
+    from ..ai_client import gemini_available
+
+    return gemini_available()
 
 
 def _resolve_provider(env_name: str) -> str:
     """Resolve which provider to use for ``env_name``.
 
     An explicit value (e.g. ``fake`` or ``gemini``) always wins, keeping tests and
-    offline use deterministic. When unset, default to ``gemini`` only if a Gemini
-    API key is present, otherwise ``fake``.
+    offline use deterministic. When unset, default to ``gemini`` only if an AI
+    client is available (Vertex AI enabled or an API key present), otherwise
+    ``fake``.
     """
     val = os.getenv(env_name, "").strip().lower()
     if val:
         return val
-    return "gemini" if _gemini_key_present() else "fake"
+    return "gemini" if _gemini_available() else "fake"
 
 
 def get_embedding_provider() -> EmbeddingProvider:
