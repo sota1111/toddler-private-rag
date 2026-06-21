@@ -1,9 +1,55 @@
 import logging
+import os
 import re
 from pathlib import Path
-from typing import Union
+from typing import TYPE_CHECKING, Union
+
+if TYPE_CHECKING:
+    from .schemas import DocumentExtraction
 
 logger = logging.getLogger(__name__)
+
+
+def _gemini_ocr_enabled() -> bool:
+    """Whether to attempt Gemini vision OCR for images.
+
+    Enabled when a Gemini API key is present and OCR_PROVIDER is not explicitly
+    set to a non-Gemini engine. Falls back to local Tesseract otherwise.
+    """
+    if not (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")):
+        return False
+    return os.getenv("OCR_PROVIDER", "").strip().lower() not in ("tesseract", "fake", "local")
+
+
+def _extract_from_image_gemini(file_path: Path) -> str:
+    """Extract text from an image using Gemini vision.
+
+    Returns an empty string on any failure (missing key/SDK, network error, etc.)
+    so the caller can fall back to local OCR.
+    """
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        return ""
+    try:
+        import google.generativeai as genai  # type: ignore
+        from PIL import Image
+    except ImportError:
+        logger.warning("google-generativeai/Pillow not installed; skipping Gemini OCR")
+        return ""
+
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-2.0-flash"))
+        img = Image.open(file_path)
+        prompt = (
+            "この画像に含まれる文字をそのまま日本語/英語ですべて書き起こしてください。"
+            "説明や前置きは不要で、本文テキストのみ返してください。"
+        )
+        response = model.generate_content([prompt, img])
+        return (getattr(response, "text", "") or "").strip()
+    except Exception as e:
+        logger.warning(f"Gemini OCR failed, falling back to local OCR: {type(e).__name__}")
+        return ""
 
 def build_extraction(raw_text: str) -> "DocumentExtraction":
     """
@@ -87,6 +133,12 @@ def extract_text(file_path: Union[str, Path], mime_type: str) -> str:
         return ""
 
 def _extract_from_image(file_path: Path) -> str:
+    # Prefer Gemini vision when configured; fall back to local OCR on empty/failure.
+    if _gemini_ocr_enabled():
+        gemini_text = _extract_from_image_gemini(file_path)
+        if gemini_text:
+            return gemini_text
+
     try:
         from PIL import Image
         import pytesseract
@@ -131,7 +183,6 @@ def _extract_from_pdf(file_path: Path) -> str:
     try:
         from pdf2image import convert_from_path
         import pytesseract
-        from PIL import Image
         
         # Convert PDF pages to images
         try:

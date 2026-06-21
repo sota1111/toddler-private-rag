@@ -133,8 +133,8 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
 
 
 class GeminiLLMProvider(LLMProvider):
-    def __init__(self, model: str = "gemini-1.5-flash"):
-        self._model = model
+    def __init__(self, model: str | None = None):
+        self._model = model or os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
     def generate(self, question: str, contexts: List[str]) -> str:
         genai = _import_genai()
@@ -150,10 +150,27 @@ class GeminiLLMProvider(LLMProvider):
         return (getattr(response, "text", "") or "").strip()
 
 
-# --- Factories (env-selected; default = fake) ---
+# --- Factories (env-selected; default = gemini when a key is present, else fake) ---
+
+def _gemini_key_present() -> bool:
+    return bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
+
+
+def _resolve_provider(env_name: str) -> str:
+    """Resolve which provider to use for ``env_name``.
+
+    An explicit value (e.g. ``fake`` or ``gemini``) always wins, keeping tests and
+    offline use deterministic. When unset, default to ``gemini`` only if a Gemini
+    API key is present, otherwise ``fake``.
+    """
+    val = os.getenv(env_name, "").strip().lower()
+    if val:
+        return val
+    return "gemini" if _gemini_key_present() else "fake"
+
 
 def get_embedding_provider() -> EmbeddingProvider:
-    provider = os.getenv("EMBEDDING_PROVIDER", "fake").lower()
+    provider = _resolve_provider("EMBEDDING_PROVIDER")
     if provider == "gemini":
         return GeminiEmbeddingProvider()
     if provider not in ("fake", ""):
@@ -162,7 +179,7 @@ def get_embedding_provider() -> EmbeddingProvider:
 
 
 def get_llm_provider() -> LLMProvider:
-    provider = os.getenv("LLM_PROVIDER", "fake").lower()
+    provider = _resolve_provider("LLM_PROVIDER")
     if provider == "gemini":
         return GeminiLLMProvider()
     if provider not in ("fake", ""):
