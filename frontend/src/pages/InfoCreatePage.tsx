@@ -12,6 +12,12 @@ const PRIORITY_TYPES = ["高", "普通", "低"];
 
 const InfoCreatePage: React.FC = () => {
   const { t } = useI18n();
+  // 表示専用ラベル: 保存値（日本語）は変えず、表示テキストのみ翻訳する
+  const optLabel = (group: string, value: string) => {
+    const key = `options.${group}.${value}`;
+    const label = t(key);
+    return label === key ? value : label;
+  };
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -253,7 +259,7 @@ const InfoCreatePage: React.FC = () => {
               onChange={handleChange}
               disabled={isSubmitting}
             >
-              {INFO_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              {INFO_TYPES.map(v => <option key={v} value={v}>{optLabel('infoType', v)}</option>)}
             </select>
           </div>
 
@@ -266,7 +272,7 @@ const InfoCreatePage: React.FC = () => {
               onChange={handleChange}
               disabled={isSubmitting}
             >
-              {STATUS_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
+              {STATUS_TYPES.map(s => <option key={s} value={s}>{optLabel('status', s)}</option>)}
             </select>
           </div>
 
@@ -279,7 +285,7 @@ const InfoCreatePage: React.FC = () => {
               onChange={handleChange}
               disabled={isSubmitting}
             >
-              {PRIORITY_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
+              {PRIORITY_TYPES.map(p => <option key={p} value={p}>{optLabel('priority', p)}</option>)}
             </select>
           </div>
 

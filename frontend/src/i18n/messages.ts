@@ -108,6 +108,23 @@ export const messages: Record<Lang, Messages> = {
     'create.uploadErrGeneric': '(エラーが発生しました)',
     'create.backToList': '一覧へ戻る',
     'create.genericError': 'エラーが発生しました。もう一度お試しください。',
+
+    // option labels (display-only; stored/submitted value stays Japanese)
+    'options.all': 'すべて',
+    'options.infoType.資料': '資料',
+    'options.infoType.掲示': '掲示',
+    'options.infoType.行事': '行事',
+    'options.infoType.持ち物': '持ち物',
+    'options.infoType.提出物': '提出物',
+    'options.infoType.お知らせ': 'お知らせ',
+    'options.infoType.給食': '給食',
+    'options.infoType.休園変更': '休園変更',
+    'options.status.未対応': '未対応',
+    'options.status.対応済み': '対応済み',
+    'options.status.確認済み': '確認済み',
+    'options.priority.高': '高',
+    'options.priority.普通': '普通',
+    'options.priority.低': '低',
   },
   en: {
     // nav / shell
@@ -214,5 +231,22 @@ export const messages: Record<Lang, Messages> = {
     'create.uploadErrGeneric': '(An error occurred)',
     'create.backToList': 'Back to list',
     'create.genericError': 'An error occurred. Please try again.',
+
+    // option labels (display-only; stored/submitted value stays Japanese)
+    'options.all': 'All',
+    'options.infoType.資料': 'Material',
+    'options.infoType.掲示': 'Notice',
+    'options.infoType.行事': 'Event',
+    'options.infoType.持ち物': 'Belongings',
+    'options.infoType.提出物': 'Submission',
+    'options.infoType.お知らせ': 'Announcement',
+    'options.infoType.給食': 'Lunch',
+    'options.infoType.休園変更': 'Closure Change',
+    'options.status.未対応': 'Open',
+    'options.status.対応済み': 'Done',
+    'options.status.確認済み': 'Confirmed',
+    'options.priority.高': 'High',
+    'options.priority.普通': 'Normal',
+    'options.priority.低': 'Low',
   },
 }
