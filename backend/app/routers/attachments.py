@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Backgro
 from fastapi.responses import FileResponse, RedirectResponse
 import os
 import logging
-from typing import Optional
 from .. import schemas, storage, ocr
 from ..privacy import redact_pii
 from ..repository import AttachmentRepository, get_attachment_repository, get_attachment_repo_standalone, SqliteAttachmentRepository
@@ -157,4 +156,3 @@ def delete_attachment(
     repo.delete(att_id)
 
     return {"message": "Successfully deleted"}
-

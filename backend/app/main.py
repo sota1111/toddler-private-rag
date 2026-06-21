@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import logging
-from .database import engine, Base, SessionLocal
+from .database import engine, SessionLocal
 from .routers import info, attachments
 from .routers import auth as auth_router
 from .seed import seed_data

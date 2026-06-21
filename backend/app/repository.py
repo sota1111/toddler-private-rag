@@ -476,10 +476,14 @@ class FirestoreInfoRepository(InfoRepository):
             
         update_data = data.model_dump(exclude_unset=True)
         # Convert dates and tags
-        if "date" in update_data: update_data["date"] = _from_date(update_data["date"])
-        if "event_date" in update_data: update_data["event_date"] = _from_date(update_data["event_date"])
-        if "due_date" in update_data: update_data["due_date"] = _from_date(update_data["due_date"])
-        if "tags" in update_data: update_data["tags"] = _tags_str_to_array(update_data["tags"])
+        if "date" in update_data:
+            update_data["date"] = _from_date(update_data["date"])
+        if "event_date" in update_data:
+            update_data["event_date"] = _from_date(update_data["event_date"])
+        if "due_date" in update_data:
+            update_data["due_date"] = _from_date(update_data["due_date"])
+        if "tags" in update_data:
+            update_data["tags"] = _tags_str_to_array(update_data["tags"])
         
         update_data["updated_at"] = datetime.datetime.now(datetime.timezone.utc)
         
