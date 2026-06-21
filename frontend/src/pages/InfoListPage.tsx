@@ -8,6 +8,12 @@ const STATUS_TYPES = ["すべて", "未対応", "対応済み", "確認済み"];
 
 const InfoListPage: React.FC = () => {
   const { t } = useI18n();
+  // 表示専用ラベル: フィルタ値・保存値（日本語）は変えず、表示テキストのみ翻訳する
+  const optLabel = (group: string, value: string) => {
+    const key = `options.${group}.${value}`;
+    const label = t(key);
+    return label === key ? value : label;
+  };
   const [query, setQuery] = useState('');
   const [infoType, setInfoType] = useState('すべて');
   const [status, setStatus] = useState('すべて');
@@ -94,7 +100,7 @@ const InfoListPage: React.FC = () => {
             value={infoType}
             onChange={(e) => setInfoType(e.target.value)}
           >
-            {INFO_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            {INFO_TYPES.map(v => <option key={v} value={v}>{v === 'すべて' ? t('options.all') : optLabel('infoType', v)}</option>)}
           </select>
         </div>
         <div>
@@ -104,7 +110,7 @@ const InfoListPage: React.FC = () => {
             value={status}
             onChange={(e) => setStatus(e.target.value)}
           >
-            {STATUS_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
+            {STATUS_TYPES.map(s => <option key={s} value={s}>{s === 'すべて' ? t('options.all') : optLabel('status', s)}</option>)}
           </select>
         </div>
       </div>
@@ -131,10 +137,10 @@ const InfoListPage: React.FC = () => {
                 <div className="flex-1">
                   <div className="flex items-center space-x-2 mb-1">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                      {item.info_type}
+                      {optLabel('infoType', item.info_type)}
                     </span>
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(item.priority)}`}>
-                      {item.priority}
+                      {optLabel('priority', item.priority)}
                     </span>
                     {item.attachments && item.attachments.length > 0 && (
                       <span className="inline-flex items-center text-xs text-gray-500">
@@ -153,7 +159,7 @@ const InfoListPage: React.FC = () => {
                 </div>
                 <div className="mt-2 sm:mt-0 flex items-center space-x-2">
                   <span className={`px-3 py-1 rounded-full text-sm font-bold ${getStatusColor(item.status)}`}>
-                    {item.status}
+                    {optLabel('status', item.status)}
                   </span>
                   <button
                     type="button"
