@@ -1,10 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createInfo, uploadAttachment, extractInfoDraft } from '../api';
 import type { NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
+import { compressImageFile, compressImageFiles } from '../utils/imageCompression';
 
 const INFO_TYPES = ["資料", "掲示", "行事", "持ち物", "提出物", "お知らせ", "給食", "休園変更"];
 const STATUS_TYPES = ["未対応", "対応済み", "確認済み"];
@@ -36,6 +37,8 @@ const InfoCreatePage: React.FC = () => {
   });
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  // プレビュー用 object URL（画像のみ）。selectedFiles に同期して生成/破棄する。
+  const [isProcessingFiles, setIsProcessingFiles] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
@@ -101,9 +104,30 @@ const InfoCreatePage: React.FC = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setSelectedFiles(Array.from(e.target.files));
+  const previewUrls = useMemo(
+    () => selectedFiles.map((file) =>
+      file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+    ),
+    [selectedFiles],
+  );
+
+  // selectedFiles の変更に追従して作成したプレビュー用 URL を不要になったら破棄する
+  useEffect(() => () => {
+    previewUrls.forEach((url) => url && URL.revokeObjectURL(url));
+  }, [previewUrls]);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    const picked = Array.from(e.target.files);
+    // 同じファイルでも再選択できるよう input をリセット
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setIsProcessingFiles(true);
+    try {
+      // アップロード前に画像を圧縮・JPEG変換（生データは保持しない）
+      const processed = await compressImageFiles(picked);
+      setSelectedFiles(processed);
+    } finally {
+      setIsProcessingFiles(false);
     }
   };
 
@@ -119,7 +143,9 @@ const InfoCreatePage: React.FC = () => {
     setExtractNotice(null);
 
     try {
-      const draft = await extractInfoDraft(file);
+      // アップロード前に圧縮・JPEG変換し、OCR・添付ともに変換後ファイルのみを使う（生データは保持しない）
+      const processed = await compressImageFile(file);
+      const draft = await extractInfoDraft(processed);
       setFormData(prev => ({
         ...prev,
         title: draft.title || prev.title,
@@ -129,8 +155,8 @@ const InfoCreatePage: React.FC = () => {
         items: draft.items || prev.items,
         date: draft.date || prev.date,
       }));
-      // 解析した写真はそのまま添付として保持
-      setSelectedFiles(prev => (prev.includes(file) ? prev : [...prev, file]));
+      // 解析した写真（変換後）を添付として保持
+      setSelectedFiles(prev => (prev.includes(processed) ? prev : [...prev, processed]));
       setExtractNotice(t('create.extractSuccess'));
     } catch (error: unknown) {
       console.error('Failed to extract from photo', error);
@@ -162,7 +188,7 @@ const InfoCreatePage: React.FC = () => {
     setIsDragging(false);
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
@@ -176,7 +202,14 @@ const InfoCreatePage: React.FC = () => {
       );
 
       if (acceptedFiles.length > 0) {
-        setSelectedFiles(prev => [...prev, ...acceptedFiles]);
+        setIsProcessingFiles(true);
+        try {
+          // アップロード前に画像を圧縮・JPEG変換（生データは保持しない）
+          const processed = await compressImageFiles(acceptedFiles);
+          setSelectedFiles(prev => [...prev, ...processed]);
+        } finally {
+          setIsProcessingFiles(false);
+        }
       }
     }
   };
@@ -187,7 +220,7 @@ const InfoCreatePage: React.FC = () => {
     mutation.mutate(formData);
   };
 
-  const isSubmitting = mutation.isPending || isUploading;
+  const isSubmitting = mutation.isPending || isUploading || isProcessingFiles;
 
   return (
     <div className="w-full lg:max-w-3xl lg:mx-auto pb-12">
@@ -403,15 +436,35 @@ const InfoCreatePage: React.FC = () => {
               hover:file:bg-blue-100"
             disabled={isSubmitting}
           />
+          <p className="mt-2 text-xs text-gray-500">{t('create.compressNote')}</p>
+          {isProcessingFiles && (
+            <p className="mt-2 text-sm text-blue-700">{t('create.processingFiles')}</p>
+          )}
           {selectedFiles.length > 0 && (
-            <ul className="mt-2 text-sm text-gray-600 space-y-1">
-              {selectedFiles.map((file, i) => (
-                <li key={i} className="flex items-center">
-                  <span className="truncate max-w-xs">{file.name}</span>
-                  <span className="ml-2 text-gray-400">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
-                </li>
-              ))}
-            </ul>
+            <>
+              <p className="mt-3 mb-1 text-xs font-medium text-gray-600">{t('create.previewHeading')}</p>
+              <ul className="text-sm text-gray-600 space-y-2">
+                {selectedFiles.map((file, i) => (
+                  <li key={i} className="flex items-center gap-3">
+                    {previewUrls[i] ? (
+                      <img
+                        src={previewUrls[i] as string}
+                        alt={file.name}
+                        className="h-14 w-14 object-cover rounded border border-gray-200 flex-shrink-0"
+                      />
+                    ) : (
+                      <span className="h-14 w-14 flex items-center justify-center rounded border border-gray-200 bg-gray-50 text-gray-400 text-xs flex-shrink-0">
+                        PDF
+                      </span>
+                    )}
+                    <span className="min-w-0">
+                      <span className="block truncate max-w-xs">{file.name}</span>
+                      <span className="text-gray-400">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </div>
 
