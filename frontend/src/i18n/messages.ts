@@ -5,12 +5,15 @@ export type Messages = Record<string, string>
 export const messages: Record<Lang, Messages> = {
   ja: {
     // nav / shell
-    'app.title': '保育園アシスタント',
+    'app.title': '保育園RAG',
     'nav.dashboard': 'ダッシュボード',
     'nav.ask': '質問',
     'nav.list': '一覧',
     'nav.create': '登録',
     'nav.logout': 'ログアウト',
+    'role.label': '表示モード',
+    'role.admin': '管理者',
+    'role.user': 'ユーザー',
     'footer.copyright': '© 2026 保育園情報アシスタント MVP',
 
     // common
@@ -146,12 +149,15 @@ export const messages: Record<Lang, Messages> = {
   },
   en: {
     // nav / shell
-    'app.title': 'Nursery Assistant',
+    'app.title': '保育園RAG',
     'nav.dashboard': 'Dashboard',
     'nav.ask': 'Ask',
     'nav.list': 'List',
     'nav.create': 'Add',
     'nav.logout': 'Log out',
+    'role.label': 'Display mode',
+    'role.admin': 'Admin',
+    'role.user': 'User',
     'footer.copyright': '© 2026 Nursery Info Assistant MVP',
 
     // common

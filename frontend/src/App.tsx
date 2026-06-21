@@ -5,7 +5,9 @@ import { AuthProvider } from './contexts/AuthContext';
 import { useAuth } from './contexts/useAuth';
 import { I18nProvider } from './i18n/I18nContext';
 import { useI18n } from './i18n/useI18n';
+import { RoleProvider } from './contexts/RoleContext';
 import LanguageToggle from './components/LanguageToggle';
+import RoleToggle from './components/RoleToggle';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -44,16 +46,28 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center min-w-0">
               <div className="flex-shrink-0 flex items-center gap-2 text-white font-bold text-xl">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-lg" aria-hidden>🏫</span>
                 {t('app.title')}
               </div>
             </div>
             <div className="flex items-center gap-2 md:gap-3">
+              <RoleToggle />
               <LanguageToggle />
               {isAuthenticated && (
                 <div className="flex items-center gap-2 md:gap-3">
                   <span className="hidden md:inline text-blue-100 text-sm">{email}</span>
-                  <button onClick={logout} className="flex-shrink-0 text-blue-100 hover:text-white text-sm px-3 py-1 rounded hover:bg-blue-600">{t('nav.logout')}</button>
+                  <button
+                    type="button"
+                    onClick={logout}
+                    aria-label={t('nav.logout')}
+                    title={t('nav.logout')}
+                    className="flex-shrink-0 inline-flex items-center justify-center text-blue-100 hover:text-white p-2 rounded hover:bg-blue-600"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden>
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                      <polyline points="16 17 21 12 16 7" />
+                      <line x1="21" y1="12" x2="9" y2="12" />
+                    </svg>
+                  </button>
                 </div>
               )}
             </div>
@@ -84,8 +98,9 @@ const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <I18nProvider>
-        <AuthProvider>
-          <Router>
+        <RoleProvider>
+          <AuthProvider>
+            <Router>
             <Layout>
               <Routes>
                 <Route path="/login" element={<LoginPage />} />
@@ -110,8 +125,9 @@ const App: React.FC = () => {
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Layout>
-          </Router>
-        </AuthProvider>
+            </Router>
+          </AuthProvider>
+        </RoleProvider>
       </I18nProvider>
     </QueryClientProvider>
   );
