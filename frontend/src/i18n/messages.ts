@@ -111,6 +111,21 @@ export const messages: Record<Lang, Messages> = {
     'create.uploadErrGeneric': '(エラーが発生しました)',
     'create.backToList': '一覧へ戻る',
     'create.genericError': 'エラーが発生しました。もう一度お試しください。',
+    'create.proceed': '確認へ進む',
+    'create.uploadComplete': '写真をアップしました（一時登録）。内容を確認して登録してください。',
+
+    // draft confirm (一時登録確認ページ) / register confirm (登録情報確認ページ) — SOT-1010
+    'draft.title': '一時登録の確認',
+    'draft.uploadComplete': 'アップ完了（一時登録しました）',
+    'draft.desc': '内容を確認・修正してから登録に進んでください。',
+    'draft.attachments': '添付（アップ済み）',
+    'draft.next': '登録内容を確認',
+    'draft.back': '戻る',
+    'confirm.title': '登録情報の確認',
+    'confirm.desc': 'この内容で登録します。',
+    'confirm.submit': '登録する',
+    'confirm.submitting': '登録中...',
+    'confirm.edit': '修正する',
 
     // option labels (display-only; stored/submitted value stays Japanese)
     'options.all': 'すべて',
@@ -237,6 +252,21 @@ export const messages: Record<Lang, Messages> = {
     'create.uploadErrGeneric': '(An error occurred)',
     'create.backToList': 'Back to list',
     'create.genericError': 'An error occurred. Please try again.',
+    'create.proceed': 'Continue to confirm',
+    'create.uploadComplete': 'Photo uploaded (temporarily saved). Review and register.',
+
+    // draft confirm / register confirm — SOT-1010
+    'draft.title': 'Review temporary registration',
+    'draft.uploadComplete': 'Upload complete (temporarily saved)',
+    'draft.desc': 'Review and edit the content before registering.',
+    'draft.attachments': 'Attachments (uploaded)',
+    'draft.next': 'Continue to final check',
+    'draft.back': 'Back',
+    'confirm.title': 'Confirm registration',
+    'confirm.desc': 'This information will be registered.',
+    'confirm.submit': 'Register',
+    'confirm.submitting': 'Registering...',
+    'confirm.edit': 'Edit',
 
     // option labels (display-only; stored/submitted value stays Japanese)
     'options.all': 'All',

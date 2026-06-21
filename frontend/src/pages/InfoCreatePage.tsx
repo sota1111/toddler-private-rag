@@ -1,15 +1,12 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createInfo, uploadAttachment, extractInfoDraft } from '../api';
+import { extractInfoDraft } from '../api';
 import type { NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
+import { useCreateFlow } from '../contexts/useCreateFlow';
 import { compressImageFile, compressImageFiles } from '../utils/imageCompression';
-
-const INFO_TYPES = ["資料", "掲示", "行事", "持ち物", "提出物", "お知らせ", "給食", "休園変更"];
-const STATUS_TYPES = ["未対応", "対応済み", "確認済み"];
-const PRIORITY_TYPES = ["高", "普通", "低"];
+import { INFO_TYPES, STATUS_TYPES, PRIORITY_TYPES } from './infoFormOptions';
 
 const InfoCreatePage: React.FC = () => {
   const { t } = useI18n();
@@ -20,9 +17,9 @@ const InfoCreatePage: React.FC = () => {
     return label === key ? value : label;
   };
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const { staged, setStaged } = useCreateFlow();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [formData, setFormData] = useState<NurseryInfoCreate>({
+  const [formData, setFormData] = useState<NurseryInfoCreate>(() => staged?.data ?? {
     title: '',
     info_type: '資料',
     content: '',
@@ -36,68 +33,16 @@ const InfoCreatePage: React.FC = () => {
     memo: '',
   });
 
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>(staged?.files ?? []);
   // プレビュー用 object URL（画像のみ）。selectedFiles に同期して生成/破棄する。
   const [isProcessingFiles, setIsProcessingFiles] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // 写真から自動入力 (SOT-829)
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractNotice, setExtractNotice] = useState<string | null>(null);
   const [extractError, setExtractError] = useState<string | null>(null);
-
-  const mutation = useMutation({
-    mutationFn: createInfo,
-    onSuccess: async (newInfo) => {
-      if (selectedFiles.length > 0) {
-        setIsUploading(true);
-        setUploadProgress({ current: 0, total: selectedFiles.length });
-
-        const failedFiles: string[] = [];
-
-        for (let i = 0; i < selectedFiles.length; i++) {
-          setUploadProgress({ current: i + 1, total: selectedFiles.length });
-          try {
-            await uploadAttachment(newInfo.id, selectedFiles[i]);
-          } catch (error: unknown) {
-            console.error(`Failed to upload ${selectedFiles[i].name}`, error);
-            let msg = selectedFiles[i].name;
-            if (axios.isAxiosError(error)) {
-              if (error.response?.status === 413) {
-                msg += ` ${t('create.uploadErr413')}`;
-              } else if (error.response?.status === 400) {
-                msg += ` ${t('create.uploadErr400')}`;
-              } else {
-                msg += ` ${t('create.uploadErrGeneric')}`;
-              }
-            } else {
-              msg += ` ${t('create.uploadErrGeneric')}`;
-            }
-            failedFiles.push(msg);
-          }
-        }
-
-        setIsUploading(false);
-
-        if (failedFiles.length > 0) {
-          setErrorMessage(`${t('create.uploadPartialFail')}\n${failedFiles.join('\n')}`);
-          // Stay on page if there's an error so user can see it
-          queryClient.invalidateQueries({ queryKey: ['info'] });
-          return;
-        }
-      }
-
-      queryClient.invalidateQueries({ queryKey: ['info'] });
-      queryClient.invalidateQueries({ queryKey: ['tomorrow'] });
-      queryClient.invalidateQueries({ queryKey: ['weekly'] });
-      queryClient.invalidateQueries({ queryKey: ['pending'] });
-      navigate('/list');
-    },
-  });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -157,7 +102,8 @@ const InfoCreatePage: React.FC = () => {
       }));
       // 解析した写真（変換後）を添付として保持
       setSelectedFiles(prev => (prev.includes(processed) ? prev : [...prev, processed]));
-      setExtractNotice(t('create.extractSuccess'));
+      // 写真アップ＝一時登録完了。確認ページで内容を確認して登録する。
+      setExtractNotice(t('create.uploadComplete'));
     } catch (error: unknown) {
       console.error('Failed to extract from photo', error);
       let msg = t('create.extractFailDefault');
@@ -214,13 +160,14 @@ const InfoCreatePage: React.FC = () => {
     }
   };
 
+  // 入力内容を一時保持し、一時登録確認ページへ進む（本登録はまだ行わない）
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage(null);
-    mutation.mutate(formData);
+    setStaged({ data: formData, files: selectedFiles });
+    navigate('/create/confirm-draft');
   };
 
-  const isSubmitting = mutation.isPending || isUploading || isProcessingFiles;
+  const isSubmitting = isProcessingFiles;
 
   return (
     <div className="w-full lg:max-w-3xl lg:mx-auto pb-12">
@@ -481,30 +428,9 @@ const InfoCreatePage: React.FC = () => {
             disabled={isSubmitting}
             className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-blue-300 min-w-[120px]"
           >
-            {mutation.isPending ? t('create.submitting') :
-             isUploading ? t('create.uploading', { current: uploadProgress.current, total: uploadProgress.total }) :
-             t('create.submit')}
+            {isProcessingFiles ? t('create.processingFiles') : t('create.proceed')}
           </button>
         </div>
-
-        {errorMessage && (
-          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
-            <p className="text-sm text-red-600 whitespace-pre-wrap">{errorMessage}</p>
-            {!isUploading && (
-               <button
-                type="button"
-                onClick={() => navigate('/list')}
-                className="mt-2 text-sm text-blue-600 font-medium hover:underline"
-              >
-                {t('create.backToList')}
-              </button>
-            )}
-          </div>
-        )}
-
-        {mutation.isError && !errorMessage && (
-          <p className="mt-2 text-sm text-red-600 text-center">{t('create.genericError')}</p>
-        )}
       </form>
     </div>
   );

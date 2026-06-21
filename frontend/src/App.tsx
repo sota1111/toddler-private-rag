@@ -11,7 +11,10 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import InfoListPage from './pages/InfoListPage';
 import InfoCreatePage from './pages/InfoCreatePage';
+import DraftConfirmPage from './pages/DraftConfirmPage';
+import RegisterConfirmPage from './pages/RegisterConfirmPage';
 import AskPage from './pages/AskPage';
+import { CreateFlowProvider } from './contexts/CreateFlowContext';
 
 const queryClient = new QueryClient();
 
@@ -89,7 +92,21 @@ const App: React.FC = () => {
                 <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
                 <Route path="/ask" element={<ProtectedRoute><AskPage /></ProtectedRoute>} />
                 <Route path="/list" element={<ProtectedRoute><InfoListPage /></ProtectedRoute>} />
-                <Route path="/create" element={<ProtectedRoute><InfoCreatePage /></ProtectedRoute>} />
+                <Route
+                  path="/create/*"
+                  element={
+                    <ProtectedRoute>
+                      <CreateFlowProvider>
+                        <Routes>
+                          <Route index element={<InfoCreatePage />} />
+                          <Route path="confirm-draft" element={<DraftConfirmPage />} />
+                          <Route path="confirm-register" element={<RegisterConfirmPage />} />
+                          <Route path="*" element={<Navigate to="/create" replace />} />
+                        </Routes>
+                      </CreateFlowProvider>
+                    </ProtectedRoute>
+                  }
+                />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Layout>
