@@ -162,32 +162,6 @@ const InfoCreatePage: React.FC = () => {
       <h1 className="text-2xl font-bold mb-6 text-gray-800">{t('create.manualTitle')}</h1>
 
       <form onSubmit={handleSubmit} className="bg-white shadow-md rounded-lg p-6 space-y-4">
-        {/* 登録時AI自動タグ付け (SOT-1039 / 提案3) */}
-        <div className="border border-dashed border-emerald-300 bg-emerald-50 rounded-lg p-4">
-          <h2 className="text-sm font-semibold text-emerald-800">{t('create.aiTagHeading')}</h2>
-          <p className="mt-1 text-xs text-gray-600">{t('create.aiTagDesc')}</p>
-          <button
-            type="button"
-            onClick={handleAutoTag}
-            disabled={isTagging || isSubmitting}
-            className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-md shadow-sm hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isTagging ? (
-              <>
-                <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                {t('create.aiTagAnalyzing')}
-              </>
-            ) : (
-              t('create.aiTagButton')
-            )}
-          </button>
-          {tagNotice && <p className="mt-2 text-sm text-emerald-700">{tagNotice}</p>}
-          {tagError && <p className="mt-2 text-sm text-red-600">{tagError}</p>}
-        </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-gray-700">{t('create.fieldTitle')}</label>
@@ -386,6 +360,32 @@ const InfoCreatePage: React.FC = () => {
               </ul>
             </>
           )}
+        </div>
+
+        {/* 登録時AI自動タグ付け (SOT-1039 / 提案3) */}
+        <div className="border border-dashed border-emerald-200 bg-emerald-50/40 rounded-md p-3">
+          <h2 className="text-xs font-medium text-emerald-800">{t('create.aiTagHeading')}</h2>
+          <p className="mt-1 text-[11px] text-gray-500">{t('create.aiTagDesc')}</p>
+          <button
+            type="button"
+            onClick={handleAutoTag}
+            disabled={isTagging || isSubmitting}
+            className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-md shadow-sm hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isTagging ? (
+              <>
+                <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                {t('create.aiTagAnalyzing')}
+              </>
+            ) : (
+              t('create.aiTagButton')
+            )}
+          </button>
+          {tagNotice && <p className="mt-2 text-xs text-emerald-700">{tagNotice}</p>}
+          {tagError && <p className="mt-2 text-xs text-red-600">{tagError}</p>}
         </div>
 
         <div className="flex justify-end pt-4">
