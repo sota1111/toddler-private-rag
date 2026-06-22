@@ -42,6 +42,19 @@ export const messages: Record<Lang, Messages> = {
     'dashboard.itemsLabel': '持物: ',
     'dashboard.dueLabel': '期限: ',
 
+    // reminder (能動リマインド SOT-1080 / 提案5-A)
+    'reminder.title': '能動リマインド',
+    'reminder.subtitle': '締切・行事・持ち物が近づくと自動でお知らせします。',
+    'reminder.empty': '緊急のリマインドはありません',
+    'reminder.bannerUrgent': '緊急のリマインドが{n}件あります',
+    'reminder.view': '確認する',
+    'reminder.dismiss': '閉じる',
+    'reminder.enableNotifications': '通知を有効化',
+    'reminder.urgency.overdue': '期限切れ',
+    'reminder.urgency.today': '本日',
+    'reminder.urgency.soon': 'まもなく',
+    'reminder.urgency.upcoming': '予定',
+
     // ask
     'ask.title': '質問する',
     'ask.label': '保育園の情報について質問してください',
@@ -231,6 +244,19 @@ export const messages: Record<Lang, Messages> = {
     'dashboard.pending': 'Pending tasks',
     'dashboard.itemsLabel': 'Items: ',
     'dashboard.dueLabel': 'Due: ',
+
+    // reminder (proactive reminders SOT-1080)
+    'reminder.title': 'Proactive Reminders',
+    'reminder.subtitle': 'Get notified automatically as deadlines, events and items approach.',
+    'reminder.empty': 'No urgent reminders',
+    'reminder.bannerUrgent': '{n} urgent reminder(s)',
+    'reminder.view': 'View',
+    'reminder.dismiss': 'Dismiss',
+    'reminder.enableNotifications': 'Enable notifications',
+    'reminder.urgency.overdue': 'Overdue',
+    'reminder.urgency.today': 'Today',
+    'reminder.urgency.soon': 'Soon',
+    'reminder.urgency.upcoming': 'Upcoming',
 
     // ask
     'ask.title': 'Ask a question',

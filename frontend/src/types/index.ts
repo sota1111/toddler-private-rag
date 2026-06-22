@@ -96,3 +96,33 @@ export interface RagAnswer {
   answer: string
   sources: RagSource[]
 }
+
+// 能動リマインド (SOT-1080 / 提案5-A)
+export type ReminderUrgency = 'overdue' | 'today' | 'soon' | 'upcoming'
+
+export interface ReminderItem {
+  info_id: number | string
+  title: string
+  info_type: string
+  kind: 'deadline' | 'event' | 'belongings'
+  target_date: string
+  days_until: number
+  urgency: ReminderUrgency
+  status: string
+  priority: string
+  message: string
+}
+
+export interface ReminderFeed {
+  generated_at: string
+  horizon_days: number
+  counts: {
+    overdue: number
+    today: number
+    soon: number
+    upcoming: number
+    total: number
+  }
+  items: ReminderItem[]
+  digest: string
+}

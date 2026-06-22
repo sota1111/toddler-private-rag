@@ -1,8 +1,16 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getToday, getTomorrow, getWeekly, getPending } from '../api';
-import type { NurseryInfo } from '../types';
+import { getToday, getTomorrow, getWeekly, getPending, getReminders } from '../api';
+import type { NurseryInfo, ReminderItem, ReminderUrgency } from '../types';
 import { useI18n } from '../i18n/useI18n';
+
+// SOT-1080 / 提案5-A: 緊急度ごとの配色（受動表示ではなく能動的に目を引く）。
+const URGENCY_STYLES: Record<ReminderUrgency, { row: string; chip: string }> = {
+  overdue: { row: 'border-l-4 border-red-500 bg-red-50', chip: 'bg-red-100 text-red-800' },
+  today: { row: 'border-l-4 border-amber-500 bg-amber-50', chip: 'bg-amber-100 text-amber-800' },
+  soon: { row: 'border-l-4 border-yellow-400 bg-yellow-50', chip: 'bg-yellow-100 text-yellow-800' },
+  upcoming: { row: 'border-l-4 border-gray-300 bg-gray-50', chip: 'bg-gray-100 text-gray-700' },
+};
 
 // SOT-1071: 掲示板（親しみやすい）デザイン。彩度の高い単色ヘッダーをやめ、
 // 淡いパステル帯＋絵文字＋柔らかい角丸カードでお知らせボードらしい表現にする。
@@ -40,6 +48,61 @@ const DashboardSection: React.FC<{
   );
 };
 
+const ReminderRow: React.FC<{ item: ReminderItem }> = ({ item }) => {
+  const { t } = useI18n();
+  const style = URGENCY_STYLES[item.urgency] ?? URGENCY_STYLES.upcoming;
+  return (
+    <li className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 ${style.row}`}>
+      <div className="min-w-0">
+        <p className="font-medium text-gray-800 truncate">{item.message}</p>
+        <p className="text-xs text-gray-500">
+          {item.info_type} ・ {item.target_date}
+        </p>
+      </div>
+      <span className={`flex-shrink-0 text-xs px-2 py-1 rounded-full ${style.chip}`}>
+        {t(`reminder.urgency.${item.urgency}`)}
+      </span>
+    </li>
+  );
+};
+
+const ProactiveReminders: React.FC = () => {
+  const { t } = useI18n();
+  const remindersQuery = useQuery({ queryKey: ['reminders'], queryFn: () => getReminders(7) });
+  const items = remindersQuery.data?.items ?? [];
+
+  if (remindersQuery.isLoading) {
+    return (
+      <div className="bg-white rounded-2xl shadow-card overflow-hidden mb-6">
+        <div className="bg-rose-50 text-rose-700 flex items-center gap-2 px-4 py-3 font-bold">
+          <span aria-hidden className="text-lg">🔔</span>
+          <span>{t('reminder.title')}</span>
+        </div>
+        <div className="p-4"><p className="text-gray-500">{t('common.loading')}</p></div>
+      </div>
+    );
+  }
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-card overflow-hidden mb-6 ring-1 ring-rose-100">
+      <div className="bg-rose-50 text-rose-700 flex items-center gap-2 px-4 py-3 font-bold">
+        <span aria-hidden className="text-lg">🔔</span>
+        <span>{t('reminder.title')}</span>
+        <span className="ml-auto text-xs font-normal text-rose-500">{t('reminder.subtitle')}</span>
+      </div>
+      <div className="p-4">
+        <ul className="space-y-2">
+          {items.map((item) => (
+            <ReminderRow key={`${item.kind}-${item.info_id}-${item.target_date}`} item={item} />
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+};
+
 const DashboardPage: React.FC = () => {
   const { t } = useI18n();
   const todayQuery = useQuery({ queryKey: ['today'], queryFn: getToday });
@@ -51,6 +114,8 @@ const DashboardPage: React.FC = () => {
     <div className="w-full lg:max-w-6xl lg:mx-auto">
       <h1 className="text-2xl font-bold mb-1 text-gray-800">{t('dashboard.title')}</h1>
       <p className="text-sm text-gray-500 mb-6">{t('dashboard.subtitle')}</p>
+
+      <ProactiveReminders />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <DashboardSection

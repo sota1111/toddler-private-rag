@@ -6,7 +6,7 @@ import tempfile
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from typing import List, Optional
-from .. import schemas, storage, ocr, tagging, extraction
+from .. import schemas, storage, ocr, tagging, extraction, reminders
 from ..privacy import redact_pii
 from ..rag.providers import get_llm_provider
 from ..repository import InfoRepository, get_info_repository
@@ -301,6 +301,44 @@ def get_weekly_info(repo: InfoRepository = Depends(get_info_repository), current
 @router.get("/pending", response_model=List[schemas.NurseryInfoResponse])
 def get_pending_info(repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
     return repo.list_pending()
+
+
+# 能動リマインド (SOT-1080 / 提案5-A)。"/{id}" より前に宣言してリテラルパスを優先させる。
+@router.get("/reminders", response_model=schemas.ReminderFeed)
+def get_reminders(
+    horizon_days: int = Query(7, ge=1, le=60, description="先読みする日数"),
+    repo: InfoRepository = Depends(get_info_repository),
+    current_user: str = Depends(get_current_user),
+):
+    """登録済み情報から締切/行事/持ち物を自律走査し、緊急度付きリマインドを返す。"""
+    today = datetime.date.today()
+    infos = repo.list()
+    items = reminders.build_reminders(infos, today=today, horizon_days=horizon_days)
+    return schemas.ReminderFeed(
+        generated_at=datetime.datetime.now().isoformat(),
+        horizon_days=horizon_days,
+        counts=reminders.summarize_counts(items),
+        items=[schemas.ReminderItem(**r) for r in items],
+        digest=reminders.build_digest(items, today=today),
+    )
+
+
+@router.get("/reminders/digest", response_model=schemas.ReminderDigest)
+def get_reminders_digest(
+    horizon_days: int = Query(7, ge=1, le=60, description="先読みする日数"),
+    repo: InfoRepository = Depends(get_info_repository),
+    current_user: str = Depends(get_current_user),
+):
+    """通知配信向けのリマインドダイジェスト（Cloud Scheduler等での定期push素材）を返す。"""
+    today = datetime.date.today()
+    infos = repo.list()
+    items = reminders.build_reminders(infos, today=today, horizon_days=horizon_days)
+    return schemas.ReminderDigest(
+        generated_at=datetime.datetime.now().isoformat(),
+        horizon_days=horizon_days,
+        total=len(items),
+        digest=reminders.build_digest(items, today=today),
+    )
 
 @router.get("/", response_model=List[schemas.NurseryInfoResponse])
 def list_info(

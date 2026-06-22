@@ -7,6 +7,7 @@ import type {
   InfoExtractDraft,
   InfoTagSuggestion,
   HybridSearchResponse,
+  ReminderFeed,
 } from '../types';
 
 const api = axios.create({
@@ -75,6 +76,14 @@ export const getWeekly = async (): Promise<NurseryInfo[]> => {
 
 export const getPending = async (): Promise<NurseryInfo[]> => {
   const response = await api.get('/info/pending');
+  return response.data;
+};
+
+// 能動リマインド (SOT-1080 / 提案5-A)
+export const getReminders = async (horizonDays = 7): Promise<ReminderFeed> => {
+  const response = await api.get<ReminderFeed>('/info/reminders', {
+    params: { horizon_days: horizonDays },
+  });
   return response.data;
 };
 
