@@ -10,9 +10,8 @@ const AskPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const q = query.trim();
+  const runQuery = async (raw: string) => {
+    const q = raw.trim();
     if (!q || isLoading) return;
     setIsLoading(true);
     setError(null);
@@ -26,6 +25,19 @@ const AskPage: React.FC = () => {
       setIsLoading(false);
     }
   };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void runQuery(query);
+  };
+
+  // サンプル質問チップ（SOT-1020 / 提案1）。タップで入力欄を埋めてそのまま送信する。
+  const handleSample = (sample: string) => {
+    setQuery(sample);
+    void runQuery(sample);
+  };
+
+  const SAMPLE_KEYS = ['ask.sample1', 'ask.sample2', 'ask.sample3'];
 
   return (
     <div className="w-full lg:max-w-3xl lg:mx-auto pb-12">
@@ -43,6 +55,21 @@ const AskPage: React.FC = () => {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        {/* サンプル質問チップ（提案1） */}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-gray-500">{t('ask.samplesLabel')}</span>
+          {SAMPLE_KEYS.map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => handleSample(t(k))}
+              disabled={isLoading}
+              className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition-colors"
+            >
+              {t(k)}
+            </button>
+          ))}
+        </div>
         <div className="mt-3 flex justify-end">
           <button
             type="submit"
