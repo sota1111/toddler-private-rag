@@ -6,8 +6,8 @@ export const messages: Record<Lang, Messages> = {
   ja: {
     // nav / shell
     'app.title': '保育園RAG',
-    'nav.dashboard': 'ダッシュボード',
-    'nav.info': '情報',
+    'nav.dashboard': '掲示板',
+    'nav.info': '質問',
     'nav.ask': '質問',
     'nav.search': '検索',
     'nav.list': '一覧',
@@ -33,7 +33,8 @@ export const messages: Record<Lang, Messages> = {
     'login.failed': 'ログインに失敗しました',
 
     // dashboard
-    'dashboard.title': 'ダッシュボード',
+    'dashboard.title': '掲示板',
+    'dashboard.subtitle': '今日明日の持ち物・行事・提出物をまとめた園からのお知らせボードです。',
     'dashboard.tomorrow': '明日の持ち物',
     'dashboard.weekly': '今週の行事',
     'dashboard.pending': '未対応の提出物',
@@ -193,8 +194,8 @@ export const messages: Record<Lang, Messages> = {
   en: {
     // nav / shell
     'app.title': '保育園RAG',
-    'nav.dashboard': 'Dashboard',
-    'nav.info': 'Info',
+    'nav.dashboard': 'Board',
+    'nav.info': 'Questions',
     'nav.ask': 'Ask',
     'nav.search': 'Search',
     'nav.list': 'List',
@@ -220,7 +221,8 @@ export const messages: Record<Lang, Messages> = {
     'login.failed': 'Login failed',
 
     // dashboard
-    'dashboard.title': 'Dashboard',
+    'dashboard.title': 'Bulletin Board',
+    'dashboard.subtitle': 'A friendly board of belongings, events and submissions from the nursery.',
     'dashboard.tomorrow': "Tomorrow's items",
     'dashboard.weekly': "This week's events",
     'dashboard.pending': 'Pending submissions',
