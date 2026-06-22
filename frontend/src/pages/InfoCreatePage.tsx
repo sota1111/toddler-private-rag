@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { extractInfoDraft, suggestInfoTags } from '../api';
 import type { NurseryInfoCreate } from '../types';
@@ -38,10 +37,11 @@ const InfoCreatePage: React.FC = () => {
   const [isProcessingFiles, setIsProcessingFiles] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
-  // 写真から自動入力 (SOT-829)
+  // 写真から自動入力 (SOT-829) / 解析待ちなしの即時案内 (SOT-1024)
   const photoInputRef = useRef<HTMLInputElement>(null);
-  const [isExtracting, setIsExtracting] = useState(false);
+  const [isPhotoStaging, setIsPhotoStaging] = useState(false);
   const [extractNotice, setExtractNotice] = useState<string | null>(null);
+  const [autofillNotice, setAutofillNotice] = useState<string | null>(null);
   const [extractError, setExtractError] = useState<string | null>(null);
 
   // 登録時AI自動タグ付け (SOT-1039 / 提案3)
@@ -115,20 +115,37 @@ const InfoCreatePage: React.FC = () => {
     }
   };
 
-  // 写真をアップロードしてOCR・構造化し、フォームを自動入力する (SOT-829)
+  // 写真を選んだら解析を待たずに一時登録へ即ステージし、投稿完了を案内する (SOT-1024)
+  // OCR自動入力はバックグラウンドで非ブロッキング実行し、失敗しても投稿成功は維持する。
   const handlePhotoExtract = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     // input をリセットして同じファイルでも再選択できるようにする
     if (photoInputRef.current) photoInputRef.current.value = '';
     if (!file) return;
 
-    setIsExtracting(true);
     setExtractError(null);
     setExtractNotice(null);
+    setAutofillNotice(null);
+    setIsPhotoStaging(true);
 
+    let processed: File;
     try {
       // アップロード前に圧縮・JPEG変換し、OCR・添付ともに変換後ファイルのみを使う（生データは保持しない）
-      const processed = await compressImageFile(file);
+      processed = await compressImageFile(file);
+    } catch (error) {
+      console.error('Failed to process photo', error);
+      setExtractError(t('create.extractFailDefault'));
+      setIsPhotoStaging(false);
+      return;
+    }
+
+    // 解析の完了を待たず、写真を一時登録へ即ステージし「投稿できました」を案内する
+    setSelectedFiles(prev => (prev.includes(processed) ? prev : [...prev, processed]));
+    setExtractNotice(t('create.uploadComplete'));
+    setIsPhotoStaging(false);
+
+    // バックグラウンドでOCR自動入力（非ブロッキング）。投稿は成功済みなので失敗は遮らない。
+    try {
       const draft = await extractInfoDraft(processed);
       setFormData(prev => ({
         ...prev,
@@ -139,23 +156,9 @@ const InfoCreatePage: React.FC = () => {
         items: draft.items || prev.items,
         date: draft.date || prev.date,
       }));
-      // 解析した写真（変換後）を添付として保持
-      setSelectedFiles(prev => (prev.includes(processed) ? prev : [...prev, processed]));
-      // 写真アップ＝一時登録完了。確認ページで内容を確認して登録する。
-      setExtractNotice(t('create.uploadComplete'));
-    } catch (error: unknown) {
-      console.error('Failed to extract from photo', error);
-      let msg = t('create.extractFailDefault');
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 413) {
-          msg = t('create.extractFail413');
-        } else if (error.response?.status === 400) {
-          msg = t('create.extractFail400');
-        }
-      }
-      setExtractError(msg);
-    } finally {
-      setIsExtracting(false);
+      setAutofillNotice(t('create.autofillDone'));
+    } catch (error) {
+      console.warn('Background auto-fill skipped', error);
     }
   };
 
@@ -229,16 +232,16 @@ const InfoCreatePage: React.FC = () => {
           <button
             type="button"
             onClick={() => photoInputRef.current?.click()}
-            disabled={isExtracting || isSubmitting}
+            disabled={isPhotoStaging || isSubmitting}
             className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md shadow-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isExtracting ? (
+            {isPhotoStaging ? (
               <>
                 <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                {t('create.photoAnalyzing')}
+                {t('create.processingFiles')}
               </>
             ) : (
               t('create.photoButton')
@@ -246,6 +249,9 @@ const InfoCreatePage: React.FC = () => {
           </button>
           {extractNotice && (
             <p className="mt-2 text-sm text-green-700">{extractNotice}</p>
+          )}
+          {autofillNotice && (
+            <p className="mt-1 text-sm text-green-700">{autofillNotice}</p>
           )}
           {extractError && (
             <p className="mt-2 text-sm text-red-600">
