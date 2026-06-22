@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getTomorrow, getWeekly, getPending } from '../api';
+import { getToday, getTomorrow, getWeekly, getPending } from '../api';
 import type { NurseryInfo } from '../types';
 import { useI18n } from '../i18n/useI18n';
 
@@ -42,6 +42,7 @@ const DashboardSection: React.FC<{
 
 const DashboardPage: React.FC = () => {
   const { t } = useI18n();
+  const todayQuery = useQuery({ queryKey: ['today'], queryFn: getToday });
   const tomorrowQuery = useQuery({ queryKey: ['tomorrow'], queryFn: getTomorrow });
   const weeklyQuery = useQuery({ queryKey: ['weekly'], queryFn: getWeekly });
   const pendingQuery = useQuery({ queryKey: ['pending'], queryFn: getPending });
@@ -52,6 +53,25 @@ const DashboardPage: React.FC = () => {
       <p className="text-sm text-gray-500 mb-6">{t('dashboard.subtitle')}</p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <DashboardSection
+          title={t('dashboard.today')}
+          items={todayQuery.data || []}
+          isLoading={todayQuery.isLoading}
+          emoji="📝"
+          accentClass="bg-amber-50 text-amber-700"
+          renderItem={(item) => (
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="font-medium text-gray-800">{item.title}</p>
+                {item.due_date && <p className="text-xs text-red-600 font-semibold">{t('dashboard.dueLabel')}{item.due_date}</p>}
+              </div>
+              <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">
+                {item.info_type}
+              </span>
+            </div>
+          )}
+        />
+
         <DashboardSection
           title={t('dashboard.tomorrow')}
           items={tomorrowQuery.data || []}

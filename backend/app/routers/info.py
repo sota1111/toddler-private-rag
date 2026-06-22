@@ -273,6 +273,10 @@ async def extract_info_draft(
 def create_info(info: schemas.NurseryInfoCreate, repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
     return repo.create(info)
 
+@router.get("/today", response_model=List[schemas.NurseryInfoResponse])
+def get_today_info(repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
+    return repo.list_today()
+
 @router.get("/tomorrow", response_model=List[schemas.NurseryInfoResponse])
 def get_tomorrow_info(repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
     return repo.list_tomorrow()
