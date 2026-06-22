@@ -84,6 +84,18 @@ def _source_label(source) -> str:
     return source.title
 
 
+def _snippet(text: Optional[str], limit: int = 160) -> Optional[str]:
+    """根拠チャンクの元テキストを表示用に短縮する (SOT-1094)。"""
+    if not text:
+        return None
+    normalized = " ".join(text.split())
+    if not normalized:
+        return None
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[:limit].rstrip() + "…"
+
+
 def _to_rag_source(source) -> schemas.RagSource:
     return schemas.RagSource(
         info_id=source.info_id,
@@ -92,6 +104,7 @@ def _to_rag_source(source) -> schemas.RagSource:
         score=source.score,
         filename=source.filename,
         label=_source_label(source),
+        snippet=_snippet(getattr(source, "text", None)),
     )
 
 

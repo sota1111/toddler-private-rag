@@ -65,6 +65,7 @@ class RagSource(BaseModel):
     score: float
     filename: Optional[str] = None  # 添付ファイル名 (source=="ocr" の場合)
     label: Optional[str] = None  # 出典表示用ラベル (タイトル + 添付ファイル名)
+    snippet: Optional[str] = None  # 根拠となる元テキストの抜粋 (SOT-1094)
 
 
 class RagSearchResponse(BaseModel):

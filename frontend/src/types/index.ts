@@ -89,6 +89,7 @@ export interface RagSource {
   score: number
   filename?: string | null
   label?: string | null
+  snippet?: string | null
 }
 
 export interface RagAnswer {
