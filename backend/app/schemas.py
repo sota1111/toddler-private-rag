@@ -77,6 +77,42 @@ class RagAnswer(BaseModel):
     sources: List[RagSource] = []
 
 
+# --- 登録時AI自動タグ付け (SOT-1039 / 提案3) ---
+
+class InfoTagSuggestRequest(BaseModel):
+    """登録フォームの現在の入力から自動タグ付けを依頼するリクエスト。"""
+    title: str = ""
+    content: str = ""
+    items: Optional[str] = None
+    info_type: Optional[str] = None
+
+
+class InfoTagSuggestResponse(BaseModel):
+    """AI/ヒューリスティックが推定した編集可能なメタデータ。"""
+    info_type: str
+    priority: str
+    date: Optional[str] = None
+    due_date: Optional[str] = None
+    event_date: Optional[str] = None
+    tags: List[str] = []
+    source: str = "heuristic"  # "ai" | "heuristic"
+
+
+# --- ハイブリッド検索 (SOT-1039 / 提案6) ---
+
+class HybridSearchResultItem(BaseModel):
+    info: NurseryInfoResponse
+    score: float
+    vector_score: float
+    keyword_score: float
+    matched_by: List[str] = []
+
+
+class HybridSearchResponse(BaseModel):
+    query: str
+    results: List[HybridSearchResultItem] = []
+
+
 # --- OCR 構造化抽出結果 ---
 
 class DocumentExtraction(BaseModel):
