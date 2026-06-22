@@ -32,6 +32,11 @@ const AutoRegisterPage: React.FC = () => {
       const processed = await compressImageFile(file);
       const draft = await extractInfoDraft(processed);
 
+      // 5カテゴリ抽出 (SOT-1092): 持ち物→items、注意事項→memo を補完プリフィル。
+      const cats = draft.categories;
+      const items = draft.items || (cats?.belongings?.length ? cats.belongings.join(', ') : '');
+      const memo = cats?.notes?.length ? cats.notes.join('\n') : '';
+
       const data: NurseryInfoCreate = {
         title: draft.title || '',
         // 推定種別が選択肢に存在する場合のみ採用
@@ -40,11 +45,11 @@ const AutoRegisterPage: React.FC = () => {
         date: draft.date || '',
         event_date: '',
         due_date: '',
-        items: draft.items || '',
+        items,
         status: '未対応',
         priority: '普通',
         tags: '',
-        memo: '',
+        memo,
       };
 
       // 読み取り結果を一時保持し、確認画面で内容を確認・修正のうえ登録する

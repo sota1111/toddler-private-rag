@@ -131,6 +131,17 @@ class DocumentExtraction(BaseModel):
         return self
 
 
+# --- 5カテゴリ構造化抽出 (SOT-1085 / SOT-1092) ---
+
+class ExtractedCategories(BaseModel):
+    """お知らせから抽出した保護者の行動5カテゴリ。"""
+    submissions: List[str] = []   # 提出物
+    belongings: List[str] = []    # 持ち物
+    deadlines: List[str] = []     # 締切
+    events: List[str] = []        # 行事予定
+    notes: List[str] = []         # 注意事項
+
+
 # --- 写真のみ登録: OCR からの登録ドラフト (SOT-829 / SOT-831) ---
 
 class InfoExtractDraft(BaseModel):
@@ -143,3 +154,4 @@ class InfoExtractDraft(BaseModel):
     raw_text: str = ""
     detected_dates: List[str] = []
     detected_items: List[str] = []
+    categories: ExtractedCategories = ExtractedCategories()  # 提出物/持ち物/締切/行事予定/注意事項
