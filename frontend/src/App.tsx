@@ -26,8 +26,8 @@ const NavLink: React.FC<{ to: string; children: React.ReactNode }> = ({ to, chil
   return (
     <Link
       to={to}
-      className={`flex-shrink-0 whitespace-nowrap px-3 py-2 rounded-md text-sm font-medium ${
-        isActive ? 'bg-blue-700 text-white' : 'text-blue-100 hover:bg-blue-600 hover:text-white'
+      className={`flex-shrink-0 whitespace-nowrap px-3.5 py-2 rounded-full text-sm font-semibold ${
+        isActive ? 'bg-white/25 text-white' : 'text-white/80 hover:bg-white/15 hover:text-white'
       } transition-colors`}
     >
       {children}
@@ -40,8 +40,8 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { t } = useI18n();
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <nav className="bg-gradient-to-r from-blue-600 to-indigo-600 shadow-md sticky top-0 z-20">
+    <div className="min-h-screen bg-surface-muted font-sans text-slate-800">
+      <nav className="bg-gradient-to-r from-brand to-brand-strong shadow-md sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center min-w-0">
@@ -54,13 +54,13 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               <LanguageToggle />
               {isAuthenticated && (
                 <div className="flex items-center gap-2 md:gap-3">
-                  <span className="hidden md:inline text-blue-100 text-sm">{email}</span>
+                  <span className="hidden md:inline text-white/80 text-sm">{email}</span>
                   <button
                     type="button"
                     onClick={logout}
                     aria-label={t('nav.logout')}
                     title={t('nav.logout')}
-                    className="flex-shrink-0 inline-flex items-center justify-center text-blue-100 hover:text-white p-2 rounded hover:bg-blue-600"
+                    className="flex-shrink-0 inline-flex items-center justify-center text-white/80 hover:text-white p-2 rounded-full hover:bg-white/15"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden>
                       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
