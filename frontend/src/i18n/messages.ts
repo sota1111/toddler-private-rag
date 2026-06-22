@@ -11,6 +11,8 @@ export const messages: Record<Lang, Messages> = {
     'nav.search': '検索',
     'nav.list': '一覧',
     'nav.create': '登録',
+    'nav.createManual': '手動登録',
+    'nav.createAuto': '自動登録',
     'nav.logout': 'ログアウト',
     'role.label': '表示モード',
     'role.admin': '管理者',
@@ -77,6 +79,11 @@ export const messages: Record<Lang, Messages> = {
 
     // create
     'create.title': '情報登録',
+    'create.manualTitle': '手動登録',
+    'create.autoTitle': '自動登録（データ登録）',
+    'create.autoDesc': '写真を選ぶと内容を自動で読み取り、確認画面へ進みます。',
+    'create.autoExtracting': '写真を読み取っています…',
+    'create.autoExtractFail': '写真の読み取りに失敗しました。もう一度お試しください。',
     'create.photoHeading': '写真から自動入力',
     'create.photoDesc':
       '掲示物の写真を選ぶと、解析を待たずにそのまま一時登録へ保存します。内容は自動で読み取ってフォームに反映され、次の確認画面で確認・修正してから登録できます。',
@@ -190,6 +197,8 @@ export const messages: Record<Lang, Messages> = {
     'nav.search': 'Search',
     'nav.list': 'List',
     'nav.create': 'Add',
+    'nav.createManual': 'Manual',
+    'nav.createAuto': 'Auto',
     'nav.logout': 'Log out',
     'role.label': 'Display mode',
     'role.admin': 'Admin',
@@ -256,6 +265,11 @@ export const messages: Record<Lang, Messages> = {
 
     // create
     'create.title': 'Add information',
+    'create.manualTitle': 'Manual registration',
+    'create.autoTitle': 'Auto registration (data import)',
+    'create.autoDesc': 'Pick a photo to auto-read its contents, then continue to the confirmation screen.',
+    'create.autoExtracting': 'Reading the photo…',
+    'create.autoExtractFail': 'Failed to read the photo. Please try again.',
     'create.photoHeading': 'Auto-fill from photo',
     'create.photoDesc':
       'Pick a photo of a notice and it is saved to your temporary registration right away — no waiting for analysis. The content is read automatically and filled into the form; review and edit it on the next screen before registering.',
