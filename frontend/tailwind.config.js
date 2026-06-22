@@ -14,6 +14,7 @@ export default {
         'brand-strong': 'var(--brand-strong)',
         'brand-soft': 'var(--brand-soft)',
         accent: 'var(--accent)',
+        foreground: 'var(--foreground)',
         surface: 'var(--surface)',
         'surface-muted': 'var(--surface-muted)',
       },

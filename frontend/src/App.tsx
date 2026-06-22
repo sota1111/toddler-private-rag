@@ -40,7 +40,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { t } = useI18n();
 
   return (
-    <div className="min-h-screen bg-surface-muted font-sans text-slate-800">
+    <div className="min-h-screen bg-surface-muted font-sans text-foreground">
       <nav className="bg-gradient-to-r from-brand to-brand-strong shadow-md sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
