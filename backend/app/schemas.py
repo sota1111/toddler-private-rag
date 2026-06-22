@@ -156,3 +156,36 @@ class InfoExtractDraft(BaseModel):
     detected_dates: List[str] = []
     detected_items: List[str] = []
     categories: ExtractedCategories = ExtractedCategories()  # 提出物/持ち物/締切/行事予定/注意事項
+
+
+# --- 能動リマインド (SOT-1080 / 提案5-A) ---
+
+class ReminderItem(BaseModel):
+    """締切/行事/持ち物から導出した緊急度付きリマインド1件。"""
+    info_id: Union[int, str]
+    title: str
+    info_type: str
+    kind: str            # "deadline" | "event" | "belongings"
+    target_date: str     # ISO YYYY-MM-DD
+    days_until: int
+    urgency: str         # "overdue" | "today" | "soon" | "upcoming"
+    status: str
+    priority: str
+    message: str
+
+
+class ReminderFeed(BaseModel):
+    """能動リマインドフィード（一覧 + 緊急度別件数 + 通知向けダイジェスト）。"""
+    generated_at: str
+    horizon_days: int
+    counts: dict = {}    # {"overdue":n,"today":n,"soon":n,"upcoming":n,"total":n}
+    items: List[ReminderItem] = []
+    digest: str = ""
+
+
+class ReminderDigest(BaseModel):
+    """通知配信向けのダイジェストのみを返す軽量レスポンス。"""
+    generated_at: str
+    horizon_days: int
+    total: int
+    digest: str
