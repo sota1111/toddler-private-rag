@@ -1,5 +1,13 @@
 import axios from 'axios';
-import type { NurseryInfo, NurseryInfoCreate, Attachment, RagAnswer, InfoExtractDraft } from '../types';
+import type {
+  NurseryInfo,
+  NurseryInfoCreate,
+  Attachment,
+  RagAnswer,
+  InfoExtractDraft,
+  InfoTagSuggestion,
+  HybridSearchResponse,
+} from '../types';
 
 const api = axios.create({
   baseURL: '/api',
@@ -67,6 +75,32 @@ export const getPending = async (): Promise<NurseryInfo[]> => {
 
 export const askInfo = async (query: string, top_k = 4): Promise<RagAnswer> => {
   const response = await api.post<RagAnswer>('/info/ask', { query, top_k });
+  return response.data;
+};
+
+// SOT-1039 / 提案3: 登録時AI自動タグ付け
+export const suggestInfoTags = async (payload: {
+  title: string;
+  content: string;
+  items?: string;
+  info_type?: string;
+}): Promise<InfoTagSuggestion> => {
+  const response = await api.post<InfoTagSuggestion>('/info/suggest-tags', payload);
+  return response.data;
+};
+
+// SOT-1039 / 提案6: ハイブリッド検索
+export const hybridSearch = async (params: {
+  q?: string;
+  info_type?: string;
+  status?: string;
+  priority?: string;
+  tag?: string;
+  date_from?: string;
+  date_to?: string;
+  top_k?: number;
+}): Promise<HybridSearchResponse> => {
+  const response = await api.get<HybridSearchResponse>('/info/hybrid-search', { params });
   return response.data;
 };
 

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { extractInfoDraft } from '../api';
+import { extractInfoDraft, suggestInfoTags } from '../api';
 import type { NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import { useCreateFlow } from '../contexts/useCreateFlow';
@@ -44,9 +44,48 @@ const InfoCreatePage: React.FC = () => {
   const [extractNotice, setExtractNotice] = useState<string | null>(null);
   const [extractError, setExtractError] = useState<string | null>(null);
 
+  // 登録時AI自動タグ付け (SOT-1039 / 提案3)
+  const [isTagging, setIsTagging] = useState(false);
+  const [tagNotice, setTagNotice] = useState<string | null>(null);
+  const [tagError, setTagError] = useState<string | null>(null);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  // タイトル・内容・持ち物からAIで種別/優先度/日付/タグを推定し、フォームへ反映する（編集可能）
+  const handleAutoTag = async () => {
+    setTagError(null);
+    setTagNotice(null);
+    if (!formData.title?.trim() && !formData.content?.trim()) {
+      setTagError(t('create.aiTagNeedInput'));
+      return;
+    }
+    setIsTagging(true);
+    try {
+      const s = await suggestInfoTags({
+        title: formData.title || '',
+        content: formData.content || '',
+        items: formData.items || undefined,
+        info_type: formData.info_type || undefined,
+      });
+      setFormData(prev => ({
+        ...prev,
+        info_type: INFO_TYPES.includes(s.info_type) ? s.info_type : prev.info_type,
+        priority: PRIORITY_TYPES.includes(s.priority) ? s.priority : prev.priority,
+        date: s.date || prev.date,
+        due_date: s.due_date || prev.due_date,
+        event_date: s.event_date || prev.event_date,
+        tags: s.tags && s.tags.length > 0 ? s.tags.join(', ') : prev.tags,
+      }));
+      setTagNotice(t('create.aiTagDone'));
+    } catch (error) {
+      console.error('Failed to auto-tag', error);
+      setTagError(t('create.aiTagFail'));
+    } finally {
+      setIsTagging(false);
+    }
   };
 
   const previewUrls = useMemo(
@@ -213,6 +252,32 @@ const InfoCreatePage: React.FC = () => {
               {extractError}{t('create.photoErrorSuffix')}
             </p>
           )}
+        </div>
+
+        {/* 登録時AI自動タグ付け (SOT-1039 / 提案3) */}
+        <div className="border border-dashed border-emerald-300 bg-emerald-50 rounded-lg p-4">
+          <h2 className="text-sm font-semibold text-emerald-800">{t('create.aiTagHeading')}</h2>
+          <p className="mt-1 text-xs text-gray-600">{t('create.aiTagDesc')}</p>
+          <button
+            type="button"
+            onClick={handleAutoTag}
+            disabled={isTagging || isSubmitting}
+            className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-md shadow-sm hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isTagging ? (
+              <>
+                <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                {t('create.aiTagAnalyzing')}
+              </>
+            ) : (
+              t('create.aiTagButton')
+            )}
+          </button>
+          {tagNotice && <p className="mt-2 text-sm text-emerald-700">{tagNotice}</p>}
+          {tagError && <p className="mt-2 text-sm text-red-600">{tagError}</p>}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

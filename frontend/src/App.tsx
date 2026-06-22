@@ -16,6 +16,7 @@ import InfoCreatePage from './pages/InfoCreatePage';
 import DraftConfirmPage from './pages/DraftConfirmPage';
 import RegisterConfirmPage from './pages/RegisterConfirmPage';
 import AskPage from './pages/AskPage';
+import SearchPage from './pages/SearchPage';
 import { CreateFlowProvider } from './contexts/CreateFlowContext';
 
 const queryClient = new QueryClient();
@@ -79,6 +80,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <NavLink to="/">{t('nav.dashboard')}</NavLink>
                 <NavLink to="/ask">{t('nav.ask')}</NavLink>
+                <NavLink to="/search">{t('nav.search')}</NavLink>
                 <NavLink to="/list">{t('nav.list')}</NavLink>
                 <NavLink to="/create">{t('nav.create')}</NavLink>
               </div>
@@ -106,6 +108,7 @@ const App: React.FC = () => {
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
                 <Route path="/ask" element={<ProtectedRoute><AskPage /></ProtectedRoute>} />
+                <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
                 <Route path="/list" element={<ProtectedRoute><InfoListPage /></ProtectedRoute>} />
                 <Route
                   path="/create/*"

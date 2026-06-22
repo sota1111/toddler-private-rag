@@ -50,6 +50,29 @@ export interface InfoExtractDraft {
   detected_items: string[]
 }
 
+export interface InfoTagSuggestion {
+  info_type: string
+  priority: string
+  date?: string | null
+  due_date?: string | null
+  event_date?: string | null
+  tags: string[]
+  source: string // "ai" | "heuristic"
+}
+
+export interface HybridSearchResultItem {
+  info: NurseryInfo
+  score: number
+  vector_score: number
+  keyword_score: number
+  matched_by: string[]
+}
+
+export interface HybridSearchResponse {
+  query: string
+  results: HybridSearchResultItem[]
+}
+
 export interface RagSource {
   info_id?: number | string | null
   title: string

@@ -6,12 +6,13 @@ import tempfile
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from typing import List, Optional
-from .. import schemas, storage, ocr
+from .. import schemas, storage, ocr, tagging
 from ..privacy import redact_pii
 from ..rag.providers import get_llm_provider
 from ..repository import InfoRepository, get_info_repository
 from ..routers.auth import get_current_user
 from ..rag.service import get_rag_service
+from ..rag.hybrid import hybrid_search
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +124,60 @@ def vector_search_info(
     return schemas.RagSearchResponse(
         query=q,
         sources=[_to_rag_source(s) for s in sources],
+    )
+
+
+# SOT-1039 / 提案3: 登録時AI自動タグ付け。"/{id}" より前に宣言する必要はないが、関連エンドポイントの近くに置く。
+@router.post("/suggest-tags", response_model=schemas.InfoTagSuggestResponse)
+def suggest_tags(
+    payload: schemas.InfoTagSuggestRequest,
+    current_user: str = Depends(get_current_user),
+):
+    """登録フォームの入力からメタデータ（種別/優先度/日付/期限/行事日/タグ）を推定する。"""
+    result = tagging.suggest_metadata(
+        payload.title, payload.content, payload.items, payload.info_type
+    )
+    return schemas.InfoTagSuggestResponse(**result)
+
+
+# SOT-1039 / 提案6: ハイブリッド検索。"/{id}" (GET) より前に宣言してリテラルパスを優先させる。
+@router.get("/hybrid-search", response_model=schemas.HybridSearchResponse)
+def hybrid_search_info(
+    q: Optional[str] = Query(None, description="検索キーワード"),
+    info_type: Optional[str] = None,
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    tag: Optional[str] = None,
+    date_from: Optional[str] = Query(None, description="日付下限 YYYY-MM-DD"),
+    date_to: Optional[str] = Query(None, description="日付上限 YYYY-MM-DD"),
+    top_k: int = 20,
+    repo: InfoRepository = Depends(get_info_repository),
+    current_user: str = Depends(get_current_user),
+):
+    """ベクトル＋キーワード＋日付/種別ファセットを組み合わせたハイブリッド検索。"""
+    hits = hybrid_search(
+        repo,
+        q=q,
+        info_type=info_type,
+        status=status,
+        priority=priority,
+        tag=tag,
+        date_from=date_from,
+        date_to=date_to,
+        top_k=top_k,
+    )
+    return schemas.HybridSearchResponse(
+        query=q or "",
+        results=[
+            schemas.HybridSearchResultItem(
+                info=h.info,
+                score=round(h.score, 4),
+                vector_score=round(h.vector_score, 4),
+                keyword_score=round(h.keyword_score, 4),
+                matched_by=h.matched_by,
+            )
+            for h in hits
+        ],
     )
 
 
