@@ -200,6 +200,20 @@ def test_ask_endpoint_sources_include_citation_label():
     assert content_sources[0]["label"] == content_sources[0]["title"]
 
 
+def test_ask_endpoint_sources_include_text_snippet():
+    # SOT-1094: 回答の根拠となる元テキストの抜粋(引用)を出典に含める
+    _seed("遠足のお知らせ", "行事", "来週の遠足では お弁当 水筒 レジャーシート を持参してください")
+
+    resp = client.post("/api/info/ask", json={"query": "遠足の持ち物", "top_k": 3})
+    assert resp.status_code == 200
+    sources = resp.json()["sources"]
+    assert sources
+    for s in sources:
+        assert "snippet" in s
+    # 少なくとも1件は実際の元テキスト抜粋を持つ
+    assert any(s["snippet"] for s in sources)
+
+
 def test_vector_search_endpoint():
     id1 = _seed("給食の献立", "連絡", "今週の給食はカレーライスとサラダです アレルギー対応あり")
     _seed("運動会", "行事", "運動会は晴天の場合に開催します")

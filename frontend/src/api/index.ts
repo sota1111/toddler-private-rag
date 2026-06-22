@@ -58,6 +58,11 @@ export const getAttachmentFileUrl = (attId: number): string => {
   return `/api/attachments/${attId}/file`;
 };
 
+export const getToday = async (): Promise<NurseryInfo[]> => {
+  const response = await api.get('/info/today');
+  return response.data;
+};
+
 export const getTomorrow = async (): Promise<NurseryInfo[]> => {
   const response = await api.get('/info/tomorrow');
   return response.data;

@@ -6,7 +6,7 @@ import tempfile
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from typing import List, Optional
-from .. import schemas, storage, ocr, tagging
+from .. import schemas, storage, ocr, tagging, extraction
 from ..privacy import redact_pii
 from ..rag.providers import get_llm_provider
 from ..repository import InfoRepository, get_info_repository
@@ -84,6 +84,18 @@ def _source_label(source) -> str:
     return source.title
 
 
+def _snippet(text: Optional[str], limit: int = 160) -> Optional[str]:
+    """根拠チャンクの元テキストを表示用に短縮する (SOT-1094)。"""
+    if not text:
+        return None
+    normalized = " ".join(text.split())
+    if not normalized:
+        return None
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[:limit].rstrip() + "…"
+
+
 def _to_rag_source(source) -> schemas.RagSource:
     return schemas.RagSource(
         info_id=source.info_id,
@@ -92,6 +104,7 @@ def _to_rag_source(source) -> schemas.RagSource:
         score=source.score,
         filename=source.filename,
         label=_source_label(source),
+        snippet=_snippet(getattr(source, "text", None)),
     )
 
 
@@ -249,6 +262,13 @@ async def extract_info_draft(
         except Exception as e:  # graceful degradation
             logger.warning("LLM title refinement failed in /info/extract: %s", e)
 
+    # 5カテゴリ構造化抽出 (提出物/持ち物/締切/行事予定/注意事項)。失敗時も空で返す。
+    try:
+        categories = schemas.ExtractedCategories(**extraction.extract_categories(safe_text))
+    except Exception as e:  # graceful degradation
+        logger.warning("Category extraction failed in /info/extract: %s", e)
+        categories = schemas.ExtractedCategories()
+
     return schemas.InfoExtractDraft(
         title=title,
         info_type=info_type,
@@ -258,12 +278,17 @@ async def extract_info_draft(
         raw_text=safe_text,
         detected_dates=detected_dates,
         detected_items=detected_items,
+        categories=categories,
     )
 
 
 @router.post("/", response_model=schemas.NurseryInfoResponse)
 def create_info(info: schemas.NurseryInfoCreate, repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
     return repo.create(info)
+
+@router.get("/today", response_model=List[schemas.NurseryInfoResponse])
+def get_today_info(repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
+    return repo.list_today()
 
 @router.get("/tomorrow", response_model=List[schemas.NurseryInfoResponse])
 def get_tomorrow_info(repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):

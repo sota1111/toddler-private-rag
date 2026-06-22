@@ -30,6 +30,10 @@ class InfoRepository(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def list_today(self) -> List[Any]:
+        pass
+
+    @abc.abstractmethod
     def list_tomorrow(self) -> List[Any]:
         pass
 
@@ -125,6 +129,17 @@ class SqliteInfoRepository(InfoRepository):
             
         return query.all()
 
+    def list_today(self) -> List[models.NurseryInfo]:
+        # 今日やること: 本日が日付/行事日/提出期限のいずれかに該当する情報 (SOT-1093)
+        today = datetime.date.today()
+        return self.db.query(models.NurseryInfo).filter(
+            or_(
+                models.NurseryInfo.date == today,
+                models.NurseryInfo.event_date == today,
+                models.NurseryInfo.due_date == today,
+            )
+        ).all()
+
     def list_tomorrow(self) -> List[models.NurseryInfo]:
         tomorrow = datetime.date.today() + datetime.timedelta(days=1)
         return self.db.query(models.NurseryInfo).filter(
@@ -144,8 +159,8 @@ class SqliteInfoRepository(InfoRepository):
         ).all()
 
     def list_pending(self) -> List[models.NurseryInfo]:
+        # 未対応のタスク: 提出物に限らず全カテゴリ横断で status=="未対応" (SOT-1093)
         return self.db.query(models.NurseryInfo).filter(
-            models.NurseryInfo.info_type == "提出物",
             models.NurseryInfo.status == "未対応"
         ).all()
 
@@ -414,6 +429,22 @@ class FirestoreInfoRepository(InfoRepository):
                 
         return results
 
+    def list_today(self) -> List[FirestoreNurseryInfo]:
+        # 今日やること: 本日が date/event_date/due_date のいずれかに該当 (SOT-1093)
+        today_str = _from_date(datetime.date.today())
+
+        results_dict = {}
+        for field_name in ("date", "event_date", "due_date"):
+            for doc in self.db.collection("nursery_info").where(field_name, "==", today_str).stream():
+                results_dict[doc.id] = doc.to_dict()
+
+        results = []
+        for doc_id, data in results_dict.items():
+            att_refs = self.db.collection("attachments").where("info_id", "==", doc_id).stream()
+            attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
+            results.append(_info_doc_to_obj(doc_id, data, attachments))
+        return results
+
     def list_tomorrow(self) -> List[FirestoreNurseryInfo]:
         tomorrow_date = datetime.date.today() + datetime.timedelta(days=1)
         tomorrow_str = _from_date(tomorrow_date)
@@ -456,11 +487,11 @@ class FirestoreInfoRepository(InfoRepository):
         return results
 
     def list_pending(self) -> List[FirestoreNurseryInfo]:
+        # 未対応のタスク: 全カテゴリ横断で status=="未対応" (SOT-1093)
         docs = self.db.collection("nursery_info") \
-            .where("info_type", "==", "提出物") \
             .where("status", "==", "未対応") \
             .stream()
-            
+
         results = []
         for doc in docs:
             att_refs = self.db.collection("attachments").where("info_id", "==", doc.id).stream()

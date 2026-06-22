@@ -118,23 +118,30 @@ const AskPage: React.FC = () => {
                 {result.sources.map((s, i) => (
                   <li
                     key={i}
-                    className="flex items-center justify-between gap-3 p-3 rounded-md border border-gray-100 bg-gray-50"
+                    className="p-3 rounded-md border border-gray-100 bg-gray-50"
                   >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          s.source === 'ocr'
-                            ? 'bg-purple-100 text-purple-800'
-                            : 'bg-blue-100 text-blue-800'
-                        }`}
-                      >
-                        {s.source === 'ocr' ? t('ask.attached') : t('ask.body')}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            s.source === 'ocr'
+                              ? 'bg-purple-100 text-purple-800'
+                              : 'bg-blue-100 text-blue-800'
+                          }`}
+                        >
+                          {s.source === 'ocr' ? t('ask.attached') : t('ask.body')}
+                        </span>
+                        <span className="text-sm text-gray-800 truncate">{s.label || s.title}</span>
+                      </div>
+                      <span className="text-xs text-gray-500 whitespace-nowrap">
+                        {t('ask.relevance')} {s.score.toFixed(2)}
                       </span>
-                      <span className="text-sm text-gray-800 truncate">{s.label || s.title}</span>
                     </div>
-                    <span className="text-xs text-gray-500 whitespace-nowrap">
-                      {t('ask.relevance')} {s.score.toFixed(2)}
-                    </span>
+                    {s.snippet && (
+                      <blockquote className="mt-2 border-l-2 border-gray-300 pl-3 text-xs text-gray-600 whitespace-pre-wrap break-words">
+                        {t('ask.quoteLabel')}{s.snippet}
+                      </blockquote>
+                    )}
                   </li>
                 ))}
               </ul>

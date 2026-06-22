@@ -34,10 +34,11 @@ export const messages: Record<Lang, Messages> = {
 
     // dashboard
     'dashboard.title': '掲示板',
-    'dashboard.subtitle': '今日明日の持ち物・行事・提出物をまとめた園からのお知らせボードです。',
+    'dashboard.subtitle': '今日やること・明日の持ち物・今週の予定・未対応のタスクをまとめた園からのお知らせボードです。',
+    'dashboard.today': '今日やること',
     'dashboard.tomorrow': '明日の持ち物',
-    'dashboard.weekly': '今週の行事',
-    'dashboard.pending': '未対応の提出物',
+    'dashboard.weekly': '今週の予定',
+    'dashboard.pending': '未対応のタスク',
     'dashboard.itemsLabel': '持物: ',
     'dashboard.dueLabel': '期限: ',
 
@@ -57,6 +58,7 @@ export const messages: Record<Lang, Messages> = {
     'ask.attached': '添付',
     'ask.body': '本文',
     'ask.relevance': '関連度',
+    'ask.quoteLabel': '引用: ',
     'ask.samplesLabel': '質問の例:',
     'ask.sample1': '来週の予定を教えて',
     'ask.sample2': '持ち物の準備はある？',
@@ -222,10 +224,11 @@ export const messages: Record<Lang, Messages> = {
 
     // dashboard
     'dashboard.title': 'Bulletin Board',
-    'dashboard.subtitle': 'A friendly board of belongings, events and submissions from the nursery.',
+    'dashboard.subtitle': "A friendly board of today's to-dos, tomorrow's items, this week's plans and pending tasks.",
+    'dashboard.today': 'Today’s to-dos',
     'dashboard.tomorrow': "Tomorrow's items",
-    'dashboard.weekly': "This week's events",
-    'dashboard.pending': 'Pending submissions',
+    'dashboard.weekly': "This week's plans",
+    'dashboard.pending': 'Pending tasks',
     'dashboard.itemsLabel': 'Items: ',
     'dashboard.dueLabel': 'Due: ',
 
@@ -245,6 +248,7 @@ export const messages: Record<Lang, Messages> = {
     'ask.attached': 'Attachment',
     'ask.body': 'Text',
     'ask.relevance': 'Relevance',
+    'ask.quoteLabel': 'Quote: ',
     'ask.samplesLabel': 'Example questions:',
     'ask.sample1': 'What is the schedule for next week?',
     'ask.sample2': 'Is there anything I need to prepare?',

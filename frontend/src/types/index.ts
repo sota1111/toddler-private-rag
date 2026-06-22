@@ -39,6 +39,14 @@ export interface NurseryInfoCreate {
   memo?: string
 }
 
+export interface ExtractedCategories {
+  submissions: string[]
+  belongings: string[]
+  deadlines: string[]
+  events: string[]
+  notes: string[]
+}
+
 export interface InfoExtractDraft {
   title: string
   info_type: string
@@ -48,6 +56,7 @@ export interface InfoExtractDraft {
   raw_text: string
   detected_dates: string[]
   detected_items: string[]
+  categories?: ExtractedCategories
 }
 
 export interface InfoTagSuggestion {
@@ -80,6 +89,7 @@ export interface RagSource {
   score: number
   filename?: string | null
   label?: string | null
+  snippet?: string | null
 }
 
 export interface RagAnswer {
