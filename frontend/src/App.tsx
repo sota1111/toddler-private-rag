@@ -13,6 +13,7 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import InfoListPage from './pages/InfoListPage';
 import InfoCreatePage from './pages/InfoCreatePage';
+import AutoRegisterPage from './pages/AutoRegisterPage';
 import DraftConfirmPage from './pages/DraftConfirmPage';
 import RegisterConfirmPage from './pages/RegisterConfirmPage';
 import AskPage from './pages/AskPage';
@@ -82,7 +83,8 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 <NavLink to="/ask">{t('nav.ask')}</NavLink>
                 <NavLink to="/search">{t('nav.search')}</NavLink>
                 <NavLink to="/list">{t('nav.list')}</NavLink>
-                <NavLink to="/create">{t('nav.create')}</NavLink>
+                <NavLink to="/create">{t('nav.createManual')}</NavLink>
+                <NavLink to="/create/auto">{t('nav.createAuto')}</NavLink>
               </div>
             </div>
           </div>
@@ -117,6 +119,7 @@ const App: React.FC = () => {
                       <CreateFlowProvider>
                         <Routes>
                           <Route index element={<InfoCreatePage />} />
+                          <Route path="auto" element={<AutoRegisterPage />} />
                           <Route path="confirm-draft" element={<DraftConfirmPage />} />
                           <Route path="confirm-register" element={<RegisterConfirmPage />} />
                           <Route path="*" element={<Navigate to="/create" replace />} />

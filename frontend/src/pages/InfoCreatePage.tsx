@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { extractInfoDraft, suggestInfoTags } from '../api';
+import { suggestInfoTags } from '../api';
 import type { NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import { useCreateFlow } from '../contexts/useCreateFlow';
-import { compressImageFile, compressImageFiles } from '../utils/imageCompression';
+import { compressImageFiles } from '../utils/imageCompression';
 import { INFO_TYPES, STATUS_TYPES, PRIORITY_TYPES } from './infoFormOptions';
 
 const InfoCreatePage: React.FC = () => {
@@ -36,13 +36,6 @@ const InfoCreatePage: React.FC = () => {
   // プレビュー用 object URL（画像のみ）。selectedFiles に同期して生成/破棄する。
   const [isProcessingFiles, setIsProcessingFiles] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-
-  // 写真から自動入力 (SOT-829) / 解析待ちなしの即時案内 (SOT-1024)
-  const photoInputRef = useRef<HTMLInputElement>(null);
-  const [isPhotoStaging, setIsPhotoStaging] = useState(false);
-  const [extractNotice, setExtractNotice] = useState<string | null>(null);
-  const [autofillNotice, setAutofillNotice] = useState<string | null>(null);
-  const [extractError, setExtractError] = useState<string | null>(null);
 
   // 登録時AI自動タグ付け (SOT-1039 / 提案3)
   const [isTagging, setIsTagging] = useState(false);
@@ -115,53 +108,6 @@ const InfoCreatePage: React.FC = () => {
     }
   };
 
-  // 写真を選んだら解析を待たずに一時登録へ即ステージし、投稿完了を案内する (SOT-1024)
-  // OCR自動入力はバックグラウンドで非ブロッキング実行し、失敗しても投稿成功は維持する。
-  const handlePhotoExtract = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    // input をリセットして同じファイルでも再選択できるようにする
-    if (photoInputRef.current) photoInputRef.current.value = '';
-    if (!file) return;
-
-    setExtractError(null);
-    setExtractNotice(null);
-    setAutofillNotice(null);
-    setIsPhotoStaging(true);
-
-    let processed: File;
-    try {
-      // アップロード前に圧縮・JPEG変換し、OCR・添付ともに変換後ファイルのみを使う（生データは保持しない）
-      processed = await compressImageFile(file);
-    } catch (error) {
-      console.error('Failed to process photo', error);
-      setExtractError(t('create.extractFailDefault'));
-      setIsPhotoStaging(false);
-      return;
-    }
-
-    // 解析の完了を待たず、写真を一時登録へ即ステージし「投稿できました」を案内する
-    setSelectedFiles(prev => (prev.includes(processed) ? prev : [...prev, processed]));
-    setExtractNotice(t('create.uploadComplete'));
-    setIsPhotoStaging(false);
-
-    // バックグラウンドでOCR自動入力（非ブロッキング）。投稿は成功済みなので失敗は遮らない。
-    try {
-      const draft = await extractInfoDraft(processed);
-      setFormData(prev => ({
-        ...prev,
-        title: draft.title || prev.title,
-        // 推定種別が選択肢に存在する場合のみ採用
-        info_type: INFO_TYPES.includes(draft.info_type) ? draft.info_type : prev.info_type,
-        content: draft.content || prev.content,
-        items: draft.items || prev.items,
-        date: draft.date || prev.date,
-      }));
-      setAutofillNotice(t('create.autofillDone'));
-    } catch (error) {
-      console.warn('Background auto-fill skipped', error);
-    }
-  };
-
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -213,53 +159,9 @@ const InfoCreatePage: React.FC = () => {
 
   return (
     <div className="w-full lg:max-w-3xl lg:mx-auto pb-12">
-      <h1 className="text-2xl font-bold mb-6 text-gray-800">{t('create.title')}</h1>
+      <h1 className="text-2xl font-bold mb-6 text-gray-800">{t('create.manualTitle')}</h1>
 
       <form onSubmit={handleSubmit} className="bg-white shadow-md rounded-lg p-6 space-y-4">
-        {/* 写真から自動入力 (SOT-832) */}
-        <div className="border border-dashed border-blue-300 bg-blue-50 rounded-lg p-4">
-          <h2 className="text-sm font-semibold text-blue-800">{t('create.photoHeading')}</h2>
-          <p className="mt-1 text-xs text-gray-600">
-            {t('create.photoDesc')}
-          </p>
-          <input
-            type="file"
-            accept="image/*"
-            ref={photoInputRef}
-            onChange={handlePhotoExtract}
-            className="hidden"
-          />
-          <button
-            type="button"
-            onClick={() => photoInputRef.current?.click()}
-            disabled={isPhotoStaging || isSubmitting}
-            className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md shadow-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isPhotoStaging ? (
-              <>
-                <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                {t('create.processingFiles')}
-              </>
-            ) : (
-              t('create.photoButton')
-            )}
-          </button>
-          {extractNotice && (
-            <p className="mt-2 text-sm text-green-700">{extractNotice}</p>
-          )}
-          {autofillNotice && (
-            <p className="mt-1 text-sm text-green-700">{autofillNotice}</p>
-          )}
-          {extractError && (
-            <p className="mt-2 text-sm text-red-600">
-              {extractError}{t('create.photoErrorSuffix')}
-            </p>
-          )}
-        </div>
-
         {/* 登録時AI自動タグ付け (SOT-1039 / 提案3) */}
         <div className="border border-dashed border-emerald-300 bg-emerald-50 rounded-lg p-4">
           <h2 className="text-sm font-semibold text-emerald-800">{t('create.aiTagHeading')}</h2>
