@@ -7,6 +7,7 @@ export const messages: Record<Lang, Messages> = {
     // nav / shell
     'app.title': '保育園RAG',
     'nav.dashboard': 'ダッシュボード',
+    'nav.info': '情報',
     'nav.ask': '質問',
     'nav.search': '検索',
     'nav.list': '一覧',
@@ -193,6 +194,7 @@ export const messages: Record<Lang, Messages> = {
     // nav / shell
     'app.title': '保育園RAG',
     'nav.dashboard': 'Dashboard',
+    'nav.info': 'Info',
     'nav.ask': 'Ask',
     'nav.search': 'Search',
     'nav.list': 'List',
