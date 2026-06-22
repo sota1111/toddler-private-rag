@@ -7,13 +7,19 @@
 
 ## 主な機能
 
-- **ダッシュボード**: 明日の持ち物、今週の行事、未対応の提出物をクイックビュー
+- **ダッシュボード / 掲示板**: 今日・明日の持ち物、今週の行事、未対応の提出物をクイックビュー
+  （`GET /api/info/today` / `tomorrow` / `weekly` / `pending`）
+- **能動リマインド**: 締切・行事の緊急度別リマインドとダイジェスト（`GET /api/info/reminders` / `reminders/digest`）
 - **情報一覧**: キーワード・種別・ステータスによる検索／フィルタリング
-- **情報登録**: 新しい情報の登録と添付ファイル（画像/PDF）のアップロード（OCR連携）
-- **写真から自動入力**: 写真/PDFをOCR・構造化し、登録フォームのドラフトを自動生成（`POST /api/info/extract`、DB未保存）
+- **ハイブリッド検索**: キーワード＋ベクトル＋ファセットの統合検索（`GET /api/info/hybrid-search`）
+- **AI 自動タグ付け**: 内容からタグ候補を生成（`POST /api/info/suggest-tags`）
+- **情報登録 / 自動登録**: 手動登録と、写真/PDFをOCR・構造化して登録フォームのドラフトを自動生成
+  （`POST /api/info/extract`、DB未保存）。添付ファイル（画像/PDF）アップロードはOCR連携
+- **5カテゴリ抽出**: 提出物 / 持ち物 / 締切 / 行事 / 注意事項を抽出
 - **情報の編集・削除（管理）**: 情報一覧から各レコードの編集（`PUT /api/info/{id}`）・削除（`DELETE /api/info/{id}`）
 - **RAG（ベクトル検索＋LLM回答生成）**: 埋め込みベースのベクトル検索で関連情報を取得し、
   LLMで質問に回答（出典チャンク付き）
+- **ロール切替**: 管理者/利用者の表示切替（フロント側のトグル）と日本語/英語の言語切替
 
 ## アーキテクチャ
 
@@ -22,14 +28,14 @@ flowchart TD
     User([ユーザー / ブラウザ])
 
     subgraph Frontend["Frontend — React + Vite (Cloud Run :8080 / Firebase Hosting)"]
-        FE["SPA: Dashboard / InfoList / InfoCreate / Ask / Login"]
+        FE["SPA: Dashboard(掲示板) / InfoHub(一覧・検索・Q&A) / 登録・自動登録 / Login"]
     end
 
-    subgraph Backend["Backend — FastAPI (Cloud Run :8000)"]
+    subgraph Backend["Backend — FastAPI (Cloud Run :8080)"]
         AUTH["routers/auth (/api/auth)"]
         ATT["routers/attachments (/api)"]
         INFO["routers/info (/api/info)"]
-        OCR["ocr.py — Pillow + pytesseract / pypdf / pdf2image"]
+        OCR["ocr.py — Gemini Vision / Pillow + pytesseract / pypdf / pdf2image"]
         RAG["rag/ — chunking → embedding → InMemoryVectorStore → LLM"]
     end
 
@@ -111,11 +117,12 @@ flowchart LR
 
 | レイヤ | 技術 |
 |--------|------|
-| Frontend | React 19 + TypeScript, Vite, Tailwind CSS, TanStack Query, React Router |
-| Backend | FastAPI (Python 3.12), SQLAlchemy, SQLite |
-| OCR | pytesseract, pypdf, pdf2image, Pillow（ローカル実行） |
+| Frontend | React 19 + TypeScript, Vite, Tailwind CSS, TanStack Query, React Router 7（本リポジトリ同梱の monorepo） |
+| Backend | FastAPI (Python 3.12), SQLAlchemy, SQLite（local）/ Firestore（本番） |
+| OCR | Gemini Vision（`OCR_PROVIDER`、利用可能時に優先）→ pytesseract / pypdf / pdf2image / Pillow にフォールバック |
 | RAG | インプロセス・ベクトルストア（コサイン類似度）+ Provider抽象（fake / gemini） |
-| GCP | Cloud Run, Cloud Build, Secret Manager、（任意）Cloud Storage / Firestore / Gemini API |
+| AI | google-genai 経由の Gemini。本番は Vertex AI（`GOOGLE_GENAI_USE_VERTEXAI=true`）、ローカルは API キーも可 |
+| GCP | Cloud Run, Cloud Build, Secret Manager、（任意）Cloud Storage / Firestore / Gemini・Vertex AI |
 | 認証 | Firebase Identity Toolkit REST（サーバサイド照合）+ HMAC署名セッションcookie |
 
 ## RAG（ベクトル検索＋LLM回答生成）
@@ -204,7 +211,12 @@ docker run -p 8080:8080 toddler-private-rag-frontend
 | `FIRESTORE_DATABASE` | Firestore データベース名 | `(default)` |
 | `EMBEDDING_PROVIDER` | 埋め込みプロバイダ | `fake`（既定）/ `gemini` |
 | `LLM_PROVIDER` | 回答生成プロバイダ | `fake`（既定）/ `gemini` |
-| `GEMINI_API_KEY` | `gemini` プロバイダ利用時のみ必要（`GOOGLE_API_KEY` でも可） | （未設定） |
+| `OCR_PROVIDER` | OCRエンジン。未指定かつ Gemini 利用可能時は Gemini Vision を優先。`tesseract`/`local`/`fake` で従来OCR | （未設定） |
+| `GOOGLE_GENAI_USE_VERTEXAI` | truthy で Vertex AI モード（APIキー不要。本番 Cloud Run の SA 認証で利用） | （未設定） |
+| `GOOGLE_CLOUD_LOCATION` | Vertex AI のロケーション | `us-central1` |
+| `GEMINI_MODEL` | 使用する Gemini モデル | `gemini-2.5-flash` |
+| `GEMINI_API_KEY` | API-key モード利用時のみ必要（`GOOGLE_API_KEY` でも可） | （未設定） |
+| `ATTACHMENT_RETENTION_DAYS` | 添付ファイルの保持日数（期限切れをパージ） | （未設定） |
 
 ## 認証
 
