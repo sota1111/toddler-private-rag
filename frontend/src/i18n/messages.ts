@@ -79,7 +79,7 @@ export const messages: Record<Lang, Messages> = {
     'create.title': '情報登録',
     'create.photoHeading': '写真から自動入力',
     'create.photoDesc':
-      '掲示物の写真をアップロードすると、内容を解析して下のフォームを自動入力します。自動入力後に内容を確認・修正してから登録できます。',
+      '掲示物の写真を選ぶと、解析を待たずにそのまま一時登録へ保存します。内容は自動で読み取ってフォームに反映され、次の確認画面で確認・修正してから登録できます。',
     'create.photoAnalyzing': '解析中…',
     'create.photoButton': '写真を選択して自動入力',
     'create.photoErrorSuffix': '（このまま手入力で登録できます）',
@@ -120,7 +120,8 @@ export const messages: Record<Lang, Messages> = {
     'create.backToList': '一覧へ戻る',
     'create.genericError': 'エラーが発生しました。もう一度お試しください。',
     'create.proceed': '確認へ進む',
-    'create.uploadComplete': '写真をアップしました（一時登録）。内容を確認して登録してください。',
+    'create.uploadComplete': '投稿できました。内容は一時登録に保存しました。次の確認画面で内容をご確認・修正のうえ登録してください。',
+    'create.autofillDone': '写真の内容をフォームに自動反映しました。ご確認ください。',
     // AI自動タグ付け (SOT-1039 / 提案3)
     'create.aiTagHeading': 'AIで自動タグ付け',
     'create.aiTagDesc': 'タイトル・内容からAIが種別・優先度・日付・タグを推定して入力します（後から編集できます）。',
@@ -257,7 +258,7 @@ export const messages: Record<Lang, Messages> = {
     'create.title': 'Add information',
     'create.photoHeading': 'Auto-fill from photo',
     'create.photoDesc':
-      'Upload a photo of a notice to analyze it and auto-fill the form below. You can review and edit before saving.',
+      'Pick a photo of a notice and it is saved to your temporary registration right away — no waiting for analysis. The content is read automatically and filled into the form; review and edit it on the next screen before registering.',
     'create.photoAnalyzing': 'Analyzing…',
     'create.photoButton': 'Select a photo to auto-fill',
     'create.photoErrorSuffix': ' (You can still enter the details manually)',
@@ -298,7 +299,8 @@ export const messages: Record<Lang, Messages> = {
     'create.backToList': 'Back to list',
     'create.genericError': 'An error occurred. Please try again.',
     'create.proceed': 'Continue to confirm',
-    'create.uploadComplete': 'Photo uploaded (temporarily saved). Review and register.',
+    'create.uploadComplete': 'Posted. Saved to your temporary registration. Review and edit on the next screen before registering.',
+    'create.autofillDone': 'The photo content was auto-filled into the form. Please review.',
     // AI auto-tagging (SOT-1039 / proposal 3)
     'create.aiTagHeading': 'AI auto-tagging',
     'create.aiTagDesc': 'AI infers type, priority, dates and tags from the title and content (you can edit them afterwards).',
