@@ -15,6 +15,8 @@ class NurseryInfo(Base):
     due_date = Column(Date, nullable=True)
     items = Column(Text, nullable=True)
     status = Column(String(20), default="未対応")
+    # 仮登録(draft) / 本登録(registered) の区分。既存(未設定)データは registered 扱い。
+    registration_state = Column(String(20), nullable=False, server_default="registered", default="registered")
     priority = Column(String(10), default="普通")
     tags = Column(Text, nullable=True)
     memo = Column(Text, nullable=True)

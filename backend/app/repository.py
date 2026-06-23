@@ -46,6 +46,14 @@ class InfoRepository(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def list_drafts(self) -> List[Any]:
+        pass
+
+    @abc.abstractmethod
+    def finalize(self, id: Union[int, str]) -> Optional[Any]:
+        pass
+
+    @abc.abstractmethod
     def update(self, id: Union[int, str], data: schemas.NurseryInfoUpdate) -> Optional[Any]:
         pass
 
@@ -85,6 +93,15 @@ class AttachmentRepository(abc.ABC):
 
 # --- SQLite Implementation ---
 
+def _sqlite_registered_only():
+    """本登録(registered)のみを対象にする SQLAlchemy フィルタ。
+    未設定(旧データ)は registered 扱いで残し、draft だけを除外する。"""
+    return or_(
+        models.NurseryInfo.registration_state == "registered",
+        models.NurseryInfo.registration_state.is_(None),
+    )
+
+
 class SqliteInfoRepository(InfoRepository):
     def __init__(self, db: Session):
         self.db = db
@@ -102,8 +119,8 @@ class SqliteInfoRepository(InfoRepository):
     def list(self, q: Optional[str] = None, info_type: Optional[str] = None, 
              status: Optional[str] = None, priority: Optional[str] = None, 
              tag: Optional[str] = None) -> List[models.NurseryInfo]:
-        query = self.db.query(models.NurseryInfo)
-        
+        query = self.db.query(models.NurseryInfo).filter(_sqlite_registered_only())
+
         if q:
             search = f"%{q}%"
             query = query.filter(
@@ -133,6 +150,7 @@ class SqliteInfoRepository(InfoRepository):
         # 今日やること: 本日が日付/行事日/提出期限のいずれかに該当する情報 (SOT-1093)
         today = datetime.date.today()
         return self.db.query(models.NurseryInfo).filter(
+            _sqlite_registered_only(),
             or_(
                 models.NurseryInfo.date == today,
                 models.NurseryInfo.event_date == today,
@@ -143,6 +161,7 @@ class SqliteInfoRepository(InfoRepository):
     def list_tomorrow(self) -> List[models.NurseryInfo]:
         tomorrow = datetime.date.today() + datetime.timedelta(days=1)
         return self.db.query(models.NurseryInfo).filter(
+            _sqlite_registered_only(),
             or_(
                 models.NurseryInfo.event_date == tomorrow,
                 (models.NurseryInfo.info_type == "持ち物") & (models.NurseryInfo.date == tomorrow)
@@ -153,6 +172,7 @@ class SqliteInfoRepository(InfoRepository):
         today = datetime.date.today()
         next_week = today + datetime.timedelta(days=7)
         return self.db.query(models.NurseryInfo).filter(
+            _sqlite_registered_only(),
             models.NurseryInfo.info_type == "行事",
             models.NurseryInfo.event_date >= today,
             models.NurseryInfo.event_date <= next_week
@@ -161,8 +181,24 @@ class SqliteInfoRepository(InfoRepository):
     def list_pending(self) -> List[models.NurseryInfo]:
         # 未対応のタスク: 提出物に限らず全カテゴリ横断で status=="未対応" (SOT-1093)
         return self.db.query(models.NurseryInfo).filter(
+            _sqlite_registered_only(),
             models.NurseryInfo.status == "未対応"
         ).all()
+
+    def list_drafts(self) -> List[models.NurseryInfo]:
+        # 仮登録(draft)のみ。新しい順で返す。
+        return self.db.query(models.NurseryInfo).filter(
+            models.NurseryInfo.registration_state == "draft"
+        ).order_by(models.NurseryInfo.created_at.desc()).all()
+
+    def finalize(self, id: Union[int, str]) -> Optional[models.NurseryInfo]:
+        db_info = self.get(id)
+        if not db_info:
+            return None
+        db_info.registration_state = "registered"
+        self.db.commit()
+        self.db.refresh(db_info)
+        return db_info
 
     def update(self, id: Union[int, str], data: schemas.NurseryInfoUpdate) -> Optional[models.NurseryInfo]:
         db_info = self.get(id)
@@ -272,6 +308,7 @@ class FirestoreNurseryInfo:
     memo: Optional[str]
     created_at: datetime.datetime
     updated_at: datetime.datetime
+    registration_state: str = "registered"
     attachments: List[FirestoreAttachment] = field(default_factory=list)
 
 # Firestore helper functions
@@ -313,6 +350,7 @@ def _info_doc_to_obj(doc_id: str, data: dict, attachments: List[FirestoreAttachm
         priority=data.get("priority", "普通"),
         tags=_tags_array_to_str(data.get("tags")),
         memo=data.get("memo"),
+        registration_state=data.get("registration_state") or "registered",
         created_at=data.get("created_at") or datetime.datetime.now(),
         updated_at=data.get("updated_at") or datetime.datetime.now(),
         attachments=attachments or []
@@ -332,6 +370,12 @@ def _att_doc_to_obj(doc_id: str, data: dict) -> FirestoreAttachment:
         ocr_status=data.get("ocr_status", "pending"),
         created_at=data.get("created_at") or datetime.datetime.now()
     )
+
+def _is_registered_data(data: dict) -> bool:
+    """Firestore ドキュメントが本登録(registered)かどうか。
+    未設定(旧データ)は registered 扱い。draft のみ False。"""
+    return (data.get("registration_state") or "registered") == "registered"
+
 
 def _matches_query(info: FirestoreNurseryInfo, q: Optional[str], tag: Optional[str]) -> bool:
     if tag:
@@ -412,6 +456,9 @@ class FirestoreInfoRepository(InfoRepository):
         results = []
         for doc in docs:
             doc_data = doc.to_dict()
+            # 仮登録(draft)は通常一覧に含めない (SOT-1113)
+            if not _is_registered_data(doc_data):
+                continue
             # Fetch attachments if q is present (needed for OCR search)
             attachments = []
             if q:
@@ -440,6 +487,8 @@ class FirestoreInfoRepository(InfoRepository):
 
         results = []
         for doc_id, data in results_dict.items():
+            if not _is_registered_data(data):  # 仮登録は除外 (SOT-1113)
+                continue
             att_refs = self.db.collection("attachments").where("info_id", "==", doc_id).stream()
             attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
             results.append(_info_doc_to_obj(doc_id, data, attachments))
@@ -462,10 +511,12 @@ class FirestoreInfoRepository(InfoRepository):
             
         results = []
         for doc_id, data in results_dict.items():
+            if not _is_registered_data(data):  # 仮登録は除外 (SOT-1113)
+                continue
             att_refs = self.db.collection("attachments").where("info_id", "==", doc_id).stream()
             attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
             results.append(_info_doc_to_obj(doc_id, data, attachments))
-            
+
         return results
 
     def list_weekly(self) -> List[FirestoreNurseryInfo]:
@@ -481,6 +532,8 @@ class FirestoreInfoRepository(InfoRepository):
             
         results = []
         for doc in docs:
+            if not _is_registered_data(doc.to_dict()):  # 仮登録は除外 (SOT-1113)
+                continue
             att_refs = self.db.collection("attachments").where("info_id", "==", doc.id).stream()
             attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
             results.append(_info_doc_to_obj(doc.id, doc.to_dict(), attachments))
@@ -494,10 +547,36 @@ class FirestoreInfoRepository(InfoRepository):
 
         results = []
         for doc in docs:
+            if not _is_registered_data(doc.to_dict()):  # 仮登録は除外 (SOT-1113)
+                continue
             att_refs = self.db.collection("attachments").where("info_id", "==", doc.id).stream()
             attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
             results.append(_info_doc_to_obj(doc.id, doc.to_dict(), attachments))
         return results
+
+    def list_drafts(self) -> List[FirestoreNurseryInfo]:
+        # 仮登録(draft)のみ返す (SOT-1113)。
+        docs = self.db.collection("nursery_info").stream()
+        results = []
+        for doc in docs:
+            doc_data = doc.to_dict()
+            if (doc_data.get("registration_state") or "registered") != "draft":
+                continue
+            att_refs = self.db.collection("attachments").where("info_id", "==", doc.id).stream()
+            attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
+            results.append(_info_doc_to_obj(doc.id, doc_data, attachments))
+        results.sort(key=lambda i: i.created_at, reverse=True)
+        return results
+
+    def finalize(self, id: Union[int, str]) -> Optional[FirestoreNurseryInfo]:
+        doc_ref = self.db.collection("nursery_info").document(str(id))
+        if not doc_ref.get().exists:
+            return None
+        doc_ref.update({
+            "registration_state": "registered",
+            "updated_at": datetime.datetime.now(datetime.timezone.utc),
+        })
+        return self.get(id)
 
     def update(self, id: Union[int, str], data: schemas.NurseryInfoUpdate) -> Optional[FirestoreNurseryInfo]:
         doc_ref = self.db.collection("nursery_info").document(str(id))

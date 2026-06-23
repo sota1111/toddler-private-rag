@@ -20,6 +20,7 @@ export interface NurseryInfo {
   priority: string
   tags?: string
   memo?: string
+  registration_state?: string
   created_at: string
   updated_at: string
   attachments?: Attachment[]
@@ -37,6 +38,7 @@ export interface NurseryInfoCreate {
   priority?: string
   tags?: string
   memo?: string
+  registration_state?: string
 }
 
 export interface ExtractedCategories {

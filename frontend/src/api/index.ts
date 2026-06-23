@@ -29,6 +29,18 @@ export const deleteInfo = async (id: number): Promise<void> => {
   await api.delete(`/info/${id}`);
 };
 
+// 仮登録(draft) 一覧取得 (SOT-1113)
+export const getDrafts = async (): Promise<NurseryInfo[]> => {
+  const response = await api.get('/info/drafts');
+  return response.data;
+};
+
+// 仮登録を本登録(registered)に確定する (SOT-1113)
+export const finalizeInfo = async (id: number): Promise<NurseryInfo> => {
+  const response = await api.post(`/info/${id}/finalize`);
+  return response.data;
+};
+
 export const uploadAttachment = async (infoId: number, file: File): Promise<Attachment> => {
   const formData = new FormData();
   formData.append('file', file);

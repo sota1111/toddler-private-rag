@@ -22,6 +22,8 @@ class NurseryInfoBase(BaseModel):
     due_date: Optional[datetime.date] = None
     items: Optional[str] = None
     status: Optional[str] = "未対応"
+    # 仮登録(draft) / 本登録(registered)。省略時は本登録。
+    registration_state: Optional[str] = "registered"
     priority: Optional[str] = "普通"
     tags: Optional[str] = None
     memo: Optional[str] = None
@@ -38,6 +40,7 @@ class NurseryInfoUpdate(BaseModel):
     due_date: Optional[datetime.date] = None
     items: Optional[str] = None
     status: Optional[str] = None
+    registration_state: Optional[str] = None
     priority: Optional[str] = None
     tags: Optional[str] = None
     memo: Optional[str] = None

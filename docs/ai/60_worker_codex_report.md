@@ -1,44 +1,36 @@
-# Codex Verification Report
+# Worker Report
 
 ## Summary
-Verified SOT-1080 proactive reminders on branch `feat/SOT-1080-proactive-reminders`.
+Frontend verification for SOT-1117 passed.
 
-Backend tests pass, frontend lint passes with zero errors, and frontend production build passes. The `/info/reminders` and `/info/reminders/digest` endpoints are declared before `/info/{id}`, so literal reminder routes take precedence over the dynamic ID route.
+`cd frontend && npm run lint` exited 0 with no code changes required.
+`cd frontend && npm run build` exited 0; TypeScript and Vite production build passed.
 
-No code changes were required.
+i18n keys for `nav.drafts`, `create.autoSaved*`, and `drafts.*` are present in both ja and en.
+
+No frontend code fixes were needed. `frontend/dist` has no tracked or untracked diff after the build.
 
 ## Changed Files
-- `docs/ai/60_worker_codex_report.md` - verification report only
+- `docs/ai/60_worker_codex_report.md` - updated this verification report.
 
-## Commands Run (with results)
-- `git branch --show-current && git status --short` - confirmed branch `feat/SOT-1080-proactive-reminders`; feature files are modified/untracked in the worktree.
-- `sed -n '1,220p' docs/ai/50_worker_gemini_report.md` - read context report; it appears stale and references SOT-1085 rather than SOT-1080.
-- `sed -n '1,260p' backend/app/reminders.py` - reviewed reminder engine logic.
-- `sed -n '1,520p' backend/app/routers/info.py` - reviewed endpoints and route order.
-- `sed -n '1,320p' backend/tests/test_reminders.py` - reviewed backend coverage.
-- `sed -n '1,260p' frontend/src/pages/DashboardPage.tsx` - reviewed dashboard reminder integration.
-- `sed -n '1,260p' frontend/src/components/ReminderBanner.tsx` - reviewed app-level urgent reminder banner.
-- `sed -n '1,260p' frontend/src/api/index.ts` - reviewed frontend API client.
-- `sed -n '1,260p' frontend/src/types/index.ts` - reviewed reminder types.
-- `python -m pytest -q` from `backend` - passed: `91 passed, 4 warnings in 1.42s`.
-- `npm run lint` from `frontend` - passed: ESLint completed with zero reported errors.
-- `npm run build` from `frontend` - passed: `tsc -b && vite build` completed successfully.
-- `rg -n "Reminder|reminders|ReminderBanner" backend/app frontend/src docs/ai -g '!frontend/dist/**'` - confirmed backend/frontend reminder wiring.
-- `sed -n '150,200p' backend/app/schemas.py` - confirmed reminder response schemas exist.
+## Commands Run
+- `cd frontend && npm run lint` - pass, exit 0.
+- `cd frontend && npm run build` - pass, exit 0.
+- `rg "nav\\.drafts|create\\.autoSaved|drafts\\." frontend/src/i18n/messages.ts frontend/src -n` - confirmed ja/en keys and usages.
+- `git diff --stat main...HEAD` - currently shows committed backend draft API/test changes plus this report only; current frontend implementation is in the uncommitted worktree.
+- `git diff --stat -- frontend` - shows intended frontend source changes for App/API/i18n/AutoRegister/types; note that untracked `frontend/src/pages/DraftsPage.tsx` is not included in this stat.
+- `git status --short frontend/dist docs/ai/60_worker_codex_report.md` - no `frontend/dist` diff; report modified.
 
 ## Acceptance Criteria
-- Backend pytest gate: PASS.
-- Frontend lint gate: PASS.
-- Frontend build gate: PASS.
-- `/info/reminders` endpoint exists: PASS.
-- `/info/reminders/digest` endpoint exists: PASS.
-- Reminder routes declared before `/{id}`: PASS.
-- Existing tests/behavior not broken by test gates: PASS.
+- [x] npm run lint pass
+- [x] npm run build pass
+- [x] i18n キー ja/en 揃い
+- [x] 変更は意図どおり（backend を壊していない）
 
 ## Risks
-- `docs/ai/50_worker_gemini_report.md` does not describe SOT-1080; it appears to be a stale SOT-1085 fallback report. Verification used the actual source files and test/build gates instead.
-- The worktree contains feature modifications and an untracked `frontend/src/components/ReminderBanner.tsx` from the implementation. This report did not normalize or commit those files.
-- Browser notification behavior was statically reviewed and build-checked, but not manually tested in a browser.
+`git diff --stat main...HEAD` does not include the current frontend implementation because these frontend files are uncommitted in the worktree. The worktree contains the expected frontend changes, including untracked `frontend/src/pages/DraftsPage.tsx`.
+
+Backend files were not modified during this verification. The committed branch diff already contains backend draft API/test changes from prior work.
 
 ## Next Action
 READY_FOR_REVIEW

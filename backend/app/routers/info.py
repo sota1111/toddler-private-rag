@@ -340,6 +340,12 @@ def get_reminders_digest(
         digest=reminders.build_digest(items, today=today),
     )
 
+# 仮登録一覧 (SOT-1113)。"/{id}" より前に宣言してリテラルパスを優先させる。
+@router.get("/drafts", response_model=List[schemas.NurseryInfoResponse])
+def list_drafts(repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
+    return repo.list_drafts()
+
+
 @router.get("/", response_model=List[schemas.NurseryInfoResponse])
 def list_info(
     q: Optional[str] = None,
@@ -365,6 +371,15 @@ def update_info(id: int, info: schemas.NurseryInfoUpdate, repo: InfoRepository =
     if db_info is None:
         raise HTTPException(status_code=404, detail="Info not found")
     return db_info
+
+# 本登録 (SOT-1113): 仮登録(draft)を registered に確定する。
+@router.post("/{id}/finalize", response_model=schemas.NurseryInfoResponse)
+def finalize_info(id: int, repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
+    db_info = repo.finalize(id)
+    if db_info is None:
+        raise HTTPException(status_code=404, detail="Info not found")
+    return db_info
+
 
 @router.delete("/{id}")
 def delete_info(id: int, repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
