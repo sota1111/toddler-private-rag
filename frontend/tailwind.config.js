@@ -1,7 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 // Design-language renewal (SOT-1019). Soft nursery brand: friendly rounded type,
-// calm teal brand + warm coral accent, larger radii. Tokens are CSS vars in
-// src/index.css so light/dark swap together (bg-brand, bg-surface, shadow-card…).
+// orange brand + amber accent (SOT-1150), larger radii. Tokens are CSS vars in
+// src/index.css; the app is locked to a light, orange-based palette
+// (bg-brand, bg-surface, shadow-card…).
 export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {

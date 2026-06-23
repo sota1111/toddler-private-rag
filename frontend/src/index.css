@@ -6,29 +6,30 @@
  * ===========================================================================
  * Design-language renewal (SOT-1019) — soft nursery design tokens
  * ===========================================================================
- * Warm, friendly identity: calm teal brand, warm coral accent, gentle pastel
- * surfaces and generous rounding. One token layer drives light/dark; dark
- * applies via prefers-color-scheme and can be forced with `.theme-dark`.
+ * Warm, friendly identity: orange brand, amber accent, gentle warm surfaces
+ * and generous rounding. One light token layer drives the whole app.
+ * Dark mode is intentionally not supported (SOT-1150): the app is locked to
+ * a light, orange-based palette via `color-scheme: light`.
  */
 :root {
   font-family: 'Nunito', 'Noto Sans JP', system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
-  /* Brand & accent — warm, friendly identity (SOT-1114) */
-  --brand: #0f766e;          /* calm teal */
-  --brand-strong: #115e56;
-  --brand-soft: #fdeede;     /* warm cream wash */
-  --accent: #f97316;         /* warm amber */
-  --accent-bg: #fff3e6;
-  --accent-border: #fdba74;
+  /* Brand & accent — orange-based identity (SOT-1150) */
+  --brand: #ea580c;          /* orange-600 brand */
+  --brand-strong: #c2410c;   /* orange-700 */
+  --brand-soft: #ffedd5;     /* orange-100 soft wash */
+  --accent: #f59e0b;         /* amber-500 accent (hue split from brand) */
+  --accent-bg: #fffbeb;      /* amber-50 */
+  --accent-border: #fcd34d;  /* amber-300 */
 
   /* Surfaces — white bg = near-black text (SOT-1114 contrast rule) */
   --foreground: #171210;        /* near-black ink on light surfaces */
   --muted-foreground: #5b524c;  /* warm muted text, still AA on white/cream */
   --surface: #ffffff;
-  --surface-muted: #fbf6f0;     /* warm ivory */
-  --border: #ece2d8;            /* warm hairline */
+  --surface-muted: #fff7ed;     /* warm orange-tinted ivory (orange-50) */
+  --border: #f0e2d4;            /* warm hairline */
   --shadow-card: 0 1px 3px rgba(120, 80, 40, 0.08), 0 1px 2px rgba(60, 40, 20, 0.05);
   --shadow-card-hover: 0 6px 18px rgba(120, 80, 40, 0.14);
 
@@ -40,45 +41,6 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not(.theme-light) {
-    --brand: #34d399;
-    --brand-strong: #6ee7b7;
-    --brand-soft: #2a221b;
-    --accent: #fb923c;
-    --accent-bg: #3a2a1a;
-    --accent-border: #b9743c;
-    /* black bg = near-white text (SOT-1114 contrast rule) */
-    --foreground: #f5efe9;
-    --muted-foreground: #c4b7ab;
-    --surface: #1e1916;        /* warm dark surface */
-    --surface-muted: #141010;  /* warm near-black */
-    --border: #3a322c;
-    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.5);
-    --shadow-card-hover: 0 8px 22px rgba(0, 0, 0, 0.55);
-    color-scheme: dark;
-    color: var(--foreground);
-  }
-}
-
-:root.theme-dark {
-  --brand: #34d399;
-  --brand-strong: #6ee7b7;
-  --brand-soft: #2a221b;
-  --accent: #fb923c;
-  --accent-bg: #3a2a1a;
-  --accent-border: #b9743c;
-  --foreground: #f5efe9;
-  --muted-foreground: #c4b7ab;
-  --surface: #1e1916;
-  --surface-muted: #141010;
-  --border: #3a322c;
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.5);
-  --shadow-card-hover: 0 8px 22px rgba(0, 0, 0, 0.55);
-  color-scheme: dark;
-  color: var(--foreground);
 }
 
 /* Skeleton shimmer for photo / RAG loading states (proposal 6). */
