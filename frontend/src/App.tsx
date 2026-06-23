@@ -42,7 +42,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { t } = useI18n();
 
   return (
-    <div className="min-h-screen bg-surface-muted font-sans text-foreground">
+    <div className="min-h-screen bg-surface-muted font-sans text-foreground pb-16 md:pb-0">
       <nav className="bg-gradient-to-r from-brand to-brand-strong shadow-md sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -76,7 +76,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           </div>
         </div>
         {isAuthenticated && (
-          <div className="border-t border-white/10">
+          <div className="border-t border-white/10 fixed bottom-0 left-0 right-0 z-20 bg-gradient-to-r from-brand to-brand-strong shadow-[0_-2px_8px_rgba(0,0,0,0.18)] md:static md:bg-transparent md:shadow-none">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <NavLink to="/">{t('nav.dashboard')}</NavLink>
