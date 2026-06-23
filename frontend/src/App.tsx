@@ -22,9 +22,13 @@ import { CreateFlowProvider } from './contexts/CreateFlowContext';
 
 const queryClient = new QueryClient();
 
-const NavLink: React.FC<{ to: string; children: React.ReactNode }> = ({ to, children }) => {
+const NavLink: React.FC<{
+  to: string;
+  children: React.ReactNode;
+  activeWhen?: (pathname: string) => boolean;
+}> = ({ to, children, activeWhen }) => {
   const location = useLocation();
-  const isActive = location.pathname === to;
+  const isActive = activeWhen ? activeWhen(location.pathname) : location.pathname === to;
   return (
     <Link
       to={to}
@@ -81,9 +85,12 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <NavLink to="/">{t('nav.dashboard')}</NavLink>
                 <NavLink to="/info">{t('nav.info')}</NavLink>
-                <NavLink to="/create">{t('nav.createManual')}</NavLink>
-                <NavLink to="/create/auto">{t('nav.createAuto')}</NavLink>
-                <NavLink to="/drafts">{t('nav.drafts')}</NavLink>
+                <NavLink
+                  to="/create/auto"
+                  activeWhen={(p) => p.startsWith('/create') || p === '/drafts'}
+                >
+                  {t('nav.create')}
+                </NavLink>
               </div>
             </div>
           </div>
