@@ -5,6 +5,7 @@ import type { NurseryInfo, NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import { compressImageFile } from '../utils/imageCompression';
 import { INFO_TYPES } from './infoFormOptions';
+import RegisterMenu from '../components/RegisterMenu';
 
 // 自動登録 = データ登録 (SOT-1052 / SOT-1113)
 // 写真を選ぶとOCRで内容を読み取り、仮登録(draft)として永続化する。
@@ -68,6 +69,7 @@ const AutoRegisterPage: React.FC = () => {
 
   return (
     <div className="w-full lg:max-w-3xl lg:mx-auto pb-12">
+      <RegisterMenu />
       <h1 className="text-2xl font-bold mb-6 text-foreground">{t('create.autoTitle')}</h1>
 
       <div className="bg-surface shadow-md rounded-lg p-6 space-y-4">

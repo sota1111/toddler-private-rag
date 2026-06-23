@@ -6,6 +6,7 @@ import { useI18n } from '../i18n/useI18n';
 import { useCreateFlow } from '../contexts/useCreateFlow';
 import { compressImageFiles } from '../utils/imageCompression';
 import { INFO_TYPES, STATUS_TYPES, PRIORITY_TYPES } from './infoFormOptions';
+import RegisterMenu from '../components/RegisterMenu';
 
 const InfoCreatePage: React.FC = () => {
   const { t } = useI18n();
@@ -159,6 +160,7 @@ const InfoCreatePage: React.FC = () => {
 
   return (
     <div className="w-full lg:max-w-3xl lg:mx-auto pb-12">
+      <RegisterMenu />
       <h1 className="text-2xl font-bold mb-6 text-foreground">{t('create.manualTitle')}</h1>
 
       <form onSubmit={handleSubmit} className="bg-surface shadow-md rounded-lg p-6 space-y-4">

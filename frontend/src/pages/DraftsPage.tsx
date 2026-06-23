@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDrafts, finalizeInfo, deleteInfo, getAttachmentFileUrl } from '../api';
 import type { NurseryInfo } from '../types';
 import { useI18n } from '../i18n/useI18n';
+import RegisterMenu from '../components/RegisterMenu';
 
 // 登録ページ (SOT-1113): 自動登録した写真の仮登録(draft)一覧。
 // 内容を確認のうえ本登録(finalize)、または破棄(delete)できる。
@@ -56,6 +57,7 @@ const DraftsPage: React.FC = () => {
 
   return (
     <div className="w-full lg:max-w-4xl lg:mx-auto pb-12">
+      <RegisterMenu />
       <h1 className="text-2xl font-bold mb-2 text-foreground">{t('drafts.title')}</h1>
       <p className="text-sm text-muted-foreground mb-6">{t('drafts.desc')}</p>
 
