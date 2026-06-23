@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { extractInfoDraft, createInfo, uploadAttachment } from '../api';
+import { extractInfoDraft, createInfo, updateInfo, uploadAttachment } from '../api';
 import type { NurseryInfo, NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import { compressImageFile } from '../utils/imageCompression';
@@ -28,9 +28,46 @@ const AutoRegisterPage: React.FC = () => {
     setSavedDraft(null);
     setIsUploading(true);
 
+    // アップロード前に圧縮・JPEG変換し、OCR・添付ともに変換後ファイルのみを使う（生データは保持しない）
+    // 圧縮は失敗しても元ファイルにフォールバックするため throw しない。
+    const processed = await compressImageFile(file);
+
+    // SOT-1175: 「画像アップ完了をトリガーに画像変換と仮登録を始める」。
+    // 重い画像変換(OCR/AI抽出)を待たずに、まず最小限の仮登録(draft)と写真添付を保存して応答する。
+    // 抽出はその後に best-effort で行い、失敗しても保存済みのドラフトは保持する。
+    let created: NurseryInfo;
     try {
-      // アップロード前に圧縮・JPEG変換し、OCR・添付ともに変換後ファイルのみを使う（生データは保持しない）
-      const processed = await compressImageFile(file);
+      const initial: NurseryInfoCreate = {
+        title: '',
+        info_type: '資料',
+        content: '',
+        date: '',
+        event_date: '',
+        due_date: '',
+        items: '',
+        status: '未対応',
+        priority: '普通',
+        tags: '',
+        memo: '',
+        // 仮登録として永続化する (SOT-1113)
+        registration_state: 'draft',
+      };
+
+      // 仮登録を保存し、写真を添付する（ここまで成功＝アップ完了の応答）
+      created = await createInfo(initial);
+      await uploadAttachment(created.id, processed);
+      setSavedDraft(created);
+    } catch (error) {
+      console.error('Failed to save draft/photo on upload', error);
+      setExtractError(t('create.autoSaveFail'));
+      return;
+    } finally {
+      setIsUploading(false);
+    }
+
+    // 画像変換(OCR/AI抽出)を best-effort で実行し、抽出結果でドラフトを補完する。
+    // ここでの失敗（遅延・タイムアウト・OCR/LLMエラー）はアップ完了を取り消さない。
+    try {
       const draft = await extractInfoDraft(processed);
 
       // 5カテゴリ抽出 (SOT-1092): 持ち物→items、注意事項→memo を補完プリフィル。
@@ -38,32 +75,22 @@ const AutoRegisterPage: React.FC = () => {
       const items = draft.items || (cats?.belongings?.length ? cats.belongings.join(', ') : '');
       const memo = cats?.notes?.length ? cats.notes.join('\n') : '';
 
-      const data: NurseryInfoCreate = {
+      const enrichment: Partial<NurseryInfoCreate> = {
         title: draft.title || '',
         // 推定種別が選択肢に存在する場合のみ採用
         info_type: INFO_TYPES.includes(draft.info_type) ? draft.info_type : '資料',
         content: draft.content || '',
         date: draft.date || '',
-        event_date: '',
-        due_date: '',
         items,
-        status: '未対応',
-        priority: '普通',
-        tags: '',
         memo,
-        // 仮登録として永続化する (SOT-1113)
-        registration_state: 'draft',
       };
 
-      // 仮登録を保存し、写真を添付する
-      const created = await createInfo(data);
-      await uploadAttachment(created.id, processed);
-      setSavedDraft(created);
+      const updated = await updateInfo(created.id, enrichment);
+      // 成功表示中なら補完後の内容に差し替える（別の写真を開始済みなら触らない）
+      setSavedDraft((prev) => (prev && prev.id === updated.id ? updated : prev));
     } catch (error) {
-      console.error('Failed to register draft from photo', error);
-      setExtractError(t('create.autoSaveFail'));
-    } finally {
-      setIsUploading(false);
+      // 抽出/補完は任意。失敗してもアップ済みのドラフトはそのまま使える。
+      console.warn('Draft enrichment from OCR/AI failed (draft already saved)', error);
     }
   };
 
