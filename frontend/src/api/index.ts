@@ -25,6 +25,12 @@ export const createInfo = async (data: NurseryInfoCreate): Promise<NurseryInfo> 
   return response.data;
 };
 
+// 既存の仮登録(draft)を部分更新する (SOT-1175: 写真アップ後の best-effort 補完用)
+export const updateInfo = async (id: number, data: Partial<NurseryInfoCreate>): Promise<NurseryInfo> => {
+  const response = await api.put(`/info/${id}`, data);
+  return response.data;
+};
+
 export const deleteInfo = async (id: number): Promise<void> => {
   await api.delete(`/info/${id}`);
 };
