@@ -58,9 +58,9 @@ const SearchPage: React.FC = () => {
   const getPriorityColor = (p: string) => {
     switch (p) {
       case '高': return 'text-red-600 bg-red-50';
-      case '普通': return 'text-blue-600 bg-blue-50';
-      case '低': return 'text-gray-600 bg-gray-50';
-      default: return 'text-gray-600 bg-gray-50';
+      case '普通': return 'text-brand bg-brand-soft';
+      case '低': return 'text-muted-foreground bg-surface-muted';
+      default: return 'text-muted-foreground bg-surface-muted';
     }
   };
 
@@ -72,15 +72,15 @@ const SearchPage: React.FC = () => {
 
   return (
     <div className="w-full lg:max-w-5xl lg:mx-auto pb-12">
-      <h1 className="text-2xl font-bold mb-2 text-gray-800">{t('search.title')}</h1>
-      <p className="mb-6 text-sm text-gray-600">{t('search.desc')}</p>
+      <h1 className="text-2xl font-bold mb-2 text-foreground">{t('search.title')}</h1>
+      <p className="mb-6 text-sm text-muted-foreground">{t('search.desc')}</p>
 
-      <form onSubmit={handleSubmit} className="bg-white p-4 rounded-lg shadow-sm mb-6 space-y-4">
+      <form onSubmit={handleSubmit} className="bg-surface p-4 rounded-lg shadow-sm mb-6 space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">{t('search.keyword')}</label>
+          <label className="block text-sm font-medium text-foreground mb-1">{t('search.keyword')}</label>
           <input
             type="text"
-            className="w-full border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2"
+            className="w-full border border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2"
             placeholder={t('search.keywordPlaceholder')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -89,9 +89,9 @@ const SearchPage: React.FC = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('list.type')}</label>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('list.type')}</label>
             <select
-              className="w-full border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2"
+              className="w-full border border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2"
               value={infoType}
               onChange={(e) => setInfoType(e.target.value)}
             >
@@ -99,9 +99,9 @@ const SearchPage: React.FC = () => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('list.status')}</label>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('list.status')}</label>
             <select
-              className="w-full border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2"
+              className="w-full border border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
             >
@@ -109,9 +109,9 @@ const SearchPage: React.FC = () => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('create.fieldPriority')}</label>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('create.fieldPriority')}</label>
             <select
-              className="w-full border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2"
+              className="w-full border border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2"
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
             >
@@ -119,29 +119,29 @@ const SearchPage: React.FC = () => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('search.tag')}</label>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('search.tag')}</label>
             <input
               type="text"
-              className="w-full border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2"
+              className="w-full border border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2"
               placeholder={t('search.tagPlaceholder')}
               value={tag}
               onChange={(e) => setTag(e.target.value)}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('search.dateFrom')}</label>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('search.dateFrom')}</label>
             <input
               type="date"
-              className="w-full border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2"
+              className="w-full border border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('search.dateTo')}</label>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('search.dateTo')}</label>
             <input
               type="date"
-              className="w-full border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2"
+              className="w-full border border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
             />
@@ -152,7 +152,7 @@ const SearchPage: React.FC = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className="px-5 py-2 rounded-md text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+            className="px-5 py-2 rounded-md text-sm font-medium text-white bg-brand hover:bg-brand-strong disabled:bg-border disabled:cursor-not-allowed transition-colors"
           >
             {isLoading ? t('search.searching') : t('search.submit')}
           </button>
@@ -166,34 +166,34 @@ const SearchPage: React.FC = () => {
       )}
 
       {isLoading && (
-        <div className="text-center py-10 text-gray-500">{t('common.loading')}</div>
+        <div className="text-center py-10 text-muted-foreground">{t('common.loading')}</div>
       )}
 
       {!isLoading && submitted && data && data.results.length === 0 && (
-        <div className="text-center py-10 text-gray-400">{t('search.empty')}</div>
+        <div className="text-center py-10 text-muted-foreground">{t('search.empty')}</div>
       )}
 
       {!isLoading && data && data.results.length > 0 && (
         <div className="space-y-4">
-          <p className="text-sm text-gray-500">{t('search.resultCount', { count: String(data.results.length) })}</p>
+          <p className="text-sm text-muted-foreground">{t('search.resultCount', { count: String(data.results.length) })}</p>
           {data.results.map(({ info, score, vector_score, keyword_score, matched_by }) => (
-            <div key={info.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div key={info.id} className="bg-surface rounded-lg shadow-sm border border-border p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-muted text-foreground">
                       {optLabel('infoType', info.info_type)}
                     </span>
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(info.priority)}`}>
                       {optLabel('priority', info.priority)}
                     </span>
                     {info.attachments && info.attachments.length > 0 && (
-                      <span className="inline-flex items-center text-xs text-gray-500">📎 {info.attachments.length}</span>
+                      <span className="inline-flex items-center text-xs text-muted-foreground">📎 {info.attachments.length}</span>
                     )}
                   </div>
-                  <h3 className="text-lg font-bold text-gray-900 break-words">{info.title}</h3>
-                  <p className="mt-1 text-sm text-gray-600 line-clamp-2 break-words">{info.content}</p>
-                  <div className="mt-1 text-xs text-gray-500 space-x-3">
+                  <h3 className="text-lg font-bold text-foreground break-words">{info.title}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground line-clamp-2 break-words">{info.content}</p>
+                  <div className="mt-1 text-xs text-muted-foreground space-x-3">
                     {info.date && <span>{t('list.dateLabel')}{info.date}</span>}
                     {info.due_date && <span className="text-red-500 font-semibold">{t('list.dueLabel')}{info.due_date}</span>}
                   </div>
@@ -202,7 +202,7 @@ const SearchPage: React.FC = () => {
                   <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700">
                     {t('search.relevance')} {score.toFixed(2)}
                   </span>
-                  <div className="mt-1 text-[10px] text-gray-400">
+                  <div className="mt-1 text-[10px] text-muted-foreground">
                     K {keyword_score.toFixed(2)} / V {vector_score.toFixed(2)}
                   </div>
                 </div>
@@ -211,7 +211,7 @@ const SearchPage: React.FC = () => {
               {matched_by.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {matched_by.map((m) => (
-                    <span key={m} className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                    <span key={m} className="text-[10px] bg-brand-soft text-brand-strong px-1.5 py-0.5 rounded">
                       {matchedLabel(m)}
                     </span>
                   ))}
@@ -221,7 +221,7 @@ const SearchPage: React.FC = () => {
               {info.tags && (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {info.tags.split(',').map(tg => tg.trim()).filter(Boolean).map(tg => (
-                    <span key={tg} className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded">#{tg}</span>
+                    <span key={tg} className="text-xs bg-border text-foreground px-2 py-0.5 rounded">#{tg}</span>
                   ))}
                 </div>
               )}
@@ -233,7 +233,7 @@ const SearchPage: React.FC = () => {
                       key={att.id}
                       src={getAttachmentFileUrl(att.id)}
                       alt={att.original_filename}
-                      className="h-14 w-14 object-cover rounded border border-gray-200 cursor-pointer hover:opacity-90"
+                      className="h-14 w-14 object-cover rounded border border-border cursor-pointer hover:opacity-90"
                       loading="lazy"
                       onClick={() => window.open(getAttachmentFileUrl(att.id), '_blank')}
                     />

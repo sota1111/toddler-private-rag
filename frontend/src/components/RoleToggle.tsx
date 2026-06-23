@@ -15,7 +15,7 @@ export default function RoleToggle() {
         onClick={() => setRole('admin')}
         aria-pressed={role === 'admin'}
         className={`px-2 py-1 transition-colors ${
-          role === 'admin' ? 'bg-white text-blue-700' : 'text-white hover:bg-white/20'
+          role === 'admin' ? 'bg-surface text-foreground' : 'text-white hover:bg-surface/20'
         }`}
       >
         {t('role.admin')}
@@ -25,7 +25,7 @@ export default function RoleToggle() {
         onClick={() => setRole('user')}
         aria-pressed={role === 'user'}
         className={`px-2 py-1 transition-colors ${
-          role === 'user' ? 'bg-white text-blue-700' : 'text-white hover:bg-white/20'
+          role === 'user' ? 'bg-surface text-foreground' : 'text-white hover:bg-surface/20'
         }`}
       >
         {t('role.user')}

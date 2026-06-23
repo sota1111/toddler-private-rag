@@ -68,9 +68,9 @@ const AutoRegisterPage: React.FC = () => {
 
   return (
     <div className="w-full lg:max-w-3xl lg:mx-auto pb-12">
-      <h1 className="text-2xl font-bold mb-6 text-gray-800">{t('create.autoTitle')}</h1>
+      <h1 className="text-2xl font-bold mb-6 text-foreground">{t('create.autoTitle')}</h1>
 
-      <div className="bg-white shadow-md rounded-lg p-6 space-y-4">
+      <div className="bg-surface shadow-md rounded-lg p-6 space-y-4">
         {savedDraft ? (
           <div className="border border-green-300 bg-green-50 rounded-lg p-6 text-center space-y-4">
             <div className="flex items-center justify-center gap-2 text-green-700">
@@ -80,22 +80,22 @@ const AutoRegisterPage: React.FC = () => {
               </svg>
               <span className="text-lg font-semibold">{t('create.autoSavedTitle')}</span>
             </div>
-            <p className="text-sm text-gray-700">{t('create.autoSavedDesc')}</p>
+            <p className="text-sm text-foreground">{t('create.autoSavedDesc')}</p>
             {savedDraft.title && (
-              <p className="text-sm font-medium text-gray-800 truncate">「{savedDraft.title}」</p>
+              <p className="text-sm font-medium text-foreground truncate">「{savedDraft.title}」</p>
             )}
             <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
               <button
                 type="button"
                 onClick={() => navigate('/drafts')}
-                className="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-md shadow-sm hover:bg-blue-700"
+                className="px-5 py-2.5 bg-brand text-white text-sm font-medium rounded-md shadow-sm hover:bg-brand-strong"
               >
                 {t('create.autoOpenDrafts')}
               </button>
               <button
                 type="button"
                 onClick={() => setSavedDraft(null)}
-                className="px-5 py-2.5 bg-white text-gray-700 text-sm font-medium border border-gray-300 rounded-md hover:bg-gray-50"
+                className="px-5 py-2.5 bg-surface text-foreground text-sm font-medium border border-border rounded-md hover:bg-surface-muted"
               >
                 {t('create.autoUploadAnother')}
               </button>
@@ -103,8 +103,8 @@ const AutoRegisterPage: React.FC = () => {
           </div>
         ) : (
           <>
-            <div className="border border-dashed border-blue-300 bg-blue-50 rounded-lg p-6 text-center">
-              <p className="text-sm text-gray-700">{t('create.autoDesc')}</p>
+            <div className="border border-dashed border-brand bg-brand-soft rounded-lg p-6 text-center">
+              <p className="text-sm text-foreground">{t('create.autoDesc')}</p>
               <input
                 type="file"
                 accept="image/*"
@@ -116,7 +116,7 @@ const AutoRegisterPage: React.FC = () => {
                 type="button"
                 onClick={() => photoInputRef.current?.click()}
                 disabled={isUploading}
-                className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-md shadow-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-brand text-white text-sm font-medium rounded-md shadow-sm hover:bg-brand-strong disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isUploading ? (
                   <>
@@ -140,7 +140,7 @@ const AutoRegisterPage: React.FC = () => {
                 type="button"
                 onClick={() => navigate(-1)}
                 disabled={isUploading}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                className="px-4 py-2 text-sm font-medium text-foreground bg-surface border border-border rounded-md hover:bg-surface-muted disabled:opacity-50"
               >
                 {t('create.cancel')}
               </button>

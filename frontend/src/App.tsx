@@ -29,7 +29,7 @@ const NavLink: React.FC<{ to: string; children: React.ReactNode }> = ({ to, chil
     <Link
       to={to}
       className={`flex-shrink-0 whitespace-nowrap px-3.5 py-2 rounded-full text-sm font-semibold ${
-        isActive ? 'bg-white/25 text-white' : 'text-white/80 hover:bg-white/15 hover:text-white'
+        isActive ? 'bg-surface/25 text-white' : 'text-white/80 hover:bg-surface/15 hover:text-white'
       } transition-colors`}
     >
       {children}
@@ -62,7 +62,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                     onClick={logout}
                     aria-label={t('nav.logout')}
                     title={t('nav.logout')}
-                    className="flex-shrink-0 inline-flex items-center justify-center text-white/80 hover:text-white p-2 rounded-full hover:bg-white/15"
+                    className="flex-shrink-0 inline-flex items-center justify-center text-white/80 hover:text-white p-2 rounded-full hover:bg-surface/15"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden>
                       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -91,8 +91,8 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       </nav>
       {isAuthenticated && <ReminderBanner />}
       <main className="max-w-7xl mx-auto py-6 px-4 lg:px-8">{children}</main>
-      <footer className="bg-white border-t border-gray-200 py-4 mt-10">
-        <div className="text-center text-gray-500 text-sm">{t('footer.copyright')}</div>
+      <footer className="bg-surface border-t border-border py-4 mt-10">
+        <div className="text-center text-muted-foreground text-sm">{t('footer.copyright')}</div>
       </footer>
     </div>
   );

@@ -56,14 +56,14 @@ const DraftsPage: React.FC = () => {
 
   return (
     <div className="w-full lg:max-w-4xl lg:mx-auto pb-12">
-      <h1 className="text-2xl font-bold mb-2 text-gray-800">{t('drafts.title')}</h1>
-      <p className="text-sm text-gray-600 mb-6">{t('drafts.desc')}</p>
+      <h1 className="text-2xl font-bold mb-2 text-foreground">{t('drafts.title')}</h1>
+      <p className="text-sm text-muted-foreground mb-6">{t('drafts.desc')}</p>
 
-      {isLoading && <p className="text-sm text-gray-500">{t('common.loading')}</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t('common.loading')}</p>}
       {isError && <p className="text-sm text-red-600">{t('drafts.loadError')}</p>}
 
       {!isLoading && !isError && (!drafts || drafts.length === 0) && (
-        <div className="bg-white border border-gray-200 rounded-lg p-8 text-center text-gray-500">
+        <div className="bg-surface border border-border rounded-lg p-8 text-center text-muted-foreground">
           {t('drafts.empty')}
         </div>
       )}
@@ -73,44 +73,44 @@ const DraftsPage: React.FC = () => {
           const imageAtt = d.attachments?.find((a) => a.mime_type?.startsWith('image/'));
           const busy = busyId === d.id;
           return (
-            <div key={d.id} className="bg-white shadow-sm border border-gray-200 rounded-lg p-5">
+            <div key={d.id} className="bg-surface shadow-sm border border-border rounded-lg p-5">
               <div className="flex flex-col sm:flex-row gap-4">
                 {imageAtt && (
                   <img
                     src={getAttachmentFileUrl(imageAtt.id)}
                     alt={imageAtt.original_filename}
-                    className="w-full sm:w-40 h-40 object-cover rounded-md border border-gray-200 flex-shrink-0"
+                    className="w-full sm:w-40 h-40 object-cover rounded-md border border-border flex-shrink-0"
                   />
                 )}
                 <div className="min-w-0 flex-1 space-y-1.5">
-                  <h2 className="text-lg font-semibold text-gray-800 break-words">
+                  <h2 className="text-lg font-semibold text-foreground break-words">
                     {d.title || t('drafts.untitled')}
                   </h2>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-muted-foreground">
                     {t('drafts.type')}: {d.info_type}
                     {d.date ? ` ・ ${t('drafts.date')}: ${d.date}` : ''}
                   </p>
                   {d.content && (
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-4">{d.content}</p>
+                    <p className="text-sm text-foreground whitespace-pre-wrap line-clamp-4">{d.content}</p>
                   )}
                   {d.items && (
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-muted-foreground">
                       {t('drafts.items')}: {d.items}
                     </p>
                   )}
                   {d.memo && (
-                    <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                       {t('drafts.memo')}: {d.memo}
                     </p>
                   )}
                 </div>
               </div>
-              <div className="flex flex-wrap gap-3 justify-end mt-4 pt-4 border-t border-gray-100">
+              <div className="flex flex-wrap gap-3 justify-end mt-4 pt-4 border-t border-border">
                 <button
                   type="button"
                   onClick={() => handleDiscard(d.id)}
                   disabled={busy}
-                  className="px-4 py-2 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-md hover:bg-red-50 disabled:opacity-50"
+                  className="px-4 py-2 text-sm font-medium text-red-600 bg-surface border border-red-200 rounded-md hover:bg-red-50 disabled:opacity-50"
                 >
                   {busy ? t('drafts.working') : t('drafts.discard')}
                 </button>
@@ -118,7 +118,7 @@ const DraftsPage: React.FC = () => {
                   type="button"
                   onClick={() => handleFinalize(d.id)}
                   disabled={busy}
-                  className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-md shadow-sm hover:bg-blue-700 disabled:opacity-50"
+                  className="px-5 py-2 text-sm font-medium text-white bg-brand rounded-md shadow-sm hover:bg-brand-strong disabled:opacity-50"
                 >
                   {busy ? t('drafts.working') : t('drafts.finalize')}
                 </button>

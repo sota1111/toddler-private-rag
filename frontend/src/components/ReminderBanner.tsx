@@ -76,7 +76,7 @@ const ReminderBanner: React.FC = () => {
           <button
             type="button"
             onClick={enableNotifications}
-            className="text-xs px-2 py-1 rounded-full bg-white text-rose-700 border border-rose-300 hover:bg-rose-100"
+            className="text-xs px-2 py-1 rounded-full bg-surface text-rose-700 border border-rose-300 hover:bg-rose-100"
           >
             {t('reminder.enableNotifications')}
           </button>

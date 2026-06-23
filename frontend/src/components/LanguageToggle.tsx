@@ -13,7 +13,7 @@ export default function LanguageToggle() {
         onClick={() => setLang('ja')}
         aria-pressed={lang === 'ja'}
         className={`px-2 py-1 transition-colors ${
-          lang === 'ja' ? 'bg-white text-blue-700' : 'text-white hover:bg-white/20'
+          lang === 'ja' ? 'bg-surface text-foreground' : 'text-white hover:bg-surface/20'
         }`}
       >
         JP
@@ -23,7 +23,7 @@ export default function LanguageToggle() {
         onClick={() => setLang('en')}
         aria-pressed={lang === 'en'}
         className={`px-2 py-1 transition-colors ${
-          lang === 'en' ? 'bg-white text-blue-700' : 'text-white hover:bg-white/20'
+          lang === 'en' ? 'bg-surface text-foreground' : 'text-white hover:bg-surface/20'
         }`}
       >
         EN

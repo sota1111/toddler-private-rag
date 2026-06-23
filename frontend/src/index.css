@@ -15,23 +15,25 @@
   line-height: 1.5;
   font-weight: 400;
 
-  /* Brand & accent */
-  --brand: #0d9488;          /* calm teal */
-  --brand-strong: #0f766e;
-  --brand-soft: #d7f0ec;     /* pastel teal wash */
-  --accent: #fb7185;         /* warm coral */
-  --accent-bg: #fff0f1;
-  --accent-border: #fda4af;
+  /* Brand & accent — warm, friendly identity (SOT-1114) */
+  --brand: #0f766e;          /* calm teal */
+  --brand-strong: #115e56;
+  --brand-soft: #fdeede;     /* warm cream wash */
+  --accent: #f97316;         /* warm amber */
+  --accent-bg: #fff3e6;
+  --accent-border: #fdba74;
 
-  /* Surfaces */
-  --foreground: #21302e;
+  /* Surfaces — white bg = near-black text (SOT-1114 contrast rule) */
+  --foreground: #171210;        /* near-black ink on light surfaces */
+  --muted-foreground: #5b524c;  /* warm muted text, still AA on white/cream */
   --surface: #ffffff;
-  --surface-muted: #f4f7f6;
-  --shadow-card: 0 1px 3px rgba(13, 148, 136, 0.08), 0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow-card-hover: 0 6px 18px rgba(13, 148, 136, 0.14);
+  --surface-muted: #fbf6f0;     /* warm ivory */
+  --border: #ece2d8;            /* warm hairline */
+  --shadow-card: 0 1px 3px rgba(120, 80, 40, 0.08), 0 1px 2px rgba(60, 40, 20, 0.05);
+  --shadow-card-hover: 0 6px 18px rgba(120, 80, 40, 0.14);
 
   color-scheme: light;
-  color: #21302e;
+  color: var(--foreground);
   background-color: var(--surface-muted);
 
   font-synthesis: none;
@@ -42,36 +44,41 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not(.theme-light) {
-    --brand: #2dd4bf;
-    --brand-strong: #5eead4;
-    --brand-soft: #123a36;
-    --accent: #fb7185;
-    --accent-bg: #3a1f24;
-    --accent-border: #9f5560;
-    --foreground: #e8efed;
-    --surface: #1c2422;
-    --surface-muted: #131a18;
+    --brand: #34d399;
+    --brand-strong: #6ee7b7;
+    --brand-soft: #2a221b;
+    --accent: #fb923c;
+    --accent-bg: #3a2a1a;
+    --accent-border: #b9743c;
+    /* black bg = near-white text (SOT-1114 contrast rule) */
+    --foreground: #f5efe9;
+    --muted-foreground: #c4b7ab;
+    --surface: #1e1916;        /* warm dark surface */
+    --surface-muted: #141010;  /* warm near-black */
+    --border: #3a322c;
     --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.5);
     --shadow-card-hover: 0 8px 22px rgba(0, 0, 0, 0.55);
     color-scheme: dark;
-    color: #e8efed;
+    color: var(--foreground);
   }
 }
 
 :root.theme-dark {
-  --brand: #2dd4bf;
-  --brand-strong: #5eead4;
-  --brand-soft: #123a36;
-  --accent: #fb7185;
-  --accent-bg: #3a1f24;
-  --accent-border: #9f5560;
-  --foreground: #e8efed;
-  --surface: #1c2422;
-  --surface-muted: #131a18;
+  --brand: #34d399;
+  --brand-strong: #6ee7b7;
+  --brand-soft: #2a221b;
+  --accent: #fb923c;
+  --accent-bg: #3a2a1a;
+  --accent-border: #b9743c;
+  --foreground: #f5efe9;
+  --muted-foreground: #c4b7ab;
+  --surface: #1e1916;
+  --surface-muted: #141010;
+  --border: #3a322c;
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.5);
   --shadow-card-hover: 0 8px 22px rgba(0, 0, 0, 0.55);
   color-scheme: dark;
-  color: #e8efed;
+  color: var(--foreground);
 }
 
 /* Skeleton shimmer for photo / RAG loading states (proposal 6). */

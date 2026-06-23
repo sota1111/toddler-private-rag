@@ -36,7 +36,7 @@ const InfoHubPage: React.FC = () => {
       <div
         role="group"
         aria-label={t('nav.info')}
-        className="inline-flex items-center rounded-lg overflow-hidden border border-brand/40 bg-white shadow-sm text-sm font-semibold mb-6"
+        className="inline-flex items-center rounded-lg overflow-hidden border border-brand/40 bg-surface shadow-sm text-sm font-semibold mb-6"
       >
         {TABS.map((tab) => {
           const selected = tab.id === activeTab;
@@ -50,7 +50,7 @@ const InfoHubPage: React.FC = () => {
               className={`px-4 py-2 transition-colors ${
                 selected
                   ? 'bg-brand text-white'
-                  : 'text-slate-700 hover:bg-brand/10'
+                  : 'text-foreground hover:bg-brand/10'
               }`}
             >
               {t(tab.labelKey)}
