@@ -7,12 +7,16 @@ from .routers import info, attachments
 from .routers import auth as auth_router
 from .seed import seed_data
 from . import models
+from .migrations import ensure_sqlite_schema
 from .repository import get_database_type
 
 logger = logging.getLogger(__name__)
 
-if get_database_type() != "firestore":
+database_type = get_database_type()
+if database_type != "firestore":
     models.Base.metadata.create_all(bind=engine)
+if database_type == "sqlite":
+    ensure_sqlite_schema(engine)
 
 app = FastAPI(title="保育園情報アシスタント API")
 

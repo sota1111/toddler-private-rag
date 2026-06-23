@@ -1,36 +1,30 @@
 # Worker Report
 
 ## Summary
-Frontend verification for SOT-1117 passed.
-
-`cd frontend && npm run lint` exited 0 with no code changes required.
-`cd frontend && npm run build` exited 0; TypeScript and Vite production build passed.
-
-i18n keys for `nav.drafts`, `create.autoSaved*`, and `drafts.*` are present in both ja and en.
-
-No frontend code fixes were needed. `frontend/dist` has no tracked or untracked diff after the build.
+Added a lightweight SQLite startup migration after `Base.metadata.create_all()` so existing `nursery_info` tables are patched with missing model columns. The `registration_state` column is added with `VARCHAR(20) NOT NULL DEFAULT 'registered'`, preserving existing rows as registered and allowing photo auto-read drafts to be saved.
 
 ## Changed Files
-- `docs/ai/60_worker_codex_report.md` - updated this verification report.
+- `backend/app/migrations.py` — added idempotent SQLite schema patch helper for missing `NurseryInfo` columns.
+- `backend/app/main.py` — calls the SQLite migration immediately after `create_all()` when `DATABASE_TYPE=sqlite`; Firestore remains skipped.
+- `backend/tests/test_registration_state_migration.py` — regression tests for old schema draft creation and idempotent repeated migration.
+- `docs/ai/60_worker_codex_report.md` — worker verification report.
 
 ## Commands Run
-- `cd frontend && npm run lint` - pass, exit 0.
-- `cd frontend && npm run build` - pass, exit 0.
-- `rg "nav\\.drafts|create\\.autoSaved|drafts\\." frontend/src/i18n/messages.ts frontend/src -n` - confirmed ja/en keys and usages.
-- `git diff --stat main...HEAD` - currently shows committed backend draft API/test changes plus this report only; current frontend implementation is in the uncommitted worktree.
-- `git diff --stat -- frontend` - shows intended frontend source changes for App/API/i18n/AutoRegister/types; note that untracked `frontend/src/pages/DraftsPage.tsx` is not included in this stat.
-- `git status --short frontend/dist docs/ai/60_worker_codex_report.md` - no `frontend/dist` diff; report modified.
+- `cd /workspaces/toddler-private-rag/backend && pytest tests/test_registration_state_migration.py -q` — passed: 2 passed, 4 warnings.
+- `cd /workspaces/toddler-private-rag/backend && pytest -q` — passed: 98 passed, 4 warnings.
+- `cd /workspaces/toddler-private-rag/backend && pytest tests/test_registration_state_migration.py -q && pytest -q` — passed: focused test 2 passed; full suite 98 passed.
+- `git diff --stat main...HEAD` — no output because the fix is currently uncommitted in the working tree.
+- `git diff --stat && git status --short` — working tree shows backend code/test changes plus this report; no frontend files changed.
+- Frontend build was not run because no frontend files were touched.
 
 ## Acceptance Criteria
-- [x] npm run lint pass
-- [x] npm run build pass
-- [x] i18n キー ja/en 揃い
-- [x] 変更は意図どおり（backend を壊していない）
+- [x] Startup SQLite migration adds missing `registration_state` column (idempotent)
+- [x] Draft creation succeeds on a pre-SOT-1113 schema DB (regression test)
+- [x] backend pytest passes
+- [x] Firestore path untouched; change is backend-only and minimal
 
 ## Risks
-`git diff --stat main...HEAD` does not include the current frontend implementation because these frontend files are uncommitted in the worktree. The worktree contains the expected frontend changes, including untracked `frontend/src/pages/DraftsPage.tsx`.
-
-Backend files were not modified during this verification. The committed branch diff already contains backend draft API/test changes from prior work.
+The defensive migration can add missing nullable/simple model columns, but it is intentionally not a full migration framework. Future complex SQLite DDL changes should still use a proper migration path. Existing Firestore behavior is unchanged.
 
 ## Next Action
 READY_FOR_REVIEW
