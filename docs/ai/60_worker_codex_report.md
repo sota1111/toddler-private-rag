@@ -1,44 +1,40 @@
-# Codex Verification Report
+# Worker Report
 
 ## Summary
-Verified SOT-1080 proactive reminders on branch `feat/SOT-1080-proactive-reminders`.
+`cd backend && python -m pytest -q` now passes: 96 passed, 4 warnings.
 
-Backend tests pass, frontend lint passes with zero errors, and frontend production build passes. The `/info/reminders` and `/info/reminders/digest` endpoints are declared before `/info/{id}`, so literal reminder routes take precedence over the dynamic ID route.
+One minimal backend fix was applied after the first run failed in `tests/test_repository.py::test_matches_query`: `FirestoreNurseryInfo` now defaults `registration_state` to `"registered"` when tests or legacy callers instantiate it directly. This matches the existing old-data compatibility rule already used by `_info_doc_to_obj()` and `_is_registered_data()`.
 
-No code changes were required.
+Route order was checked. `GET /info/drafts` is declared before `GET /info/{id}`, so the literal route is not shadowed. `POST /info/{id}/finalize` is declared as its own route and resolves separately from `GET /info/{id}`.
+
+No backend lint config was found (`pyproject.toml`, `setup.cfg`, `tox.ini`, `.flake8`, `ruff.toml` absent in the searched repo/backend scope; no `ruff`/`flake8` references found), so lint was skipped.
+
+`git diff --stat main...HEAD` produced no output in this checkout. Uncommitted worktree changes are backend files plus this report; no frontend files are modified.
 
 ## Changed Files
-- `docs/ai/60_worker_codex_report.md` - verification report only
+- `backend/app/repository.py` - added a default `registration_state="registered"` to `FirestoreNurseryInfo` for backward-compatible direct construction.
+- `docs/ai/60_worker_codex_report.md` - verification report.
 
-## Commands Run (with results)
-- `git branch --show-current && git status --short` - confirmed branch `feat/SOT-1080-proactive-reminders`; feature files are modified/untracked in the worktree.
-- `sed -n '1,220p' docs/ai/50_worker_gemini_report.md` - read context report; it appears stale and references SOT-1085 rather than SOT-1080.
-- `sed -n '1,260p' backend/app/reminders.py` - reviewed reminder engine logic.
-- `sed -n '1,520p' backend/app/routers/info.py` - reviewed endpoints and route order.
-- `sed -n '1,320p' backend/tests/test_reminders.py` - reviewed backend coverage.
-- `sed -n '1,260p' frontend/src/pages/DashboardPage.tsx` - reviewed dashboard reminder integration.
-- `sed -n '1,260p' frontend/src/components/ReminderBanner.tsx` - reviewed app-level urgent reminder banner.
-- `sed -n '1,260p' frontend/src/api/index.ts` - reviewed frontend API client.
-- `sed -n '1,260p' frontend/src/types/index.ts` - reviewed reminder types.
-- `python -m pytest -q` from `backend` - passed: `91 passed, 4 warnings in 1.42s`.
-- `npm run lint` from `frontend` - passed: ESLint completed with zero reported errors.
-- `npm run build` from `frontend` - passed: `tsc -b && vite build` completed successfully.
-- `rg -n "Reminder|reminders|ReminderBanner" backend/app frontend/src docs/ai -g '!frontend/dist/**'` - confirmed backend/frontend reminder wiring.
-- `sed -n '150,200p' backend/app/schemas.py` - confirmed reminder response schemas exist.
+## Commands Run
+- `cd backend && python -m pytest -q` - first run failed: 95 passed, 1 failed (`FirestoreNurseryInfo.__init__()` missing `registration_state`).
+- `cd backend && python -m pytest -q` - pass: 96 passed, 4 warnings.
+- `rg -n "FirestoreNurseryInfo|list_drafts|finalize|@router\\.(get|post)\\(\\\"/drafts|@router\\.(get|post)\\(\\\"/\\{id\\}\" -n backend/app/repository.py backend/app/routers/info.py` - confirmed route and repository locations.
+- `find . -maxdepth 3 -type f \\( -name 'pyproject.toml' -o -name 'setup.cfg' -o -name 'tox.ini' -o -name '.flake8' -o -name 'ruff.toml' \\) -print` - no lint config files found.
+- `rg -n "ruff|flake8" backend requirements.txt pyproject.toml setup.cfg tox.ini .flake8 ruff.toml` - no usable lint configuration/dependency found; command also reported missing root config files.
+- `git diff --stat main...HEAD` - no output.
+- `git diff --stat` - backend implementation files plus this report; no frontend files.
+- `git status --short` - modified backend files, this report, and untracked `backend/tests/test_drafts.py`; no frontend changes.
 
 ## Acceptance Criteria
-- Backend pytest gate: PASS.
-- Frontend lint gate: PASS.
-- Frontend build gate: PASS.
-- `/info/reminders` endpoint exists: PASS.
-- `/info/reminders/digest` endpoint exists: PASS.
-- Reminder routes declared before `/{id}`: PASS.
-- Existing tests/behavior not broken by test gates: PASS.
+- [x] pytest 全 pass
+- [x] GET /info/drafts が draft のみ / POST /info/{id}/finalize が draft→registered
+- [x] 既存一覧に draft が混ざらない（テストで確認）
+- [x] 変更は backend 限定
 
 ## Risks
-- `docs/ai/50_worker_gemini_report.md` does not describe SOT-1080; it appears to be a stale SOT-1085 fallback report. Verification used the actual source files and test/build gates instead.
-- The worktree contains feature modifications and an untracked `frontend/src/components/ReminderBanner.tsx` from the implementation. This report did not normalize or commit those files.
-- Browser notification behavior was statically reviewed and build-checked, but not manually tested in a browser.
+`git diff --stat main...HEAD` is empty because the current implementation appears to be uncommitted in the worktree rather than committed on the branch. The worktree check shows no frontend changes.
+
+Warnings remain from existing dependencies/deprecations: `python_multipart` import deprecation, SQLAlchemy `declarative_base()` deprecation, and FastAPI `on_event` deprecation. They are unrelated to SOT-1116.
 
 ## Next Action
 READY_FOR_REVIEW
