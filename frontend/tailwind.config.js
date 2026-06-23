@@ -14,9 +14,13 @@ export default {
         'brand-strong': 'var(--brand-strong)',
         'brand-soft': 'var(--brand-soft)',
         accent: 'var(--accent)',
+        'accent-bg': 'var(--accent-bg)',
+        'accent-border': 'var(--accent-border)',
         foreground: 'var(--foreground)',
+        'muted-foreground': 'var(--muted-foreground)',
         surface: 'var(--surface)',
         'surface-muted': 'var(--surface-muted)',
+        border: 'var(--border)',
       },
       boxShadow: {
         card: 'var(--shadow-card)',

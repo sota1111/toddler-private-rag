@@ -63,9 +63,9 @@ const InfoListPage: React.FC = () => {
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case '高': return 'text-red-600 bg-red-50';
-      case '普通': return 'text-blue-600 bg-blue-50';
-      case '低': return 'text-gray-600 bg-gray-50';
-      default: return 'text-gray-600 bg-gray-50';
+      case '普通': return 'text-brand bg-brand-soft';
+      case '低': return 'text-muted-foreground bg-surface-muted';
+      default: return 'text-muted-foreground bg-surface-muted';
     }
   };
 
@@ -73,30 +73,30 @@ const InfoListPage: React.FC = () => {
     switch (status) {
       case '未対応': return 'bg-yellow-100 text-yellow-800';
       case '対応済み': return 'bg-green-100 text-green-800';
-      case '確認済み': return 'bg-blue-100 text-blue-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case '確認済み': return 'bg-brand-soft text-brand-strong';
+      default: return 'bg-surface-muted text-foreground';
     }
   };
 
   return (
     <div className="w-full lg:max-w-6xl lg:mx-auto pb-12">
-      <h1 className="text-2xl font-bold mb-6 text-gray-800">{t('list.title')}</h1>
+      <h1 className="text-2xl font-bold mb-6 text-foreground">{t('list.title')}</h1>
 
-      <div className="bg-white p-4 rounded-lg shadow-sm mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="bg-surface p-4 rounded-lg shadow-sm mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">{t('list.keyword')}</label>
+          <label className="block text-sm font-medium text-foreground mb-1">{t('list.keyword')}</label>
           <input
             type="text"
-            className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+            className="w-full border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2 border"
             placeholder={t('list.keywordPlaceholder')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">{t('list.type')}</label>
+          <label className="block text-sm font-medium text-foreground mb-1">{t('list.type')}</label>
           <select
-            className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+            className="w-full border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2 border"
             value={infoType}
             onChange={(e) => setInfoType(e.target.value)}
           >
@@ -104,9 +104,9 @@ const InfoListPage: React.FC = () => {
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">{t('list.status')}</label>
+          <label className="block text-sm font-medium text-foreground mb-1">{t('list.status')}</label>
           <select
-            className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2 border"
+            className="w-full border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2 border"
             value={status}
             onChange={(e) => setStatus(e.target.value)}
           >
@@ -122,28 +122,28 @@ const InfoListPage: React.FC = () => {
       )}
 
       {isLoading ? (
-        <div className="text-center py-10 text-gray-500">{t('common.loading')}</div>
+        <div className="text-center py-10 text-muted-foreground">{t('common.loading')}</div>
       ) : !items || items.length === 0 ? (
-        <div className="text-center py-10 text-gray-400">{t('list.empty')}</div>
+        <div className="text-center py-10 text-muted-foreground">{t('list.empty')}</div>
       ) : (
         <div className="space-y-4">
           {items.map((item) => (
             <div
               key={item.id}
-              className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden cursor-pointer hover:border-blue-300 transition-colors"
+              className="bg-surface rounded-lg shadow-sm border border-border overflow-hidden cursor-pointer hover:border-brand transition-colors"
               onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
             >
               <div className="p-4 sm:flex items-center justify-between">
                 <div className="flex-1">
                   <div className="flex items-center space-x-2 mb-1">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-muted text-foreground">
                       {optLabel('infoType', item.info_type)}
                     </span>
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(item.priority)}`}>
                       {optLabel('priority', item.priority)}
                     </span>
                     {item.attachments && item.attachments.length > 0 && (
-                      <span className="inline-flex items-center text-xs text-gray-500">
+                      <span className="inline-flex items-center text-xs text-muted-foreground">
                         <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
                         </svg>
@@ -151,8 +151,8 @@ const InfoListPage: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  <h3 className="text-lg font-bold text-gray-900">{item.title}</h3>
-                  <div className="mt-1 text-sm text-gray-500 space-x-4">
+                  <h3 className="text-lg font-bold text-foreground">{item.title}</h3>
+                  <div className="mt-1 text-sm text-muted-foreground space-x-4">
                     {item.date && <span>{t('list.dateLabel')}{item.date}</span>}
                     {item.due_date && <span className="text-red-500 font-semibold">{t('list.dueLabel')}{item.due_date}</span>}
                   </div>
@@ -165,41 +165,41 @@ const InfoListPage: React.FC = () => {
                     type="button"
                     onClick={(e) => handleDelete(e, item.id, item.title)}
                     disabled={deletingId === item.id}
-                    className="text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1 rounded-md disabled:text-gray-400 disabled:hover:bg-transparent transition-colors"
+                    className="text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1 rounded-md disabled:text-muted-foreground disabled:hover:bg-transparent transition-colors"
                   >
                     {deletingId === item.id ? t('list.deleting') : t('list.delete')}
                   </button>
-                  <div className="text-gray-400">
+                  <div className="text-muted-foreground">
                     {expandedId === item.id ? '▲' : '▼'}
                   </div>
                 </div>
               </div>
 
               {expandedId === item.id && (
-                <div className="px-4 pb-4 border-t border-gray-100 bg-gray-50 pt-4 animate-fadeIn">
-                  <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap break-words">
+                <div className="px-4 pb-4 border-t border-border bg-surface-muted pt-4 animate-fadeIn">
+                  <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap break-words">
                     {item.content}
                   </div>
                   {item.items && (
-                    <div className="mt-4 p-2 bg-blue-50 rounded border border-blue-100">
-                      <p className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-1">{t('list.itemsHeading')}</p>
-                      <p className="text-sm text-blue-900 break-words">{item.items}</p>
+                    <div className="mt-4 p-2 bg-brand-soft rounded border border-border">
+                      <p className="text-xs font-bold text-brand-strong uppercase tracking-wider mb-1">{t('list.itemsHeading')}</p>
+                      <p className="text-sm text-brand-strong break-words">{item.items}</p>
                     </div>
                   )}
                   {item.memo && (
                     <div className="mt-4">
-                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">{t('list.memoHeading')}</p>
-                      <p className="text-sm text-gray-600 italic break-words">{item.memo}</p>
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">{t('list.memoHeading')}</p>
+                      <p className="text-sm text-muted-foreground italic break-words">{item.memo}</p>
                     </div>
                   )}
                   {item.attachments && item.attachments.length > 0 && (
                     <div className="mt-4">
-                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">{t('list.attachmentsHeading')}</p>
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">{t('list.attachmentsHeading')}</p>
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                         {item.attachments.map((att) => (
                           <div key={att.id} className="relative group" onClick={(e) => e.stopPropagation()}>
                             {att.mime_type.startsWith('image/') ? (
-                              <div className="aspect-square bg-gray-200 rounded-md overflow-hidden border border-gray-300">
+                              <div className="aspect-square bg-border rounded-md overflow-hidden border border-border">
                                 <img
                                   src={getAttachmentFileUrl(att.id)}
                                   alt={att.original_filename}
@@ -213,12 +213,12 @@ const InfoListPage: React.FC = () => {
                                 href={getAttachmentFileUrl(att.id)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="aspect-square flex flex-col items-center justify-center bg-white rounded-md border border-gray-300 p-2 hover:bg-gray-50 transition-colors"
+                                className="aspect-square flex flex-col items-center justify-center bg-surface rounded-md border border-border p-2 hover:bg-surface-muted transition-colors"
                               >
-                                <svg className="w-8 h-8 text-gray-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <svg className="w-8 h-8 text-muted-foreground mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
                                 </svg>
-                                <span className="text-[10px] text-gray-600 text-center line-clamp-2 break-all px-1">
+                                <span className="text-[10px] text-muted-foreground text-center line-clamp-2 break-all px-1">
                                   {att.original_filename}
                                 </span>
                               </a>
@@ -231,7 +231,7 @@ const InfoListPage: React.FC = () => {
                   {item.tags && (
                     <div className="mt-4 flex flex-wrap gap-2">
                       {item.tags.split(',').map(tag => (
-                        <span key={tag} className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded">#{tag.trim()}</span>
+                        <span key={tag} className="text-xs bg-border text-foreground px-2 py-1 rounded">#{tag.trim()}</span>
                       ))}
                     </div>
                   )}
