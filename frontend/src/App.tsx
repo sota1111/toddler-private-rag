@@ -17,6 +17,7 @@ import AutoRegisterPage from './pages/AutoRegisterPage';
 import DraftConfirmPage from './pages/DraftConfirmPage';
 import RegisterConfirmPage from './pages/RegisterConfirmPage';
 import InfoHubPage from './pages/InfoHubPage';
+import DraftsPage from './pages/DraftsPage';
 import { CreateFlowProvider } from './contexts/CreateFlowContext';
 
 const queryClient = new QueryClient();
@@ -82,6 +83,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 <NavLink to="/info">{t('nav.info')}</NavLink>
                 <NavLink to="/create">{t('nav.createManual')}</NavLink>
                 <NavLink to="/create/auto">{t('nav.createAuto')}</NavLink>
+                <NavLink to="/drafts">{t('nav.drafts')}</NavLink>
               </div>
             </div>
           </div>
@@ -108,6 +110,7 @@ const App: React.FC = () => {
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
                 <Route path="/info" element={<ProtectedRoute><InfoHubPage /></ProtectedRoute>} />
+                <Route path="/drafts" element={<ProtectedRoute><DraftsPage /></ProtectedRoute>} />
                 <Route path="/ask" element={<Navigate to="/info?tab=ask" replace />} />
                 <Route path="/search" element={<Navigate to="/info?tab=search" replace />} />
                 <Route path="/list" element={<Navigate to="/info?tab=list" replace />} />
