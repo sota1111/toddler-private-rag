@@ -24,6 +24,68 @@ def _gemini_ocr_enabled() -> bool:
     return os.getenv("OCR_PROVIDER", "").strip().lower() not in ("tesseract", "fake", "local")
 
 
+def _vision_ocr_enabled() -> bool:
+    """Whether to attempt Google Cloud Vision API OCR for images.
+
+    Enabled when ``OCR_PROVIDER`` is explicitly ``"vision"``, or when ``OCR_PROVIDER`` is
+    unset AND Cloud Vision credentials look available (Vertex mode on, or a GCP project /
+    service-account credentials are configured). Conservative by design: when unsure it
+    returns False so the existing Gemini/Tesseract paths are used.
+    """
+    provider = os.getenv("OCR_PROVIDER", "").strip().lower()
+    if provider == "vision":
+        return True
+    if provider:
+        # An explicit non-vision provider (tesseract/fake/local/gemini) disables Vision.
+        return False
+
+    # Auto mode: only prefer Vision when GCP credentials are plausibly available.
+    from .ai_client import use_vertex
+
+    return (
+        use_vertex()
+        or bool(os.getenv("GOOGLE_CLOUD_PROJECT"))
+        or bool(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+    )
+
+
+def _extract_from_image_vision(file_path: Path) -> str:
+    """Extract text from an image using the Google Cloud Vision API.
+
+    Uses document text detection, which handles multi-line documents (園だより/プリント)
+    better than sparse text detection. Returns an empty string on any failure (missing
+    SDK, credentials, network error, etc.) so the caller can fall back to other OCR paths.
+    """
+    try:
+        from google.cloud import vision
+    except ImportError:
+        logger.warning("google-cloud-vision not installed; skipping Cloud Vision OCR")
+        return ""
+
+    try:
+        client = vision.ImageAnnotatorClient()
+        content = file_path.read_bytes()
+        image = vision.Image(content=content)
+        response = client.document_text_detection(image=image)
+
+        if getattr(response, "error", None) and response.error.message:
+            logger.warning("Cloud Vision OCR returned error; falling back to other OCR")
+            return ""
+
+        full = getattr(response, "full_text_annotation", None)
+        if full and (full.text or "").strip():
+            return full.text.strip()
+
+        annotations = getattr(response, "text_annotations", None) or []
+        if annotations:
+            return (annotations[0].description or "").strip()
+
+        return ""
+    except Exception as e:
+        logger.warning(f"Cloud Vision OCR failed, falling back to other OCR: {type(e).__name__}")
+        return ""
+
+
 def _extract_from_image_gemini(file_path: Path) -> str:
     """Extract text from an image using Gemini vision via Vertex AI (or API-key fallback).
 
@@ -137,6 +199,12 @@ def extract_text(file_path: Union[str, Path], mime_type: str) -> str:
         return ""
 
 def _extract_from_image(file_path: Path) -> str:
+    # Prefer Cloud Vision API when configured; fall back to Gemini, then local OCR.
+    if _vision_ocr_enabled():
+        vision_text = _extract_from_image_vision(file_path)
+        if vision_text:
+            return vision_text
+
     # Prefer Gemini vision when configured; fall back to local OCR on empty/failure.
     if _gemini_ocr_enabled():
         gemini_text = _extract_from_image_gemini(file_path)
