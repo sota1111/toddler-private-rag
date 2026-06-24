@@ -269,6 +269,15 @@ async def extract_info_draft(
         logger.warning("Category extraction failed in /info/extract: %s", e)
         categories = schemas.ExtractedCategories()
 
+    # 文字起こし(OCR)結果を登録できる形に整理して本文へ出力する (SOT-1214)。
+    # 抽出済みカテゴリを再利用し、整理に失敗した場合は生テキストにフォールバックする。
+    try:
+        organized = extraction.organize_content(safe_text, categories.model_dump())
+        if organized:
+            content_text = organized
+    except Exception as e:  # graceful degradation
+        logger.warning("Content organize failed in /info/extract: %s", e)
+
     return schemas.InfoExtractDraft(
         title=title,
         info_type=info_type,

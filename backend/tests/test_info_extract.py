@@ -110,6 +110,24 @@ def test_extract_rejects_oversize_file(monkeypatch):
     assert response.status_code == 413
 
 
+def test_extract_organizes_content_with_category_section(monkeypatch):
+    # OCR生テキストにノイズ(連続空行)とカテゴリ手掛かりを含める
+    text = "運動会のお知らせ\n\n\n持ち物\n・水筒\n・タオル\n注意: 車での来園は禁止です。"
+    monkeypatch.setattr(info_router.ocr, "extract_text", lambda path, ct: text)
+    response = client.post(
+        "/api/info/extract",
+        files={"file": ("photo.png", b"x", "image/png")},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    # content は生ダンプではなく整理済み(カテゴリ見出し付き)になっている
+    assert "【持ち物】" in data["content"]
+    assert "【注意事項】" in data["content"]
+    assert "\n\n\n" not in data["content"]  # 連続空行が整理されている
+    # raw_text は生の文字起こしを保持している
+    assert "持ち物" in data["raw_text"]
+
+
 def test_extract_empty_ocr_returns_fallback(monkeypatch):
     monkeypatch.setattr(info_router.ocr, "extract_text", lambda path, ct: "")
     response = client.post(

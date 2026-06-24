@@ -23,6 +23,15 @@ logger = logging.getLogger(__name__)
 # スキーマと一致させる5カテゴリのキー
 CATEGORY_KEYS = ["submissions", "belongings", "deadlines", "events", "notes"]
 
+# カテゴリ見出しの日本語ラベル（整理本文へ付与するセクション用）
+CATEGORY_LABELS = {
+    "submissions": "提出物",
+    "belongings": "持ち物",
+    "deadlines": "締切",
+    "events": "行事予定",
+    "notes": "注意事項",
+}
+
 # 各カテゴリの判定キーワード（行単位のヒューリスティックで使用）
 _SUBMISSION_KW = ["提出", "申込", "申し込み", "返却", "署名", "サイン", "記入", "集金", "納入", "回収"]
 _BELONGING_KW = ["持ち物", "持参", "用意", "準備するもの", "お弁当", "水筒", "着替え", "タオル", "帽子", "上履き"]
@@ -148,3 +157,86 @@ def extract_categories(raw_text: str) -> Dict[str, List[str]]:
     for key in CATEGORY_KEYS:
         merged[key] = ai.get(key) or base.get(key, [])
     return merged
+
+
+def _heuristic_organize(raw_text: str) -> str:
+    """OCR生テキストを決定的に整形する（前後空白除去・連続空行の圧縮）。
+
+    LLM が使えない/失敗した場合のフォールバック。原文の内容は変えず、見た目の
+    ノイズ（余分な空白・連続する空行）のみ取り除いて読みやすくする。
+    """
+    cleaned: List[str] = []
+    prev_blank = False
+    for raw_line in raw_text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            # 連続する空行は1つに圧縮し、先頭の空行は捨てる
+            if cleaned and not prev_blank:
+                cleaned.append("")
+                prev_blank = True
+            continue
+        cleaned.append(line)
+        prev_blank = False
+    # 末尾の空行を除去
+    while cleaned and cleaned[-1] == "":
+        cleaned.pop()
+    return "\n".join(cleaned)
+
+
+def _format_category_section(categories: Dict[str, List[str]]) -> str:
+    """空でないカテゴリのみ、見出し付き箇条書きのセクション文字列を組み立てる。"""
+    parts: List[str] = []
+    for key in CATEGORY_KEYS:
+        values = [str(v).strip() for v in (categories.get(key) or []) if str(v).strip()]
+        if not values:
+            continue
+        parts.append(f"【{CATEGORY_LABELS[key]}】")
+        parts.extend(f"・{v}" for v in values)
+    return "\n".join(parts)
+
+
+def _llm_organize(raw_text: str) -> str:
+    """Gemini / Vertex AI でOCR生テキストを読みやすい本文へ整形する。失敗時は例外。"""
+    client = ai_client.get_genai_client()
+    model = ai_client.get_model_name()
+    prompt = (
+        "あなたは保育園のお知らせOCRテキストを整える編集者です。"
+        "次のOCR生テキストを、保護者が読みやすいお知らせ本文に整理してください。"
+        "OCRの不自然な改行・重複・崩れた記号を取り除き、要点を簡潔にまとめます。"
+        "原文に無い情報を追加・推測しないでください。本文のみを出力し、前置きや説明は不要です。\n\n"
+        f"# OCR生テキスト\n{raw_text}\n\n# 整理した本文"
+    )
+    response = ai_client.with_retry(
+        lambda: client.models.generate_content(model=model, contents=prompt)
+    )
+    return (getattr(response, "text", "") or "").strip()
+
+
+def organize_content(
+    raw_text: str, categories: Optional[Dict[str, List[str]]] = None
+) -> str:
+    """OCR文字起こしを「登録できる形」に整理した本文を返す (SOT-1214)。
+
+    LLM が利用可能なら本文整形を試み、失敗時・オフライン時は決定的なヒューリスティック整形に
+    フォールバックする。``categories`` が与えられれば（無ければ内部で抽出して）整理本文の末尾に
+    空でないカテゴリのみ見出し付き箇条書きで付与する。``raw_text`` が空なら空文字を返す。
+    """
+    if not raw_text or not raw_text.strip():
+        return ""
+
+    body = ""
+    if ai_client.gemini_available():
+        try:
+            body = _llm_organize(raw_text)
+        except Exception as e:  # graceful degradation
+            logger.warning("LLM content organize failed, using heuristic: %s", e)
+            body = ""
+    if not body:
+        body = _heuristic_organize(raw_text)
+
+    if categories is None:
+        categories = extract_categories(raw_text)
+    section = _format_category_section(categories)
+    if section:
+        return f"{body}\n\n{section}" if body else section
+    return body

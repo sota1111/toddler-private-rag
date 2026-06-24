@@ -41,3 +41,48 @@ def test_extracted_categories_schema_default():
     draft = InfoExtractDraft(title="t", info_type="お知らせ", content="c")
     assert isinstance(draft.categories, ExtractedCategories)
     assert draft.categories.notes == []
+
+
+# --- 文字起こしの整理 (SOT-1214) ---
+# テスト環境では Gemini 非利用なので organize_content は決定的なヒューリスティック整形になる。
+
+
+def test_organize_content_empty_returns_empty():
+    assert extraction.organize_content("") == ""
+    assert extraction.organize_content("   \n  \n") == ""
+
+
+def test_organize_content_collapses_blank_lines_and_trims():
+    raw = "  運動会のお知らせ  \n\n\n\n5月10日に開催します。\n\n"
+    organized = extraction.organize_content(raw, categories={k: [] for k in extraction.CATEGORY_KEYS})
+    # 前後の空白除去・連続空行が1つに圧縮され、末尾の空行も除去される
+    assert organized == "運動会のお知らせ\n\n5月10日に開催します。"
+
+
+def test_organize_content_appends_category_section():
+    raw = "運動会のお知らせ"
+    categories = {
+        "submissions": ["健康調査票"],
+        "belongings": ["水筒", "タオル"],
+        "deadlines": [],
+        "events": [],
+        "notes": ["車での来園は禁止"],
+    }
+    organized = extraction.organize_content(raw, categories=categories)
+    assert organized.startswith("運動会のお知らせ")
+    # 空でないカテゴリのみ見出し付き箇条書きで付与される
+    assert "【提出物】" in organized
+    assert "・健康調査票" in organized
+    assert "【持ち物】" in organized
+    assert "・水筒" in organized and "・タオル" in organized
+    assert "【注意事項】" in organized and "・車での来園は禁止" in organized
+    # 空カテゴリの見出しは出さない
+    assert "【締切】" not in organized
+    assert "【行事予定】" not in organized
+
+
+def test_organize_content_no_categories_returns_body_only():
+    raw = "おしらせ\n本文です"
+    organized = extraction.organize_content(raw, categories={k: [] for k in extraction.CATEGORY_KEYS})
+    assert organized == "おしらせ\n本文です"
+    assert "【" not in organized
