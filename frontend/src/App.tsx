@@ -18,6 +18,7 @@ import DraftConfirmPage from './pages/DraftConfirmPage';
 import RegisterConfirmPage from './pages/RegisterConfirmPage';
 import InfoHubPage from './pages/InfoHubPage';
 import DraftsPage from './pages/DraftsPage';
+import MemoPage from './pages/MemoPage';
 import { CreateFlowProvider } from './contexts/CreateFlowContext';
 
 const queryClient = new QueryClient();
@@ -44,6 +45,9 @@ const InfoIcon = () => (
 );
 const CreateIcon = () => (
   <svg {...navIconProps}><circle cx="12" cy="12" r="9" /><path d="M12 8v8" /><path d="M8 12h8" /></svg>
+);
+const MemoIcon = () => (
+  <svg {...navIconProps}><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6" /><path d="M9 13l2 2 4-4" /></svg>
 );
 
 const NavLink: React.FC<{
@@ -108,7 +112,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         {isAuthenticated && (
           <div className="border-t border-white/10 fixed bottom-0 left-0 right-0 z-20 bg-gradient-to-r from-brand to-brand-strong shadow-[0_-2px_8px_rgba(0,0,0,0.18)] md:static md:bg-transparent md:shadow-none">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex items-center justify-center md:justify-start gap-2 overflow-x-auto whitespace-nowrap py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <NavLink to="/" icon={<DashboardIcon />}>{t('nav.dashboard')}</NavLink>
                 <NavLink to="/info" icon={<InfoIcon />}>{t('nav.info')}</NavLink>
                 <NavLink
@@ -118,6 +122,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 >
                   {t('nav.create')}
                 </NavLink>
+                <NavLink to="/memo" icon={<MemoIcon />}>{t('nav.memo')}</NavLink>
               </div>
             </div>
           </div>
@@ -145,6 +150,7 @@ const App: React.FC = () => {
                 <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
                 <Route path="/info" element={<ProtectedRoute><InfoHubPage /></ProtectedRoute>} />
                 <Route path="/drafts" element={<ProtectedRoute><DraftsPage /></ProtectedRoute>} />
+                <Route path="/memo" element={<ProtectedRoute><MemoPage /></ProtectedRoute>} />
                 <Route path="/ask" element={<Navigate to="/info?tab=ask" replace />} />
                 <Route path="/search" element={<Navigate to="/info?tab=search" replace />} />
                 <Route path="/list" element={<Navigate to="/info?tab=list" replace />} />
