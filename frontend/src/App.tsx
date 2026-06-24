@@ -18,6 +18,8 @@ import DraftConfirmPage from './pages/DraftConfirmPage';
 import RegisterConfirmPage from './pages/RegisterConfirmPage';
 import InfoHubPage from './pages/InfoHubPage';
 import DraftsPage from './pages/DraftsPage';
+import DataListPage from './pages/DataListPage';
+import DataDetailPage from './pages/DataDetailPage';
 import MemoPage from './pages/MemoPage';
 import { CreateFlowProvider } from './contexts/CreateFlowContext';
 
@@ -48,6 +50,9 @@ const CreateIcon = () => (
 );
 const MemoIcon = () => (
   <svg {...navIconProps}><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6" /><path d="M9 13l2 2 4-4" /></svg>
+);
+const DataIcon = () => (
+  <svg {...navIconProps}><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>
 );
 
 const NavLink: React.FC<{
@@ -116,6 +121,13 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 <NavLink to="/" icon={<DashboardIcon />}>{t('nav.dashboard')}</NavLink>
                 <NavLink to="/info" icon={<InfoIcon />}>{t('nav.info')}</NavLink>
                 <NavLink
+                  to="/data"
+                  icon={<DataIcon />}
+                  activeWhen={(p) => p === '/data' || p.startsWith('/data/')}
+                >
+                  {t('nav.records')}
+                </NavLink>
+                <NavLink
                   to="/create/auto"
                   icon={<CreateIcon />}
                   activeWhen={(p) => p.startsWith('/create') || p === '/drafts'}
@@ -149,6 +161,8 @@ const App: React.FC = () => {
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
                 <Route path="/info" element={<ProtectedRoute><InfoHubPage /></ProtectedRoute>} />
+                <Route path="/data" element={<ProtectedRoute><DataListPage /></ProtectedRoute>} />
+                <Route path="/data/:id" element={<ProtectedRoute><DataDetailPage /></ProtectedRoute>} />
                 <Route path="/drafts" element={<ProtectedRoute><DraftsPage /></ProtectedRoute>} />
                 <Route path="/memo" element={<ProtectedRoute><MemoPage /></ProtectedRoute>} />
                 <Route path="/ask" element={<Navigate to="/info?tab=ask" replace />} />

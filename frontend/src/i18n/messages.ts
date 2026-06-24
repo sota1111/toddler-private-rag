@@ -15,6 +15,7 @@ export const messages: Record<Lang, Messages> = {
     'nav.createManual': '手動登録',
     'nav.createAuto': '自動登録',
     'nav.drafts': '仮登録',
+    'nav.records': 'データ',
     'nav.memo': 'メモ',
     'nav.logout': 'ログアウト',
 
@@ -103,6 +104,21 @@ export const messages: Record<Lang, Messages> = {
     'list.memoHeading': 'メモ',
     'list.attachmentsHeading': '添付ファイル',
     'list.confirmDelete': '「{title}」を削除しますか？',
+
+    // records (SOT-1217: 本登録データ一覧・詳細)
+    'records.title': 'データ一覧',
+    'records.empty': '登録済みのデータがありません。',
+    'records.back': '一覧に戻る',
+    'records.edit': '編集',
+    'records.save': '保存',
+    'records.cancel': 'キャンセル',
+    'records.delete': '削除',
+    'records.deleting': '削除中…',
+    'records.confirmDelete': '「{title}」を削除しますか？',
+    'records.deleteError': '削除に失敗しました。時間をおいて再度お試しください。',
+    'records.saveError': '保存に失敗しました。時間をおいて再度お試しください。',
+    'records.notFound': 'データが見つかりませんでした。',
+    'records.attachmentsHeading': '元の画像データ',
 
     // create
     'create.title': '情報登録',
@@ -255,6 +271,7 @@ export const messages: Record<Lang, Messages> = {
     'nav.createManual': 'Manual',
     'nav.createAuto': 'Auto',
     'nav.drafts': 'Drafts',
+    'nav.records': 'Data',
     'nav.memo': 'Memo',
     'nav.logout': 'Log out',
 
@@ -343,6 +360,21 @@ export const messages: Record<Lang, Messages> = {
     'list.memoHeading': 'Memo',
     'list.attachmentsHeading': 'Attachments',
     'list.confirmDelete': 'Delete “{title}”?',
+
+    // records (SOT-1217)
+    'records.title': 'Data',
+    'records.empty': 'No registered data yet.',
+    'records.back': 'Back to list',
+    'records.edit': 'Edit',
+    'records.save': 'Save',
+    'records.cancel': 'Cancel',
+    'records.delete': 'Delete',
+    'records.deleting': 'Deleting…',
+    'records.confirmDelete': 'Delete “{title}”?',
+    'records.deleteError': 'Failed to delete. Please try again later.',
+    'records.saveError': 'Failed to save. Please try again later.',
+    'records.notFound': 'Data not found.',
+    'records.attachmentsHeading': 'Original image data',
 
     // create
     'create.title': 'Add information',

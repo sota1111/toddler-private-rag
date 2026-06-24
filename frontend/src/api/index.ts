@@ -20,6 +20,12 @@ export const getInfoList = async (params?: { q?: string; info_type?: string; sta
   return response.data;
 };
 
+// 本登録データ1件取得 (SOT-1217: データ一覧の詳細ページ用)
+export const getInfoById = async (id: number): Promise<NurseryInfo> => {
+  const response = await api.get(`/info/${id}`);
+  return response.data;
+};
+
 export const createInfo = async (data: NurseryInfoCreate): Promise<NurseryInfo> => {
   const response = await api.post('/info/', data);
   return response.data;
