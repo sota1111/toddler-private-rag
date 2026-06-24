@@ -80,30 +80,49 @@ const AutoRegisterPage: React.FC = () => {
     // 反映が完了してから完了カードを出す（完了時点で /drafts に本文が表示される）。
     // 抽出/補完は best-effort: 失敗しても保存済みのドラフトは破棄せず、失敗をユーザーに伝える。
     setPhase('enriching');
+    // SOT-1241: 文字起こしが空/失敗のとき draft が「（タイトルなし）種別:資料」のまま
+    // 写真だけ残るのを防ぐ。識別できる仮タイトル（当日日付付き）を付与し手入力を促す。
+    const fallbackTitle = `${t('create.autoFallbackTitle')}（${new Date().toISOString().slice(0, 10)}）`;
     try {
       const draft = await extractInfoDraft(processed);
 
-      // 5カテゴリ抽出 (SOT-1092): 持ち物→items、注意事項→memo を補完プリフィル。
-      const cats = draft.categories;
-      const items = draft.items || (cats?.belongings?.length ? cats.belongings.join(', ') : '');
-      const memo = cats?.notes?.length ? cats.notes.join('\n') : '';
+      // 文字起こし(OCR)で実テキストが得られたか。空なら補完せずフォールバック扱い。
+      const hasText = (draft.raw_text || '').trim().length > 0;
+      if (!hasText) {
+        // 文字起こしで何も得られなかった: 識別できる仮タイトルを付与し手入力を促す
+        const updated = await updateInfo(created.id, { title: fallbackTitle });
+        setSavedDraft((prev) => (prev && prev.id === updated.id ? updated : prev));
+        setEnrichFailed(true);
+      } else {
+        // 5カテゴリ抽出 (SOT-1092): 持ち物→items、注意事項→memo を補完プリフィル。
+        const cats = draft.categories;
+        const items = draft.items || (cats?.belongings?.length ? cats.belongings.join(', ') : '');
+        const memo = cats?.notes?.length ? cats.notes.join('\n') : '';
 
-      const enrichment: Partial<NurseryInfoCreate> = {
-        title: draft.title || '',
-        // 推定種別が選択肢に存在する場合のみ採用
-        info_type: INFO_TYPES.includes(draft.info_type) ? draft.info_type : '資料',
-        content: draft.content || '',
-        date: draft.date || '',
-        items,
-        memo,
-      };
+        const enrichment: Partial<NurseryInfoCreate> = {
+          title: draft.title || fallbackTitle,
+          // 推定種別が選択肢に存在する場合のみ採用
+          info_type: INFO_TYPES.includes(draft.info_type) ? draft.info_type : '資料',
+          content: draft.content || '',
+          date: draft.date || '',
+          items,
+          memo,
+        };
 
-      const updated = await updateInfo(created.id, enrichment);
-      // 補完後の内容に差し替える（別の写真を開始済みなら触らない）
-      setSavedDraft((prev) => (prev && prev.id === updated.id ? updated : prev));
+        const updated = await updateInfo(created.id, enrichment);
+        // 補完後の内容に差し替える（別の写真を開始済みなら触らない）
+        setSavedDraft((prev) => (prev && prev.id === updated.id ? updated : prev));
+      }
     } catch (error) {
       // 抽出/補完は任意。失敗してもアップ済みのドラフトはそのまま使える。
+      // 失敗時も仮タイトルだけは付与して /drafts で識別できるようにする (SOT-1241)。
       console.warn('Draft enrichment from OCR/AI failed (draft already saved)', error);
+      try {
+        const updated = await updateInfo(created.id, { title: fallbackTitle });
+        setSavedDraft((prev) => (prev && prev.id === updated.id ? updated : prev));
+      } catch (e2) {
+        console.warn('Fallback title update also failed', e2);
+      }
       setEnrichFailed(true);
     } finally {
       setPhase('done');
