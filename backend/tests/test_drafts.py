@@ -104,3 +104,38 @@ def test_finalize_moves_draft_to_registered():
 def test_finalize_404_for_missing():
     resp = client.post("/api/info/999999/finalize")
     assert resp.status_code == 404
+
+
+def test_create_draft_with_empty_string_dates(monkeypatch):
+    """SOT-1197: 自動登録の save-first ペイロード（空文字の日付）で 422 にならない。
+
+    フロント AutoRegisterPage は date/event_date/due_date を空文字 "" で送る。
+    空文字は「未設定」として None に正規化され、作成が成功すること。
+    """
+    body = {
+        "title": "",
+        "info_type": "資料",
+        "content": "",
+        "date": "",
+        "event_date": "",
+        "due_date": "",
+        "items": "",
+        "status": "未対応",
+        "priority": "普通",
+        "tags": "",
+        "memo": "",
+        "registration_state": "draft",
+    }
+    resp = client.post("/api/info/", json=body)
+    assert resp.status_code == 200, resp.text
+    created = resp.json()
+    assert created["date"] is None
+    assert created["event_date"] is None
+    assert created["due_date"] is None
+    assert created["registration_state"] == "draft"
+
+    # PUT 更新（enrichment 経路）でも空文字日付が許容される
+    upd = client.put(f"/api/info/{created['id']}", json={"date": "", "event_date": "2026-07-01"})
+    assert upd.status_code == 200, upd.text
+    assert upd.json()["date"] is None
+    assert upd.json()["event_date"] == "2026-07-01"

@@ -1,6 +1,18 @@
 import datetime
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator, field_validator
 from typing import Optional, List, Union
+
+
+def _empty_str_to_none(value):
+    """空文字・空白のみの文字列を None に正規化する。
+
+    フロントの登録フォームは未入力の日付を空文字 "" で送るため、
+    Optional[datetime.date] のフィールドがそのままだと Pydantic の
+    日付パースで 422 になる。空入力＝未設定として None に倒す。
+    """
+    if isinstance(value, str) and value.strip() == "":
+        return None
+    return value
 
 class AttachmentResponse(BaseModel):
     id: Union[int, str]
@@ -28,6 +40,10 @@ class NurseryInfoBase(BaseModel):
     tags: Optional[str] = None
     memo: Optional[str] = None
 
+    _normalize_dates = field_validator(
+        "date", "event_date", "due_date", mode="before"
+    )(_empty_str_to_none)
+
 class NurseryInfoCreate(NurseryInfoBase):
     pass
 
@@ -44,6 +60,10 @@ class NurseryInfoUpdate(BaseModel):
     priority: Optional[str] = None
     tags: Optional[str] = None
     memo: Optional[str] = None
+
+    _normalize_dates = field_validator(
+        "date", "event_date", "due_date", mode="before"
+    )(_empty_str_to_none)
 
 class NurseryInfoResponse(NurseryInfoBase):
     id: int
