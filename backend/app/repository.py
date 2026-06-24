@@ -24,9 +24,9 @@ class InfoRepository(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def list(self, q: Optional[str] = None, info_type: Optional[str] = None, 
-             status: Optional[str] = None, priority: Optional[str] = None, 
-             tag: Optional[str] = None) -> List[Any]:
+    def list(self, q: Optional[str] = None, info_type: Optional[str] = None,
+             status: Optional[str] = None, priority: Optional[str] = None,
+             tag: Optional[str] = None, include_attachments: bool = True) -> List[Any]:
         pass
 
     @abc.abstractmethod
@@ -116,9 +116,9 @@ class SqliteInfoRepository(InfoRepository):
     def get(self, id: Union[int, str]) -> Optional[models.NurseryInfo]:
         return self.db.query(models.NurseryInfo).filter(models.NurseryInfo.id == int(id)).first()
 
-    def list(self, q: Optional[str] = None, info_type: Optional[str] = None, 
-             status: Optional[str] = None, priority: Optional[str] = None, 
-             tag: Optional[str] = None) -> List[models.NurseryInfo]:
+    def list(self, q: Optional[str] = None, info_type: Optional[str] = None,
+             status: Optional[str] = None, priority: Optional[str] = None,
+             tag: Optional[str] = None, include_attachments: bool = True) -> List[models.NurseryInfo]:
         query = self.db.query(models.NurseryInfo).filter(_sqlite_registered_only())
 
         if q:
@@ -143,8 +143,13 @@ class SqliteInfoRepository(InfoRepository):
             
         if tag:
             query = query.filter(models.NurseryInfo.tags.ilike(f"%{tag}%"))
-            
-        return query.all()
+
+        results = query.all()
+        if not include_attachments:
+            # タイトルのみのデータ一覧（SOT-1240）向け: 添付の lazy-load (N+1) を発生させない
+            for info in results:
+                info.attachments = []
+        return results
 
     def list_today(self) -> List[models.NurseryInfo]:
         # 今日やること: 本日が日付/行事日/提出期限のいずれかに該当する情報 (SOT-1093)
@@ -437,9 +442,9 @@ class FirestoreInfoRepository(InfoRepository):
         
         return _info_doc_to_obj(doc.id, doc.to_dict(), attachments)
 
-    def list(self, q: Optional[str] = None, info_type: Optional[str] = None, 
-             status: Optional[str] = None, priority: Optional[str] = None, 
-             tag: Optional[str] = None) -> List[FirestoreNurseryInfo]:
+    def list(self, q: Optional[str] = None, info_type: Optional[str] = None,
+             status: Optional[str] = None, priority: Optional[str] = None,
+             tag: Optional[str] = None, include_attachments: bool = True) -> List[FirestoreNurseryInfo]:
         query = self.db.collection("nursery_info")
         
         if info_type:
@@ -468,8 +473,10 @@ class FirestoreInfoRepository(InfoRepository):
             info_obj = _info_doc_to_obj(doc.id, doc_data, attachments)
             
             if _matches_query(info_obj, q, tag if q else None):
-                # If q was NOT present, we still need to fetch attachments for the response model
-                if not q:
+                # If q was NOT present, we still need to fetch attachments for the response model,
+                # unless the caller opted out (SOT-1240: title-only data list skips the per-item
+                # attachment query to avoid N+1 latency).
+                if not q and include_attachments:
                     att_refs = self.db.collection("attachments").where("info_id", "==", doc.id).stream()
                     info_obj.attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
                 results.append(info_obj)

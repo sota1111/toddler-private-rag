@@ -362,10 +362,12 @@ def list_info(
     status: Optional[str] = None,
     priority: Optional[str] = None,
     tag: Optional[str] = None,
+    include_attachments: bool = True,
     repo: InfoRepository = Depends(get_info_repository),
     current_user: str = Depends(get_current_user)
 ):
-    return repo.list(q=q, info_type=info_type, status=status, priority=priority, tag=tag)
+    return repo.list(q=q, info_type=info_type, status=status, priority=priority, tag=tag,
+                     include_attachments=include_attachments)
 
 @router.get("/{id}", response_model=schemas.NurseryInfoResponse)
 def get_info(id: int, repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):

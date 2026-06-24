@@ -15,7 +15,7 @@ const api = axios.create({
   withCredentials: true,
 });
 
-export const getInfoList = async (params?: { q?: string; info_type?: string; status?: string; tag?: string }): Promise<NurseryInfo[]> => {
+export const getInfoList = async (params?: { q?: string; info_type?: string; status?: string; tag?: string; include_attachments?: boolean }): Promise<NurseryInfo[]> => {
   const response = await api.get('/info/', { params });
   return response.data;
 };

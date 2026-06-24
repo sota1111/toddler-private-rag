@@ -10,9 +10,11 @@ const DataListPage: React.FC = () => {
   const navigate = useNavigate();
 
   const { data: items, isLoading } = useQuery({
-    // 既存 InfoListPage と同じ ['info'] 名前空間（フィルタ無しの本登録一覧）
-    queryKey: ['info', '', 'すべて', 'すべて'],
-    queryFn: () => getInfoList(),
+    // SOT-1240: タイトルのみの軽量一覧。添付取得(N+1)をスキップし速やかに表示する。
+    // InfoListPage の ['info', ...] とはキャッシュを共有しない専用キーにする
+    // （添付なしデータを共有すると InfoListPage の添付表示が壊れるため）。
+    queryKey: ['data-list-titles'],
+    queryFn: () => getInfoList({ include_attachments: false }),
   });
 
   return (
