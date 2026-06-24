@@ -22,21 +22,47 @@ import { CreateFlowProvider } from './contexts/CreateFlowContext';
 
 const queryClient = new QueryClient();
 
+// 階段トレーニング（shrine-stair-trainer）のメニューに合わせ、各項目をアイコン＋文字で表示する。
+// アイコンは currentColor の線画SVGで統一し、active/hover の文字色がそのまま反映される。
+const navIconProps = {
+  width: 22,
+  height: 22,
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 2,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+  'aria-hidden': true,
+};
+
+const DashboardIcon = () => (
+  <svg {...navIconProps}><rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" /><rect x="14" y="12" width="7" height="9" rx="1" /><rect x="3" y="16" width="7" height="5" rx="1" /></svg>
+);
+const InfoIcon = () => (
+  <svg {...navIconProps}><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6" /><path d="M8 13h8" /><path d="M8 17h6" /></svg>
+);
+const CreateIcon = () => (
+  <svg {...navIconProps}><circle cx="12" cy="12" r="9" /><path d="M12 8v8" /><path d="M8 12h8" /></svg>
+);
+
 const NavLink: React.FC<{
   to: string;
+  icon: React.ReactNode;
   children: React.ReactNode;
   activeWhen?: (pathname: string) => boolean;
-}> = ({ to, children, activeWhen }) => {
+}> = ({ to, icon, children, activeWhen }) => {
   const location = useLocation();
   const isActive = activeWhen ? activeWhen(location.pathname) : location.pathname === to;
   return (
     <Link
       to={to}
-      className={`flex-shrink-0 whitespace-nowrap px-3.5 py-2 rounded-full text-sm font-semibold ${
+      className={`flex flex-shrink-0 flex-col items-center gap-0.5 whitespace-nowrap px-3.5 py-1.5 rounded-2xl text-xs font-semibold ${
         isActive ? 'bg-surface/25 text-white' : 'text-white/80 hover:bg-surface/15 hover:text-white'
       } transition-colors`}
     >
-      {children}
+      <span className="flex items-center justify-center">{icon}</span>
+      <span>{children}</span>
     </Link>
   );
 };
@@ -83,10 +109,11 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           <div className="border-t border-white/10 fixed bottom-0 left-0 right-0 z-20 bg-gradient-to-r from-brand to-brand-strong shadow-[0_-2px_8px_rgba(0,0,0,0.18)] md:static md:bg-transparent md:shadow-none">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <NavLink to="/">{t('nav.dashboard')}</NavLink>
-                <NavLink to="/info">{t('nav.info')}</NavLink>
+                <NavLink to="/" icon={<DashboardIcon />}>{t('nav.dashboard')}</NavLink>
+                <NavLink to="/info" icon={<InfoIcon />}>{t('nav.info')}</NavLink>
                 <NavLink
                   to="/create/auto"
+                  icon={<CreateIcon />}
                   activeWhen={(p) => p.startsWith('/create') || p === '/drafts'}
                 >
                   {t('nav.create')}
