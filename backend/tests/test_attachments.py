@@ -202,3 +202,35 @@ def test_create_info_without_file():
     )
     assert response.status_code == 200
     assert response.json()["attachments"] == []
+
+
+def test_list_include_attachments_param():
+    """SOT-1240: include_attachments=false でタイトル一覧の添付取得(N+1)をスキップする。"""
+    # 本登録 info + 添付を用意
+    info_id = client.post(
+        "/api/info/", json={"title": "with-att", "info_type": "行事", "content": "C"}
+    ).json()["id"]
+    client.post(
+        f"/api/info/{info_id}/attachments",
+        files={"file": ("test.png", b"data", "image/png")},
+    )
+
+    # 仮登録(draft) は一覧に出ない（軽量モードでも除外維持）
+    client.post(
+        "/api/info/",
+        json={"title": "draft-x", "info_type": "行事", "content": "C",
+              "registration_state": "draft"},
+    )
+
+    # 既定（include_attachments 省略）: 添付が従来どおり返る
+    default_items = client.get("/api/info/").json()
+    target = next(i for i in default_items if i["id"] == info_id)
+    assert len(target["attachments"]) == 1
+    assert "draft-x" not in {i["title"] for i in default_items}
+
+    # 軽量モード: 同じ本登録データが返るが添付は空配列
+    light_items = client.get("/api/info/", params={"include_attachments": "false"}).json()
+    light_target = next(i for i in light_items if i["id"] == info_id)
+    assert light_target["title"] == "with-att"
+    assert light_target["attachments"] == []
+    assert "draft-x" not in {i["title"] for i in light_items}
