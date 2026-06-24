@@ -15,7 +15,16 @@ export const messages: Record<Lang, Messages> = {
     'nav.createManual': '手動登録',
     'nav.createAuto': '自動登録',
     'nav.drafts': '仮登録',
+    'nav.memo': 'メモ',
     'nav.logout': 'ログアウト',
+
+    // memo
+    'memo.title': 'メモ',
+    'memo.desc': '自由にメモを記入して登録できます。',
+    'memo.placeholder': 'メモを入力...',
+    'memo.register': '登録',
+    'memo.empty': 'メモはまだありません。',
+    'memo.delete': '削除',
     'role.label': '表示モード',
     'role.admin': '管理者',
     'role.user': 'ユーザー',
@@ -240,7 +249,16 @@ export const messages: Record<Lang, Messages> = {
     'nav.createManual': 'Manual',
     'nav.createAuto': 'Auto',
     'nav.drafts': 'Drafts',
+    'nav.memo': 'Memo',
     'nav.logout': 'Log out',
+
+    // memo
+    'memo.title': 'Memo',
+    'memo.desc': 'Write and save free-form memos.',
+    'memo.placeholder': 'Write a memo...',
+    'memo.register': 'Save',
+    'memo.empty': 'No memos yet.',
+    'memo.delete': 'Delete',
     'role.label': 'Display mode',
     'role.admin': 'Admin',
     'role.user': 'User',
