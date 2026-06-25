@@ -204,20 +204,25 @@ const DraftsPage: React.FC = () => {
                       {d.title || t('drafts.untitled')}
                     </h2>
                     <p className="text-xs text-muted-foreground">
-                      {t('drafts.type')}: {d.info_type}
-                      {d.date ? ` ・ ${t('drafts.date')}: ${d.date}` : ''}
+                      <span className="font-semibold text-foreground">{t('drafts.type')}:</span> {d.info_type}
+                      {d.date ? (
+                        <>
+                          {' ・ '}
+                          <span className="font-semibold text-foreground">{t('drafts.date')}:</span> {d.date}
+                        </>
+                      ) : ''}
                     </p>
                     {d.content && (
                       <p className="text-sm text-foreground whitespace-pre-wrap line-clamp-4">{d.content}</p>
                     )}
                     {d.items && (
                       <p className="text-sm text-muted-foreground">
-                        {t('drafts.items')}: {d.items}
+                        <span className="font-semibold text-foreground">{t('drafts.items')}:</span> {d.items}
                       </p>
                     )}
                     {d.memo && (
                       <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                        {t('drafts.memo')}: {d.memo}
+                        <span className="font-semibold text-foreground">{t('drafts.memo')}:</span> {d.memo}
                       </p>
                     )}
                   </div>
