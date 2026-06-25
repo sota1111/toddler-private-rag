@@ -1,39 +1,35 @@
-# Worker Report — Task Check (SOT-1268)
+# Worker Report — Task Check + Verification (SOT-1274)
 
 ## Fallback Disclosure (audit sink)
-- Non-responsive worker: **Codex CLI**.
-- Detected failure mode: `CODEX_COOLDOWN_ACTIVE` — `scripts/ai/run_codex.sh` exited with the
-  dedicated non-response code `75` (usage-limit cooldown until epoch 1782609660).
-- Per the Worker Non-Response Fallback Policy, **Claude Code performed this task check directly**
-  (read-only investigation).
+Codex worker was non-responsive on this run (usage-limit cooldown, exit 75). Per the
+Worker Non-Response Fallback Policy, Claude Code performed the initial task check and the
+verification (lint/tests) directly.
 
 ## Summary
-Issue SOT-1268「PC画面では、メニューのアイコンが不要」is **actionable**. The navigation menu is
-rendered by the `NavLink` component in `frontend/src/App.tsx`. Each menu item renders an icon
-`<span>` above a label `<span>` (column layout). The same nav container is used for both layouts:
-it is a fixed bottom bar on mobile and a static top nav on desktop (the wrapper uses
-`fixed bottom-0 ... md:static`). To remove the icons on PC (desktop) only, the icon `<span>` inside
-`NavLink` should be hidden at the `md` breakpoint and up (`md:hidden`), leaving mobile unchanged.
+SOT-1274 is actionable as a single-file FIX. 種別（`info_type`）の自動分類は
+`backend/app/tagging.py` の LLM プロンプト（`_llm_suggest`）＋ヒューリスティック fallback
+（`_heuristic`）で行われる。現状プロンプトは種別名の羅列のみで定義・判別基準・例が無く、
+曖昧ケース（提出物 vs 持ち物 vs お知らせ vs 掲示）で誤分類しやすい。分類プロンプトに
+定義・優先順位・few-shot を追加して精度を改善した。
 
-Decomposition判断: **不要** — single-file CSS/className change in `frontend/src/App.tsx`.
-
-## Changed Files
-- none (task check only)
+## Classification Paths
+- info_type プロンプト: `backend/app/tagging.py` `_llm_suggest`（改善対象）
+- ヒューリスティック fallback: `backend/app/tagging.py` `_heuristic`（不変）
+- 別系統 `backend/app/extraction.py` `extract_categories` は本文整理用カテゴリ抽出で、
+  本 Issue の「種別の分類」とは別軸のため対象外。
+- フロント `frontend/src/pages/infoFormOptions.ts` の `INFO_TYPES` と同期維持。
 
 ## Commands Run
-- Read `frontend/src/App.tsx` (Layout / NavLink / nav menu).
-- Read `frontend/package.json` (scripts).
+- `ruff check app/tagging.py` → All checks passed (exit 0)
+- `python -m pytest tests/test_tagging_hybrid.py -q` → 4 passed
+- `python -m pytest -q` (full backend) → 111 passed
 
 ## Acceptance Criteria
-- [x] Issue is actionable
-- [x] Nav menu component + icon rendering confirmed (`NavLink` icon `<span>` in `frontend/src/App.tsx`)
-- [x] Desktop-only hide location identified (`md:hidden` on the icon span; mobile bottom bar unaffected)
-- [x] Quality gate commands identified (`npm run lint`, `npm run build` = tsc -b + vite build, `npm run e2e`)
+- [x] 分類プロンプトを改善（各種別の定義 + 判別優先順位 + few-shot 例）
+- [x] `INFO_TYPES` はフロントと一致／全テスト green
 
 ## Risks
-- Mobile nav (fixed bottom bar) must remain icon+label. Using `md:hidden` on the icon span keeps
-  mobile intact while hiding icons from `md` and up.
-- The `flex-col` layout still renders the remaining label cleanly on desktop.
+- 実環境精度の改善は Gemini 応答に依存。再デプロイで反映。テスト経路（ヒューリスティック）は不変。
 
 ## Next Action
 READY_FOR_REVIEW
