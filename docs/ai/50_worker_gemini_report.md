@@ -1,31 +1,29 @@
-# Worker Report — SOT-1274
+# Worker Report — SOT-1276
 
 ## Summary
-SOT-1274「分類が上手くできていない」: `info_type`（種別）自動分類の精度向上のため、
-`backend/app/tagging.py` の LLM 分類プロンプト（`_llm_suggest`）を改善した。
+質問への回答の「出典」をクリックするとデータ一覧の該当資料 (`/data/:id`) へ遷移できるようにした。
 
-**Fallback disclosure (audit sink):** Gemini worker was non-responsive on this run
-(`IneligibleTierError: UNSUPPORTED_CLIENT` / exit 75). Per the Worker Non-Response
-Fallback Policy, Claude Code performed the implementation directly.
+Implementation performed by Claude Code under the Worker Non-Response Fallback Policy:
+`scripts/ai/run_gemini.sh` exited 75 (IneligibleTierError / UNSUPPORTED_CLIENT — Gemini CLI free-tier
+no longer supported). Gemini was non-responsive, and Codex was also in cooldown (exit 75 earlier), so
+Claude Code did this small single-file FIX directly.
 
 ## Changed Files
-- `backend/app/tagging.py` — `_llm_suggest` 内の分類プロンプトを刷新。8 種別それぞれの定義、
-  複数該当時の判別優先順位（提出物 > 持ち物 > 行事 > 給食 > 休園変更 > 掲示/資料 > お知らせ）、
-  priority の判定基準、提出物/持ち物/行事を区別する few-shot 例 3 件を追加。
-  `INFO_TYPES`/`PRIORITY_TYPES` 定数・関数シグネチャ・JSON 出力形状・`_heuristic` は不変。
+- `frontend/src/pages/AskPage.tsx` — import `Link` from react-router-dom; in the sources list, render
+  the document label as `<Link to={`/data/${s.info_id}`}>` when `s.info_id` is present (not null / not
+  empty string), otherwise keep the plain `<span>`. Brand-colored, `hover:underline`, `truncate` layout
+  preserved. Badge / score / snippet unchanged.
 
 ## Commands Run
-- `python -c "import ast; ast.parse(...)"` → OK
-- `ruff check app/tagging.py` → All checks passed
-- `python -m pytest tests/test_tagging_hybrid.py -q` → 4 passed
+- (verification in Codex/Claude step — see docs/ai/60_worker_codex_report.md)
 
 ## Acceptance Criteria
-- [x] 分類プロンプトに各種別の定義・判別ルール・優先順位・few-shot 例を追加
-- [x] `INFO_TYPES` はフロント `infoFormOptions.ts` と一致を維持／既存テスト green
+- [x] Clicking a source with info_id navigates to `/data/<info_id>`
+- [x] Sources without info_id stay plain text (no broken `/data/null` link)
+- [x] No change to badge / relevance score / snippet / ask flow
 
 ## Risks
-- ヒューリスティック経路（AI 無効時／テスト）は不変なので回帰なし。実環境の精度向上は
-  Gemini 応答に依存し、再デプロイ後に効果が出る。
+- None significant. `info_id` already provided by backend; route `/data/:id` already exists.
 
 ## Next Action
 READY_FOR_REVIEW
