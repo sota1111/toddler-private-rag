@@ -301,12 +301,12 @@ const DataDetail: React.FC<{ id: number }> = ({ id }) => {
 
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">{t('create.fieldContent')}</label>
-              <textarea name="content" rows={8} value={form.content} onChange={handleChange} required className={inputClass} />
+              <textarea name="content" rows={12} value={form.content} onChange={handleChange} required className={inputClass} />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">{t('create.fieldItems')}</label>
-              <input name="items" type="text" value={form.items ?? ''} onChange={handleChange} placeholder={t('create.itemsPlaceholder')} className={inputClass} />
+              <textarea name="items" rows={3} value={form.items ?? ''} onChange={handleChange} placeholder={t('create.itemsPlaceholder')} className={inputClass} />
             </div>
 
             <div>
@@ -316,7 +316,7 @@ const DataDetail: React.FC<{ id: number }> = ({ id }) => {
 
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">{t('create.fieldMemo')}</label>
-              <textarea name="memo" rows={3} value={form.memo ?? ''} onChange={handleChange} className={inputClass} />
+              <textarea name="memo" rows={6} value={form.memo ?? ''} onChange={handleChange} className={inputClass} />
             </div>
 
             <div className="flex items-center gap-2">
