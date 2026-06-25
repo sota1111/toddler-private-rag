@@ -70,7 +70,7 @@ const NavLink: React.FC<{
         isActive ? 'bg-surface/25 text-white' : 'text-white/80 hover:bg-surface/15 hover:text-white'
       } transition-colors`}
     >
-      <span className="flex items-center justify-center">{icon}</span>
+      <span className="flex items-center justify-center md:hidden">{icon}</span>
       <span>{children}</span>
     </Link>
   );
