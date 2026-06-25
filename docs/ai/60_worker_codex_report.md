@@ -1,30 +1,39 @@
-# Worker Report
+# Worker Report — Task Check (SOT-1268)
+
+## Fallback Disclosure (audit sink)
+- Non-responsive worker: **Codex CLI**.
+- Detected failure mode: `CODEX_COOLDOWN_ACTIVE` — `scripts/ai/run_codex.sh` exited with the
+  dedicated non-response code `75` (usage-limit cooldown until epoch 1782609660).
+- Per the Worker Non-Response Fallback Policy, **Claude Code performed this task check directly**
+  (read-only investigation).
 
 ## Summary
-Added a lightweight SQLite startup migration after `Base.metadata.create_all()` so existing `nursery_info` tables are patched with missing model columns. The `registration_state` column is added with `VARCHAR(20) NOT NULL DEFAULT 'registered'`, preserving existing rows as registered and allowing photo auto-read drafts to be saved.
+Issue SOT-1268「PC画面では、メニューのアイコンが不要」is **actionable**. The navigation menu is
+rendered by the `NavLink` component in `frontend/src/App.tsx`. Each menu item renders an icon
+`<span>` above a label `<span>` (column layout). The same nav container is used for both layouts:
+it is a fixed bottom bar on mobile and a static top nav on desktop (the wrapper uses
+`fixed bottom-0 ... md:static`). To remove the icons on PC (desktop) only, the icon `<span>` inside
+`NavLink` should be hidden at the `md` breakpoint and up (`md:hidden`), leaving mobile unchanged.
+
+Decomposition判断: **不要** — single-file CSS/className change in `frontend/src/App.tsx`.
 
 ## Changed Files
-- `backend/app/migrations.py` — added idempotent SQLite schema patch helper for missing `NurseryInfo` columns.
-- `backend/app/main.py` — calls the SQLite migration immediately after `create_all()` when `DATABASE_TYPE=sqlite`; Firestore remains skipped.
-- `backend/tests/test_registration_state_migration.py` — regression tests for old schema draft creation and idempotent repeated migration.
-- `docs/ai/60_worker_codex_report.md` — worker verification report.
+- none (task check only)
 
 ## Commands Run
-- `cd /workspaces/toddler-private-rag/backend && pytest tests/test_registration_state_migration.py -q` — passed: 2 passed, 4 warnings.
-- `cd /workspaces/toddler-private-rag/backend && pytest -q` — passed: 98 passed, 4 warnings.
-- `cd /workspaces/toddler-private-rag/backend && pytest tests/test_registration_state_migration.py -q && pytest -q` — passed: focused test 2 passed; full suite 98 passed.
-- `git diff --stat main...HEAD` — no output because the fix is currently uncommitted in the working tree.
-- `git diff --stat && git status --short` — working tree shows backend code/test changes plus this report; no frontend files changed.
-- Frontend build was not run because no frontend files were touched.
+- Read `frontend/src/App.tsx` (Layout / NavLink / nav menu).
+- Read `frontend/package.json` (scripts).
 
 ## Acceptance Criteria
-- [x] Startup SQLite migration adds missing `registration_state` column (idempotent)
-- [x] Draft creation succeeds on a pre-SOT-1113 schema DB (regression test)
-- [x] backend pytest passes
-- [x] Firestore path untouched; change is backend-only and minimal
+- [x] Issue is actionable
+- [x] Nav menu component + icon rendering confirmed (`NavLink` icon `<span>` in `frontend/src/App.tsx`)
+- [x] Desktop-only hide location identified (`md:hidden` on the icon span; mobile bottom bar unaffected)
+- [x] Quality gate commands identified (`npm run lint`, `npm run build` = tsc -b + vite build, `npm run e2e`)
 
 ## Risks
-The defensive migration can add missing nullable/simple model columns, but it is intentionally not a full migration framework. Future complex SQLite DDL changes should still use a proper migration path. Existing Firestore behavior is unchanged.
+- Mobile nav (fixed bottom bar) must remain icon+label. Using `md:hidden` on the icon span keeps
+  mobile intact while hiding icons from `md` and up.
+- The `flex-col` layout still renders the remaining label cleanly on desktop.
 
 ## Next Action
 READY_FOR_REVIEW

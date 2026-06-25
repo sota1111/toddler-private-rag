@@ -1,14 +1,31 @@
-# Worker Report
+# Worker Report — SOT-1268
+
+## Fallback Disclosure (audit sink)
+- Non-responsive worker: **Gemini CLI**.
+- Detected failure mode: `IneligibleTierError (UNSUPPORTED_CLIENT)` — `scripts/ai/run_gemini.sh`
+  exited with non-response code `75`.
+- Per the Worker Non-Response Fallback Policy, **Claude Code performed this implementation directly**.
 
 ## Summary
-Gemini worker was NON-RESPONSIVE (run_gemini.sh exited 75). Detected failure modes:
-1. `GEMINI_DISABLED=1` is set live in the control-plane `.env`.
-2. Gemini CLI also crashed with `IneligibleTierError` (UNSUPPORTED_CLIENT / free-tier no longer supported).
-
-Per the Worker Non-Response Fallback Policy in CLAUDE.md, Claude Code performed the implementation for SOT-1085 (children SOT-1092 / SOT-1093 / SOT-1094) directly. Verification was delegated to Codex.
+On PC (desktop) screens, the navigation menu icons are now hidden. In `frontend/src/App.tsx` the
+`NavLink` component's icon `<span>` was given the Tailwind class `md:hidden`, so the icon is hidden
+at the `md` breakpoint and up (desktop top nav) while remaining visible on mobile (the fixed bottom
+nav bar). Only the className changed; the icon components and props are untouched (still used by
+mobile).
 
 ## Changed Files
-- See per-child commits on branch `feat/SOT-1085-actionable-agent`.
+- `frontend/src/App.tsx` — added `md:hidden` to the `NavLink` icon `<span>` (hide menu icons on PC only).
+
+## Commands Run
+- Edit applied directly (single-line className change).
+
+## Acceptance Criteria
+- [x] PC (desktop) nav menu shows labels only, no icons
+- [x] Mobile bottom nav keeps icon + label unchanged
+- [x] No other files changed
+
+## Risks
+- Pure CSS/className change; the remaining label renders cleanly in the `flex-col` layout on desktop.
 
 ## Next Action
-READY_FOR_REVIEW (implemented by Claude Code fallback)
+READY_FOR_REVIEW
