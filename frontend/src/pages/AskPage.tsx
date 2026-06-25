@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { askInfo } from '../api';
 import type { RagAnswer } from '../types';
 import { useI18n } from '../i18n/useI18n';
@@ -131,7 +132,16 @@ const AskPage: React.FC = () => {
                         >
                           {s.source === 'ocr' ? t('ask.attached') : t('ask.body')}
                         </span>
-                        <span className="text-sm text-foreground truncate">{s.label || s.title}</span>
+                        {s.info_id != null && s.info_id !== '' ? (
+                          <Link
+                            to={`/data/${s.info_id}`}
+                            className="text-sm text-brand-strong hover:underline truncate"
+                          >
+                            {s.label || s.title}
+                          </Link>
+                        ) : (
+                          <span className="text-sm text-foreground truncate">{s.label || s.title}</span>
+                        )}
                       </div>
                       <span className="text-xs text-muted-foreground whitespace-nowrap">
                         {t('ask.relevance')} {s.score.toFixed(2)}
