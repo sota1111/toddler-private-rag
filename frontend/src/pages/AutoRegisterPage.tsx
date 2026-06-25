@@ -61,8 +61,11 @@ const AutoRegisterPage: React.FC = () => {
         priority: '普通',
         tags: '',
         memo: '',
-        // 仮登録として永続化する (SOT-1113)
-        registration_state: 'draft',
+        // SOT-1272: 文字起こし(enrich)が完了するまでは仮登録一覧に出さない。
+        // まず非表示の処理中状態(processing)で保存し、enrich 完了時に draft へ昇格する。
+        // 通常一覧/仮登録一覧の既存フィルタは draft/registered 以外を除外するため、
+        // processing のレコードはどこにも表示されない (SOT-1113)。
+        registration_state: 'processing',
       };
 
       // 仮登録を保存し、写真を添付する（ここまで成功＝データは失われない）
@@ -89,8 +92,9 @@ const AutoRegisterPage: React.FC = () => {
       // 文字起こし(OCR)で実テキストが得られたか。空なら補完せずフォールバック扱い。
       const hasText = (draft.raw_text || '').trim().length > 0;
       if (!hasText) {
-        // 文字起こしで何も得られなかった: 識別できる仮タイトルを付与し手入力を促す
-        const updated = await updateInfo(created.id, { title: fallbackTitle });
+        // 文字起こしで何も得られなかった: 識別できる仮タイトルを付与し手入力を促す。
+        // SOT-1272: ここで処理完了なので draft へ昇格し、仮登録一覧に表示する。
+        const updated = await updateInfo(created.id, { title: fallbackTitle, registration_state: 'draft' });
         setSavedDraft((prev) => (prev && prev.id === updated.id ? updated : prev));
         setEnrichFailed(true);
       } else {
@@ -107,6 +111,8 @@ const AutoRegisterPage: React.FC = () => {
           date: draft.date || '',
           items,
           memo,
+          // SOT-1272: enrich 完了。draft へ昇格して仮登録一覧に表示する。
+          registration_state: 'draft',
         };
 
         const updated = await updateInfo(created.id, enrichment);
@@ -118,7 +124,8 @@ const AutoRegisterPage: React.FC = () => {
       // 失敗時も仮タイトルだけは付与して /drafts で識別できるようにする (SOT-1241)。
       console.warn('Draft enrichment from OCR/AI failed (draft already saved)', error);
       try {
-        const updated = await updateInfo(created.id, { title: fallbackTitle });
+        // SOT-1272: 失敗しても処理は終わったので draft へ昇格し、仮登録一覧に表示する。
+        const updated = await updateInfo(created.id, { title: fallbackTitle, registration_state: 'draft' });
         setSavedDraft((prev) => (prev && prev.id === updated.id ? updated : prev));
       } catch (e2) {
         console.warn('Fallback title update also failed', e2);
