@@ -183,11 +183,11 @@ const DraftsPage: React.FC = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground">{t('create.fieldContent')}</label>
-                      <textarea name="content" rows={4} className={inputCls} value={editForm.content} onChange={handleEditChange} />
+                      <textarea name="content" rows={8} className={inputCls} value={editForm.content} onChange={handleEditChange} />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground">{t('create.fieldItems')}</label>
-                      <input type="text" name="items" className={inputCls} placeholder={t('create.itemsPlaceholder')} value={editForm.items} onChange={handleEditChange} />
+                      <textarea name="items" rows={3} className={inputCls} placeholder={t('create.itemsPlaceholder')} value={editForm.items} onChange={handleEditChange} />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground">{t('create.fieldTags')}</label>
@@ -195,7 +195,7 @@ const DraftsPage: React.FC = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground">{t('create.fieldMemo')}</label>
-                      <textarea name="memo" rows={2} className={inputCls} value={editForm.memo} onChange={handleEditChange} />
+                      <textarea name="memo" rows={5} className={inputCls} value={editForm.memo} onChange={handleEditChange} />
                     </div>
                   </div>
                 ) : (
