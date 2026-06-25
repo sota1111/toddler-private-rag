@@ -133,17 +133,42 @@ def _llm_suggest(title: str, content: str, items: Optional[str]) -> dict:
     client = ai_client.get_genai_client()
     model = ai_client.get_model_name()
     prompt = (
-        "あなたは保育園のお知らせを分類するアシスタントです。"
-        "以下の本文から登録用メタデータを推定し、JSONのみを出力してください。\n"
-        f"- info_type: 次のいずれか {INFO_TYPES}\n"
-        f"- priority: 次のいずれか {PRIORITY_TYPES}\n"
+        "あなたは保育園のお知らせを正確に分類するアシスタントです。"
+        "以下の本文から登録用メタデータを推定し、JSONのみを出力してください。\n\n"
+        f"## info_type（必ず次のいずれか1つ）: {INFO_TYPES}\n"
+        "各種別の定義:\n"
+        "- 資料: 園だより・クラスだより等の配布おたより/資料で、提出や持参を求めないもの。\n"
+        "- 掲示: 園内の掲示板・掲示物の内容（その場で読むもの。配布物ではない）。\n"
+        "- 行事: 運動会・発表会・遠足・参観・面談・プール・誕生日会など行事/イベントの案内。\n"
+        "- 持ち物: 特定の物を持参・準備するよう求めるもの（持ち物リストが主目的）。\n"
+        "- 提出物: 書類・申込・集金・返却など、提出や締切を伴うもの。\n"
+        "- お知らせ: 上記いずれにも明確に当てはまらない一般連絡・周知。\n"
+        "- 給食: 給食・献立・食物アレルギーなど食事関連。\n"
+        "- 休園変更: 休園・休み・開園/登園時間や登園日の変更など予定変更。\n"
+        "判別の優先順位（複数該当する場合は上から順に適用）:\n"
+        "1. 提出/締切/申込/集金/返却があれば「提出物」。\n"
+        "2. 物の持参・準備の指示が主目的なら「持ち物」。\n"
+        "3. 行事/イベントの案内なら「行事」。\n"
+        "4. 給食/献立なら「給食」。\n"
+        "5. 休園/時間変更/登園日変更なら「休園変更」。\n"
+        "6. 掲示物なら「掲示」、配布おたより/資料なら「資料」。\n"
+        "7. それ以外は「お知らせ」。\n\n"
+        f"## priority（次のいずれか）: {PRIORITY_TYPES}\n"
+        "締切・至急・必須など緊急性が高ければ「高」、任意・参考程度なら「低」、通常は「普通」。\n\n"
+        "## 日付\n"
         "- date: 主要な日付 (YYYY-MM-DD) または null\n"
         "- due_date: 提出/締切の日付 (YYYY-MM-DD) または null\n"
         "- event_date: 行事の日付 (YYYY-MM-DD) または null\n"
         "- tags: 内容を表す日本語の短いタグ配列 (最大6個)\n\n"
+        "## 分類例\n"
+        "本文「上履きを月曜日に持たせてください」"
+        '→ {"info_type":"持ち物","priority":"普通","date":null,"due_date":null,"event_date":null,"tags":["上履き","持ち物"]}\n'
+        "本文「健康調査票を4月20日までに提出してください」"
+        '→ {"info_type":"提出物","priority":"高","date":"2026-04-20","due_date":"2026-04-20","event_date":null,"tags":["提出","健康調査票"]}\n'
+        "本文「5月1日に運動会を行います。お弁当をご持参ください」"
+        '→ {"info_type":"行事","priority":"普通","date":"2026-05-01","due_date":null,"event_date":"2026-05-01","tags":["運動会","お弁当"]}\n\n'
         f"# タイトル\n{title}\n\n# 内容\n{content}\n\n# 持ち物\n{items or ''}\n\n"
-        '# 出力例\n{"info_type":"行事","priority":"高","date":"2026-05-01",'
-        '"due_date":null,"event_date":"2026-05-01","tags":["運動会","持ち物"]}\n\n# 出力(JSONのみ)'
+        "# 出力(JSONのみ)"
     )
     response = ai_client.with_retry(
         lambda: client.models.generate_content(model=model, contents=prompt)
