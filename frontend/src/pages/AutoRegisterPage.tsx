@@ -154,6 +154,7 @@ const AutoRegisterPage: React.FC = () => {
               <span className="text-base font-semibold">{t('create.autoEnriching')}</span>
             </div>
             <p className="text-sm text-foreground">{t('create.autoSavedDesc')}</p>
+            <p className="text-sm text-muted-foreground">{t('create.autoEnrichingLeaveOk')}</p>
           </div>
         ) : phase === 'done' && savedDraft ? (
           <div className="border border-green-300 bg-green-50 rounded-lg p-6 space-y-4">
