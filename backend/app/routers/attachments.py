@@ -132,10 +132,14 @@ def get_attachment_file(
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found on disk")
 
+    # SOT-1275: serve inline so clicking an image opens it in the browser instead of
+    # forcing a download (passing filename= alone sets Content-Disposition: attachment,
+    # which makes window.open(..., '_blank') show a blank tab).
     return FileResponse(
         path=file_path,
         media_type=db_attachment.mime_type,
-        filename=db_attachment.original_filename
+        filename=db_attachment.original_filename,
+        content_disposition_type="inline",
     )
 
 @router.delete("/attachments/{att_id}")
