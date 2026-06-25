@@ -97,6 +97,8 @@ def test_upload_and_get_attachment():
     assert response.status_code == 200
     assert response.content == file_content
     assert response.headers["content-type"] == "image/png"
+    # SOT-1275: served inline so clicking an image opens (not downloads) in the browser
+    assert response.headers["content-disposition"].startswith("inline")
 
 def test_upload_unsupported_type():
     # 1. Create a NurseryInfo
