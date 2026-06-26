@@ -7,8 +7,8 @@ local development. The legacy Google AI Studio SDK path is no longer used.
 Environment variables:
 - ``GOOGLE_GENAI_USE_VERTEXAI`` — truthy → Vertex AI mode (no API key needed).
 - ``GOOGLE_CLOUD_PROJECT``     — default ``gen-lang-client-0243034020``.
-- ``GOOGLE_CLOUD_LOCATION``    — default ``us-central1``.
-- ``GEMINI_MODEL``             — default ``gemini-2.5-flash``.
+- ``GOOGLE_CLOUD_LOCATION``    — default ``global``.
+- ``GEMINI_MODEL``             — default ``gemini-3.5-flash``.
 - ``GEMINI_API_KEY`` / ``GOOGLE_API_KEY`` — only used in local API-key fallback.
 """
 
@@ -20,8 +20,8 @@ from typing import Callable, Optional, TypeVar
 logger = logging.getLogger(__name__)
 
 DEFAULT_PROJECT = "gen-lang-client-0243034020"
-DEFAULT_LOCATION = "us-central1"
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_LOCATION = "global"
+DEFAULT_MODEL = "gemini-3.5-flash"
 
 _logged_init = False
 
