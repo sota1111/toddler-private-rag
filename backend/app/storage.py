@@ -99,6 +99,11 @@ class GCSStorage(StorageBackend):
             tmp.write(content)
         return Path(path)
 
+    def read(self, object_key: str) -> bytes:
+        bucket = self.client.bucket(self.bucket_name)
+        blob = bucket.blob(object_key)
+        return blob.download_as_bytes()
+
     def generate_signed_url(self, object_key: str, content_type: Optional[str] = None) -> str:
         from datetime import timedelta
         bucket = self.client.bucket(self.bucket_name)
