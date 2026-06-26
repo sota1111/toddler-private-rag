@@ -213,8 +213,8 @@ docker run -p 8080:8080 toddler-private-rag-frontend
 | `LLM_PROVIDER` | 回答生成プロバイダ | `fake`（既定）/ `gemini` |
 | `OCR_PROVIDER` | OCRエンジン。未指定かつ Gemini 利用可能時は Gemini Vision を優先。`tesseract`/`local`/`fake` で従来OCR | （未設定） |
 | `GOOGLE_GENAI_USE_VERTEXAI` | truthy で Vertex AI モード（APIキー不要。本番 Cloud Run の SA 認証で利用） | （未設定） |
-| `GOOGLE_CLOUD_LOCATION` | Vertex AI のロケーション | `us-central1` |
-| `GEMINI_MODEL` | 使用する Gemini モデル | `gemini-2.5-flash` |
+| `GOOGLE_CLOUD_LOCATION` | Vertex AI のロケーション | `global` |
+| `GEMINI_MODEL` | 使用する Gemini モデル | `gemini-3.5-flash` |
 | `GEMINI_API_KEY` | API-key モード利用時のみ必要（`GOOGLE_API_KEY` でも可） | （未設定） |
 | `ATTACHMENT_RETENTION_DAYS` | 添付ファイルの保持日数（期限切れをパージ） | （未設定） |
 
