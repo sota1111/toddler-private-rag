@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getToday, getTomorrow, getWeekly, getPending, getReminders } from '../api';
 import type { NurseryInfo, ReminderItem, ReminderUrgency } from '../types';
@@ -37,8 +38,14 @@ const DashboardSection: React.FC<{
         ) : (
           <ul className="divide-y divide-border">
             {items.map((item) => (
-              <li key={item.id} className="py-2">
-                {renderItem(item)}
+              <li key={item.id}>
+                {/* SOT-1281: お知らせをクリックすると一覧の該当ページ（/data/:id）に遷移する */}
+                <Link
+                  to={`/data/${item.id}`}
+                  className="block py-2 -mx-2 px-2 rounded-lg transition-colors hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand/40"
+                >
+                  {renderItem(item)}
+                </Link>
               </li>
             ))}
           </ul>
