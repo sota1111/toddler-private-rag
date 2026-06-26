@@ -5,7 +5,7 @@ import re
 import tempfile
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
-from typing import List, Optional
+from typing import List, Optional, Union
 from .. import schemas, storage, ocr, tagging, extraction, reminders
 from ..privacy import redact_pii
 from ..rag.providers import get_llm_provider
@@ -370,14 +370,14 @@ def list_info(
                      include_attachments=include_attachments)
 
 @router.get("/{id}", response_model=schemas.NurseryInfoResponse)
-def get_info(id: int, repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
+def get_info(id: Union[int, str], repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
     db_info = repo.get(id)
     if db_info is None:
         raise HTTPException(status_code=404, detail="Info not found")
     return db_info
 
 @router.put("/{id}", response_model=schemas.NurseryInfoResponse)
-def update_info(id: int, info: schemas.NurseryInfoUpdate, repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
+def update_info(id: Union[int, str], info: schemas.NurseryInfoUpdate, repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
     db_info = repo.update(id, info)
     if db_info is None:
         raise HTTPException(status_code=404, detail="Info not found")
@@ -385,7 +385,7 @@ def update_info(id: int, info: schemas.NurseryInfoUpdate, repo: InfoRepository =
 
 # 本登録 (SOT-1113): 仮登録(draft)を registered に確定する。
 @router.post("/{id}/finalize", response_model=schemas.NurseryInfoResponse)
-def finalize_info(id: int, repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
+def finalize_info(id: Union[int, str], repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
     db_info = repo.finalize(id)
     if db_info is None:
         raise HTTPException(status_code=404, detail="Info not found")
@@ -393,7 +393,7 @@ def finalize_info(id: int, repo: InfoRepository = Depends(get_info_repository), 
 
 
 @router.delete("/{id}")
-def delete_info(id: int, repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
+def delete_info(id: Union[int, str], repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
     # List attachments to delete physical files
     attachments = repo.list_attachments_for_info(id)
     

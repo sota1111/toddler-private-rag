@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Backgro
 from fastapi.responses import FileResponse, RedirectResponse
 import os
 import logging
+from typing import Union
 from .. import schemas, storage, ocr
 from ..privacy import redact_pii
 from ..repository import AttachmentRepository, get_attachment_repository, get_attachment_repo_standalone, SqliteAttachmentRepository
@@ -44,7 +45,7 @@ async def process_ocr(
 
 @router.post("/info/{info_id}/attachments", response_model=schemas.AttachmentResponse)
 async def upload_attachment(
-    info_id: int,
+    info_id: Union[int, str],
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     repo: AttachmentRepository = Depends(get_attachment_repository),
@@ -109,7 +110,7 @@ async def upload_attachment(
 
 @router.get("/attachments/{att_id}/file")
 def get_attachment_file(
-    att_id: int,
+    att_id: Union[int, str],
     repo: AttachmentRepository = Depends(get_attachment_repository),
     current_user: str = Depends(get_current_user)
 ):
@@ -144,7 +145,7 @@ def get_attachment_file(
 
 @router.delete("/attachments/{att_id}")
 def delete_attachment(
-    att_id: int,
+    att_id: Union[int, str],
     repo: AttachmentRepository = Depends(get_attachment_repository),
     current_user: str = Depends(get_current_user)
 ):
