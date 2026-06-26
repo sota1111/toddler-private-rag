@@ -170,9 +170,16 @@ def _llm_suggest(title: str, content: str, items: Optional[str]) -> dict:
         f"# タイトル\n{title}\n\n# 内容\n{content}\n\n# 持ち物\n{items or ''}\n\n"
         "# 出力(JSONのみ)"
     )
-    response = ai_client.with_retry(
-        lambda: client.models.generate_content(model=model, contents=prompt)
-    )
+    cfg = ai_client.default_generate_config()
+
+    def _gen():
+        if cfg is not None:
+            return client.models.generate_content(
+                model=model, contents=prompt, config=cfg
+            )
+        return client.models.generate_content(model=model, contents=prompt)
+
+    response = ai_client.with_retry(_gen)
     text = (getattr(response, "text", "") or "").strip()
     return _extract_json(text)
 

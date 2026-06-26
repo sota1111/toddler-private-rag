@@ -193,9 +193,16 @@ def build_digest(reminders: List[Dict[str, Any]], *, today: datetime.date) -> st
             "（3〜5行・絵文字は控えめ）に整えてください。新しい情報は追加しないでください。\n\n"
             f"# 本日: {today.isoformat()}\n# リマインド要約\n{base}\n\n# 通知文"
         )
-        response = ai_client.with_retry(
-            lambda: client.models.generate_content(model=model, contents=prompt)
-        )
+        cfg = ai_client.default_generate_config()
+
+        def _gen():
+            if cfg is not None:
+                return client.models.generate_content(
+                    model=model, contents=prompt, config=cfg
+                )
+            return client.models.generate_content(model=model, contents=prompt)
+
+        response = ai_client.with_retry(_gen)
         text = (getattr(response, "text", "") or "").strip()
         return text or base
     except Exception as e:  # graceful degradation

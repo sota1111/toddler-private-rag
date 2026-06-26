@@ -97,6 +97,27 @@ def get_genai_client():
     )
 
 
+def default_generate_config(max_output_tokens: int = 2048):
+    """Return a ``GenerateContentConfig`` that disables model "thinking".
+
+    思考(thinking)が既定で有効な Gemini 2.5/3 系では、タイトル整形・カテゴリ抽出・本文整理
+    などの生成呼び出しが 1 回あたり十数秒かかり、複数を直列実行する ``/info/extract`` が
+    Cloud Run のリクエスト上限(300秒)を超えてタイムアウトし、OCR後の整理(enrich)が失敗する
+    (SOT-1292)。OCR 呼び出し(ocr.py)と同様に思考を無効化し、出力上限を明示して高速化する。
+
+    SDK 差異で ``types`` が利用できない場合は ``None`` を返し、呼び出し側は config なしで続行する。
+    """
+    try:
+        from google.genai import types
+
+        return types.GenerateContentConfig(
+            max_output_tokens=max_output_tokens,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+        )
+    except Exception:  # SDK 差異で types/ThinkingConfig が無い場合は設定なしで続行
+        return None
+
+
 T = TypeVar("T")
 
 

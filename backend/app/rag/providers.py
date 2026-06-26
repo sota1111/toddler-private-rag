@@ -122,7 +122,7 @@ class GeminiLLMProvider(LLMProvider):
         self._model = model or get_model_name()
 
     def generate(self, question: str, contexts: List[str]) -> str:
-        from ..ai_client import get_genai_client, with_retry
+        from ..ai_client import default_generate_config, get_genai_client, with_retry
 
         client = get_genai_client()
         context_block = "\n\n".join(f"- {c}" for c in contexts)
@@ -131,9 +131,16 @@ class GeminiLLMProvider(LLMProvider):
             "日本語で簡潔に質問へ回答してください。コンテキストに無いことは推測しないでください。\n\n"
             f"# コンテキスト\n{context_block}\n\n# 質問\n{question}\n\n# 回答"
         )
-        response = with_retry(
-            lambda: client.models.generate_content(model=self._model, contents=prompt)
-        )
+        cfg = default_generate_config(max_output_tokens=4096)
+
+        def _gen():
+            if cfg is not None:
+                return client.models.generate_content(
+                    model=self._model, contents=prompt, config=cfg
+                )
+            return client.models.generate_content(model=self._model, contents=prompt)
+
+        response = with_retry(_gen)
         return (getattr(response, "text", "") or "").strip()
 
 

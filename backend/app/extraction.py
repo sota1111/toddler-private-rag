@@ -121,9 +121,16 @@ def _llm_categories(raw_text: str) -> Dict[str, List[str]]:
         '"deadlines":["5月1日まで"],"events":["5月10日 運動会"],"notes":["車での来園は禁止"]}\n\n'
         "# 出力(JSONのみ)"
     )
-    response = ai_client.with_retry(
-        lambda: client.models.generate_content(model=model, contents=prompt)
-    )
+    cfg = ai_client.default_generate_config()
+
+    def _gen():
+        if cfg is not None:
+            return client.models.generate_content(
+                model=model, contents=prompt, config=cfg
+            )
+        return client.models.generate_content(model=model, contents=prompt)
+
+    response = ai_client.with_retry(_gen)
     text = (getattr(response, "text", "") or "").strip()
     data = _extract_json(text)
 
@@ -206,9 +213,16 @@ def _llm_organize(raw_text: str) -> str:
         "原文に無い情報を追加・推測しないでください。本文のみを出力し、前置きや説明は不要です。\n\n"
         f"# OCR生テキスト\n{raw_text}\n\n# 整理した本文"
     )
-    response = ai_client.with_retry(
-        lambda: client.models.generate_content(model=model, contents=prompt)
-    )
+    cfg = ai_client.default_generate_config(max_output_tokens=4096)
+
+    def _gen():
+        if cfg is not None:
+            return client.models.generate_content(
+                model=model, contents=prompt, config=cfg
+            )
+        return client.models.generate_content(model=model, contents=prompt)
+
+    response = ai_client.with_retry(_gen)
     return (getattr(response, "text", "") or "").strip()
 
 
