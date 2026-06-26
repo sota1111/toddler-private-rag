@@ -1,6 +1,6 @@
 export interface Attachment {
-  id: number;
-  info_id: number;
+  id: number | string;
+  info_id: number | string;
   original_filename: string;
   mime_type: string;
   file_size: number;
@@ -8,7 +8,7 @@ export interface Attachment {
 }
 
 export interface NurseryInfo {
-  id: number
+  id: number | string
   title: string
   info_type: string
   content: string

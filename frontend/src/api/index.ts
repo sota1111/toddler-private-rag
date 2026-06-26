@@ -21,7 +21,7 @@ export const getInfoList = async (params?: { q?: string; info_type?: string; sta
 };
 
 // 本登録データ1件取得 (SOT-1217: データ一覧の詳細ページ用)
-export const getInfoById = async (id: number): Promise<NurseryInfo> => {
+export const getInfoById = async (id: number | string): Promise<NurseryInfo> => {
   const response = await api.get(`/info/${id}`);
   return response.data;
 };
@@ -32,12 +32,12 @@ export const createInfo = async (data: NurseryInfoCreate): Promise<NurseryInfo> 
 };
 
 // 既存の仮登録(draft)を部分更新する (SOT-1175: 写真アップ後の best-effort 補完用)
-export const updateInfo = async (id: number, data: Partial<NurseryInfoCreate>): Promise<NurseryInfo> => {
+export const updateInfo = async (id: number | string, data: Partial<NurseryInfoCreate>): Promise<NurseryInfo> => {
   const response = await api.put(`/info/${id}`, data);
   return response.data;
 };
 
-export const deleteInfo = async (id: number): Promise<void> => {
+export const deleteInfo = async (id: number | string): Promise<void> => {
   await api.delete(`/info/${id}`);
 };
 
@@ -48,12 +48,12 @@ export const getDrafts = async (): Promise<NurseryInfo[]> => {
 };
 
 // 仮登録を本登録(registered)に確定する (SOT-1113)
-export const finalizeInfo = async (id: number): Promise<NurseryInfo> => {
+export const finalizeInfo = async (id: number | string): Promise<NurseryInfo> => {
   const response = await api.post(`/info/${id}/finalize`);
   return response.data;
 };
 
-export const uploadAttachment = async (infoId: number, file: File): Promise<Attachment> => {
+export const uploadAttachment = async (infoId: number | string, file: File): Promise<Attachment> => {
   const formData = new FormData();
   formData.append('file', file);
   const response = await api.post<Attachment>(`/info/${infoId}/attachments`, formData, {
@@ -75,11 +75,11 @@ export const extractInfoDraft = async (file: File): Promise<InfoExtractDraft> =>
   return response.data;
 };
 
-export const deleteAttachment = async (attId: number): Promise<void> => {
+export const deleteAttachment = async (attId: number | string): Promise<void> => {
   await api.delete(`/attachments/${attId}`);
 };
 
-export const getAttachmentFileUrl = (attId: number): string => {
+export const getAttachmentFileUrl = (attId: number | string): string => {
   return `/api/attachments/${attId}/file`;
 };
 

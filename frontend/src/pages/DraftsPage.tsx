@@ -16,8 +16,8 @@ const DraftsPage: React.FC = () => {
     queryKey: ['drafts'],
     queryFn: getDrafts,
   });
-  const [busyId, setBusyId] = useState<number | null>(null);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<number | string | null>(null);
+  const [editingId, setEditingId] = useState<number | string | null>(null);
   const [editForm, setEditForm] = useState<NurseryInfoCreate | null>(null);
 
   // 種別/ステータス/優先度などの選択肢ラベル（保存値は日本語のまま）
@@ -68,7 +68,7 @@ const DraftsPage: React.FC = () => {
     setEditForm(prev => (prev ? { ...prev, [name]: value } : prev));
   };
 
-  const handleSaveEdit = async (id: number) => {
+  const handleSaveEdit = async (id: number | string) => {
     if (!editForm) return;
     setBusyId(id);
     try {
@@ -83,7 +83,7 @@ const DraftsPage: React.FC = () => {
     }
   };
 
-  const handleFinalize = async (id: number) => {
+  const handleFinalize = async (id: number | string) => {
     setBusyId(id);
     try {
       await finalizeInfo(id);
@@ -96,7 +96,7 @@ const DraftsPage: React.FC = () => {
     }
   };
 
-  const handleDiscard = async (id: number) => {
+  const handleDiscard = async (id: number | string) => {
     if (!window.confirm(t('drafts.confirmDiscard'))) return;
     setBusyId(id);
     try {

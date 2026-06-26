@@ -8,7 +8,7 @@ import type { NurseryInfo, NurseryInfoCreate } from '../types';
 
 // SOT-1217: データ一覧の詳細ページ。内容と元画像を確認でき、編集・削除も可能。
 // id ごとに key 付きで再マウントすることで、別レコードへ遷移したときに編集状態を確実にリセットする。
-const DataDetail: React.FC<{ id: number }> = ({ id }) => {
+const DataDetail: React.FC<{ id: string }> = ({ id }) => {
   const { t } = useI18n();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -28,7 +28,7 @@ const DataDetail: React.FC<{ id: number }> = ({ id }) => {
   const { data: item, isLoading, isError } = useQuery({
     queryKey: ['info-detail', id],
     queryFn: () => getInfoById(id),
-    enabled: Number.isFinite(id),
+    enabled: Boolean(id),
   });
 
   const toForm = (info: NurseryInfo): NurseryInfoCreate => ({
@@ -344,7 +344,8 @@ const DataDetail: React.FC<{ id: number }> = ({ id }) => {
 
 const DataDetailPage: React.FC = () => {
   const params = useParams();
-  const id = Number(params.id);
+  // SOT-1284: Firestore 移行後 id は文字列のため、Number() で NaN 化せず文字列のまま扱う
+  const id = params.id ?? '';
   // id が変わると DataDetail を再マウントし、編集状態を確実に初期化する
   return <DataDetail key={id} id={id} />;
 };
