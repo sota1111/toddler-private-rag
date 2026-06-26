@@ -17,8 +17,8 @@ const InfoListPage: React.FC = () => {
   const [query, setQuery] = useState('');
   const [infoType, setInfoType] = useState('すべて');
   const [status, setStatus] = useState('すべて');
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<number | string | null>(null);
+  const [deletingId, setDeletingId] = useState<number | string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
@@ -34,7 +34,7 @@ const InfoListPage: React.FC = () => {
 
   const deleteMutation = useMutation({
     mutationFn: deleteInfo,
-    onMutate: (id: number) => {
+    onMutate: (id: number | string) => {
       setDeletingId(id);
       setDeleteError(null);
     },
@@ -52,7 +52,7 @@ const InfoListPage: React.FC = () => {
     },
   });
 
-  const handleDelete = (e: React.MouseEvent, id: number, title: string) => {
+  const handleDelete = (e: React.MouseEvent, id: number | string, title: string) => {
     e.stopPropagation();
     if (deleteMutation.isPending) return;
     if (window.confirm(t('list.confirmDelete', { title }))) {

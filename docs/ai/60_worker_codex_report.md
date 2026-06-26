@@ -1,35 +1,47 @@
-# Worker Report — Task Check + Verification (SOT-1274)
-
-## Fallback Disclosure (audit sink)
-Codex worker was non-responsive on this run (usage-limit cooldown, exit 75). Per the
-Worker Non-Response Fallback Policy, Claude Code performed the initial task check and the
-verification (lint/tests) directly.
+# Worker Report
 
 ## Summary
-SOT-1274 is actionable as a single-file FIX. 種別（`info_type`）の自動分類は
-`backend/app/tagging.py` の LLM プロンプト（`_llm_suggest`）＋ヒューリスティック fallback
-（`_heuristic`）で行われる。現状プロンプトは種別名の羅列のみで定義・判別基準・例が無く、
-曖昧ケース（提出物 vs 持ち物 vs お知らせ vs 掲示）で誤分類しやすい。分類プロンプトに
-定義・優先順位・few-shot を追加して精度を改善した。
+Task check for SOT-1284 「データが見つかりませんでした」.
 
-## Classification Paths
-- info_type プロンプト: `backend/app/tagging.py` `_llm_suggest`（改善対象）
-- ヒューリスティック fallback: `backend/app/tagging.py` `_heuristic`（不変）
-- 別系統 `backend/app/extraction.py` `extract_categories` は本文整理用カテゴリ抽出で、
-  本 Issue の「種別の分類」とは別軸のため対象外。
-- フロント `frontend/src/pages/infoFormOptions.ts` の `INFO_TYPES` と同期維持。
+**Worker non-response (audit):** Codex CLI was non-responsive — `scripts/ai/run_codex.sh`
+exited with the dedicated non-response code `75` (usage-limit cooldown active). Per the Worker
+Non-Response Fallback Policy, Claude Code performed this task check directly.
+
+**Actionable:** Yes. Clear, reproducible FIX-type bug with a single root cause.
+
+**Root cause:** After the Firestore migration (SOT-1278), record ids are **strings**, but the
+frontend still treats the detail-page id as a `number`.
+- List pages link with the raw string id: `/data/${item.id}` (DataListPage / DashboardPage),
+  so the URL carries the correct Firestore string id and the list renders fine.
+- The detail page parses it as a number: `frontend/src/pages/DataDetailPage.tsx:347`
+  `const id = Number(params.id)` → `NaN` for a Firestore string id.
+- The detail query is then gated by `enabled: Number.isFinite(id)`
+  (`DataDetailPage.tsx:31`), which is `false` for `NaN`, so `getInfoById` never runs and the
+  page renders `records.notFound` = 「データが見つかりませんでした」.
+
+This is the frontend counterpart of the SOT-1282 backend fix (`id: int` → `Union[int, str]`);
+the backend already accepts string ids, but the frontend still coerces to number.
+
+## Changed Files
+- none (task check only)
 
 ## Commands Run
-- `ruff check app/tagging.py` → All checks passed (exit 0)
-- `python -m pytest tests/test_tagging_hybrid.py -q` → 4 passed
-- `python -m pytest -q` (full backend) → 111 passed
+- `grep -n "Number(params|enabled|getInfoById" frontend/src/pages/DataDetailPage.tsx`
+- `grep -rn "Number(params.id|parseInt(params" frontend/src` → only hit: DataDetailPage.tsx:347
+- `grep -n "id" frontend/src/types/index.ts` (NurseryInfo.id / Attachment.id / info_id still `number`)
+- `grep -n "getInfoById|updateInfo|deleteInfo|getAttachmentFileUrl" frontend/src/api/index.ts`
 
 ## Acceptance Criteria
-- [x] 分類プロンプトを改善（各種別の定義 + 判別優先順位 + few-shot 例）
-- [x] `INFO_TYPES` はフロントと一致／全テスト green
+- [x] Root cause of detail "データが見つかりませんでした" identified
+- [x] Minimal fix location named: `frontend/src/pages/DataDetailPage.tsx` (id parsing + query enable),
+      with supporting type widening in `frontend/src/types/index.ts` and `frontend/src/api/index.ts`.
 
 ## Risks
-- 実環境精度の改善は Gemini 応答に依存。再デプロイで反映。テスト経路（ヒューリスティック）は不変。
+- Must keep `key={id}` remount behavior (string key is fine).
+- Widen id types to `number | string` (not replace with `string`) to stay backward compatible with
+  sqlite int ids and existing numeric callers.
+- Attachment ids are also Firestore strings; widen `Attachment.id`/`info_id` and attachment api
+  id params too so `getAttachmentFileUrl`/`deleteAttachment` type-check with string ids.
 
 ## Next Action
 READY_FOR_REVIEW
