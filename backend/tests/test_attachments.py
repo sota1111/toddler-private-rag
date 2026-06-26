@@ -100,6 +100,44 @@ def test_upload_and_get_attachment():
     # SOT-1275: served inline so clicking an image opens (not downloads) in the browser
     assert response.headers["content-disposition"].startswith("inline")
 
+def test_get_attachment_file_gcs_streams_inline(monkeypatch):
+    """SOT-1282: GCS-backed attachments must be streamed inline by the backend.
+
+    On Cloud Run the default compute service-account credentials have no private
+    key, so generating a V4 signed URL raises and the endpoint 500s -> broken
+    image. The GCS branch must instead download the bytes and serve them inline.
+    """
+    # 1. Create info + upload an image (stored locally by default in tests)
+    info_id = client.post(
+        "/api/info/",
+        json={"title": "T", "info_type": "行事", "content": "c"},
+    ).json()["id"]
+    img_bytes = b"\xff\xd8\xff fake-jpeg-bytes \xff\xd9"
+    att_id = client.post(
+        f"/api/info/{info_id}/attachments",
+        files={"file": ("photo.jpg", img_bytes, "image/jpeg")},
+    ).json()["id"]
+
+    # 2. Mark the stored attachment as GCS-backed
+    db = TestingSessionLocal()
+    att = db.query(models.Attachment).filter(models.Attachment.id == att_id).first()
+    att.storage_backend = "gcs"
+    att.object_key = "uploads/photo.jpg"
+    db.commit()
+    db.close()
+
+    # 3. Fake GCS storage that returns bytes without touching real GCS / signing
+    fake = storage.GCSStorage()
+    monkeypatch.setattr(fake, "read", lambda object_key: img_bytes)
+    monkeypatch.setattr(storage, "get_storage", lambda: fake)
+
+    resp = client.get(f"/api/attachments/{att_id}/file")
+    assert resp.status_code == 200
+    assert resp.content == img_bytes
+    assert resp.headers["content-type"] == "image/jpeg"
+    assert resp.headers["content-disposition"].startswith("inline")
+
+
 def test_upload_unsupported_type():
     # 1. Create a NurseryInfo
     response = client.post(

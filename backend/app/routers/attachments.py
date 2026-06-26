@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, Response
 import os
 import logging
 from typing import Union
@@ -122,8 +122,20 @@ def get_attachment_file(
         backend = storage.get_storage()
         # Ensure we are using GCSStorage
         if isinstance(backend, storage.GCSStorage):
-            url = backend.generate_signed_url(db_attachment.object_key, db_attachment.mime_type)
-            return RedirectResponse(url=url)
+            # SOT-1282: stream the bytes directly instead of redirecting to a V4
+            # signed URL. On Cloud Run the default compute service-account
+            # credentials only carry a token (no private key), so
+            # generate_signed_url() raises "you need a private key to sign
+            # credentials" and the endpoint 500s -> broken image. Serving the
+            # bytes inline avoids signing entirely (same UX as local storage).
+            content = backend.read(db_attachment.object_key)
+            return Response(
+                content=content,
+                media_type=db_attachment.mime_type,
+                headers={
+                    "Content-Disposition": f'inline; filename="{db_attachment.original_filename}"'
+                },
+            )
         else:
             # Fallback if config is inconsistent, though unlikely
             raise HTTPException(status_code=500, detail="Storage configuration mismatch")
