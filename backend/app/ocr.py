@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Union
 
@@ -63,10 +64,45 @@ def _extract_from_image_vision(file_path: Path) -> str:
         return ""
 
     try:
+        from google.api_core import exceptions as gexc
+    except ImportError:  # api_core は通常同梱されるが、無くても動作させる
+        gexc = None
+
+    def _is_transient(exc: Exception) -> bool:
+        # 一時的なサービス混雑 (ServiceUnavailable/503) や期限超過は再試行する。
+        if gexc is not None and isinstance(
+            exc, (gexc.ServiceUnavailable, gexc.DeadlineExceeded)
+        ):
+            return True
+        msg = str(exc).lower()
+        return any(
+            k in msg for k in ("serviceunavailable", "503", "unavailable", "deadline")
+        )
+
+    try:
         client = vision.ImageAnnotatorClient()
         content = file_path.read_bytes()
         image = vision.Image(content=content)
-        response = client.document_text_detection(image=image)
+
+        # Cloud Vision は間欠的に ServiceUnavailable を返すことがあるため数回リトライし、
+        # 一時障害で不要にフォールバック(精度の劣るエンジン)へ落ちないようにする。
+        attempts = 3
+        response = None
+        for i in range(attempts):
+            try:
+                response = client.document_text_detection(image=image)
+                break
+            except Exception as e:  # noqa: BLE001
+                if _is_transient(e) and i < attempts - 1:
+                    logger.warning(
+                        "Cloud Vision transient error (%s); retrying %d/%d",
+                        type(e).__name__,
+                        i + 1,
+                        attempts - 1,
+                    )
+                    time.sleep(1.0 * (2 ** i))
+                    continue
+                raise
 
         if getattr(response, "error", None) and response.error.message:
             logger.warning("Cloud Vision OCR returned error; falling back to other OCR")
@@ -100,6 +136,21 @@ def _extract_from_image_gemini(file_path: Path) -> str:
         logger.warning("Pillow not installed; skipping Gemini OCR")
         return ""
 
+    # gemini-2.5 系は "thinking" が既定で有効。OCR(本文の全文書き起こし)では思考トークンが
+    # 出力枠を食い潰し、本文テキストが空のまま finish_reason=MAX_TOKENS で正常終了する
+    # ことがある(例外は出ず、ログにも残らない → 文字起こし失敗の主因)。思考を無効化し
+    # 十分な出力上限を明示して、空テキストになる事象を防ぐ。
+    config = None
+    try:
+        from google.genai import types
+
+        config = types.GenerateContentConfig(
+            max_output_tokens=8192,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+        )
+    except Exception:  # SDK 差異で types/ThinkingConfig が無い場合は設定なしで続行
+        config = None
+
     try:
         client = get_genai_client()
         img = Image.open(file_path)
@@ -107,12 +158,31 @@ def _extract_from_image_gemini(file_path: Path) -> str:
             "この画像に含まれる文字をそのまま日本語/英語ですべて書き起こしてください。"
             "説明や前置きは不要で、本文テキストのみ返してください。"
         )
-        response = with_retry(
-            lambda: client.models.generate_content(
+
+        def _generate():
+            if config is not None:
+                return client.models.generate_content(
+                    model=get_model_name(), contents=[prompt, img], config=config
+                )
+            return client.models.generate_content(
                 model=get_model_name(), contents=[prompt, img]
             )
-        )
-        return (getattr(response, "text", "") or "").strip()
+
+        response = with_retry(_generate)
+        text = (getattr(response, "text", "") or "").strip()
+        if not text:
+            finish_reason = None
+            try:
+                candidates = getattr(response, "candidates", None) or []
+                if candidates:
+                    finish_reason = getattr(candidates[0], "finish_reason", None)
+            except Exception:
+                finish_reason = None
+            logger.warning(
+                "Gemini OCR returned empty text (finish_reason=%s); falling back to local OCR",
+                finish_reason,
+            )
+        return text
     except Exception as e:
         logger.warning(f"Gemini OCR failed, falling back to local OCR: {type(e).__name__}")
         return ""
@@ -199,14 +269,19 @@ def extract_text(file_path: Union[str, Path], mime_type: str) -> str:
         return ""
 
 def _extract_from_image(file_path: Path) -> str:
+    # どのエンジンを試したかを記録し、全エンジンが空を返したときに原因追跡できるようにする。
+    attempted: list[str] = []
+
     # Prefer Cloud Vision API when configured; fall back to Gemini, then local OCR.
     if _vision_ocr_enabled():
+        attempted.append("vision")
         vision_text = _extract_from_image_vision(file_path)
         if vision_text:
             return vision_text
 
     # Prefer Gemini vision when configured; fall back to local OCR on empty/failure.
     if _gemini_ocr_enabled():
+        attempted.append("gemini")
         gemini_text = _extract_from_image_gemini(file_path)
         if gemini_text:
             return gemini_text
@@ -216,8 +291,14 @@ def _extract_from_image(file_path: Path) -> str:
         import pytesseract
     except ImportError:
         logger.warning("OCR libraries (Pillow/pytesseract) not installed")
+        if attempted:
+            logger.warning(
+                "OCR produced no text (engines attempted: %s; tesseract unavailable)",
+                ", ".join(attempted),
+            )
         return ""
 
+    attempted.append("tesseract")
     try:
         img = Image.open(file_path)
         # Try with Japanese and English
@@ -227,10 +308,18 @@ def _extract_from_image(file_path: Path) -> str:
             # Fallback to default if jpn/eng data is missing
             logger.warning("Tesseract Japanese/English data missing, falling back to default language")
             text = pytesseract.image_to_string(img)
-        
-        return text.strip()
+
+        result = text.strip()
+        if not result:
+            logger.warning(
+                "OCR produced no text (engines attempted: %s)", ", ".join(attempted)
+            )
+        return result
     except Exception as e:
         logger.warning(f"Image OCR failed: {type(e).__name__}")
+        logger.warning(
+            "OCR produced no text (engines attempted: %s)", ", ".join(attempted)
+        )
         return ""
 
 def _extract_from_pdf(file_path: Path) -> str:
