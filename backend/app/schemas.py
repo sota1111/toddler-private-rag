@@ -66,7 +66,7 @@ class NurseryInfoUpdate(BaseModel):
     )(_empty_str_to_none)
 
 class NurseryInfoResponse(NurseryInfoBase):
-    id: int
+    id: Union[int, str]
     created_at: datetime.datetime
     updated_at: datetime.datetime
     attachments: List[AttachmentResponse] = []
