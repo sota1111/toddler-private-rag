@@ -6,7 +6,7 @@ import tempfile
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from typing import List, Optional, Union
-from .. import schemas, storage, ocr, tagging, extraction, reminders
+from .. import schemas, storage, ocr, tagging, extraction, reminders, ai_client
 from ..privacy import redact_pii
 from ..rag.providers import get_llm_provider
 from ..repository import InfoRepository, get_info_repository
@@ -249,8 +249,11 @@ async def extract_info_draft(
     title = _draft_title(safe_text)
     content_text = safe_text
 
-    # LLM が利用可能なら title/content を洗練する（失敗時はヒューリスティックにフォールバック）
-    if safe_text.strip() and os.getenv("LLM_PROVIDER", "fake").lower() == "gemini":
+    # LLM が利用可能なら title/content を洗練する（失敗時はヒューリスティックにフォールバック）。
+    # 判定は OCR・カテゴリ抽出・本文整理と同じ ai_client.gemini_available() に統一する。
+    # 以前は LLM_PROVIDER 環境変数に依存しており、本番(Vertex AI モード/LLM_PROVIDER 未設定)では
+    # タイトル付けだけがスキップされていた (SOT-1280)。
+    if safe_text.strip() and ai_client.gemini_available():
         try:
             provider = get_llm_provider()
             refined = provider.generate(
