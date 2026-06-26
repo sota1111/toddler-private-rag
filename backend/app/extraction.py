@@ -226,14 +226,12 @@ def _llm_organize(raw_text: str) -> str:
     return (getattr(response, "text", "") or "").strip()
 
 
-def organize_content(
-    raw_text: str, categories: Optional[Dict[str, List[str]]] = None
-) -> str:
-    """OCR文字起こしを「登録できる形」に整理した本文を返す (SOT-1214)。
+def organize_body(raw_text: str) -> str:
+    """OCR生テキストを整形した「本文のみ」を返す（カテゴリ見出しは付けない）。
 
     LLM が利用可能なら本文整形を試み、失敗時・オフライン時は決定的なヒューリスティック整形に
-    フォールバックする。``categories`` が与えられれば（無ければ内部で抽出して）整理本文の末尾に
-    空でないカテゴリのみ見出し付き箇条書きで付与する。``raw_text`` が空なら空文字を返す。
+    フォールバックする。``raw_text`` が空なら空文字を返す。カテゴリ抽出に依存しないため、
+    ``extract_categories`` / タイトル整形と並列実行できる (SOT-1292)。
     """
     if not raw_text or not raw_text.strip():
         return ""
@@ -247,10 +245,31 @@ def organize_content(
             body = ""
     if not body:
         body = _heuristic_organize(raw_text)
+    return body
+
+
+def format_category_section(categories: Dict[str, List[str]]) -> str:
+    """空でないカテゴリのみ、見出し付き箇条書きのセクション文字列を組み立てる。"""
+    return _format_category_section(categories)
+
+
+def organize_content(
+    raw_text: str, categories: Optional[Dict[str, List[str]]] = None
+) -> str:
+    """OCR文字起こしを「登録できる形」に整理した本文を返す (SOT-1214)。
+
+    LLM が利用可能なら本文整形を試み、失敗時・オフライン時は決定的なヒューリスティック整形に
+    フォールバックする。``categories`` が与えられれば（無ければ内部で抽出して）整理本文の末尾に
+    空でないカテゴリのみ見出し付き箇条書きで付与する。``raw_text`` が空なら空文字を返す。
+    """
+    if not raw_text or not raw_text.strip():
+        return ""
+
+    body = organize_body(raw_text)
 
     if categories is None:
         categories = extract_categories(raw_text)
-    section = _format_category_section(categories)
+    section = format_category_section(categories)
     if section:
         return f"{body}\n\n{section}" if body else section
     return body
