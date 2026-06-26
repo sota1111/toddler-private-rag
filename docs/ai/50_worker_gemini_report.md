@@ -1,44 +1,38 @@
-# Worker Report — SOT-1284
+# Worker Report — SOT-1289 文字起こし中に写真追加
 
 ## Fallback Disclosure (audit sink)
-Both workers were non-responsive on this run:
-- Gemini CLI: crashed with `IneligibleTierError` (UNSUPPORTED_CLIENT), `run_gemini.sh` exit 75.
-- Codex CLI: usage-limit cooldown, `run_codex.sh` exit 75.
-
-Per the Worker Non-Response Fallback Policy, Claude Code performed both the implementation and the
-verification (lint / build / e2e) directly.
+- 非応答worker: Gemini CLI（`scripts/ai/run_gemini.sh` exit 75 / `WORKER_NONRESPONSE: gemini (crash exit 1)`、`IneligibleTierError: free-tier no longer supported`）。
+- Codex CLI も非応答（task check / 後続検証ともに usage-limit cooldown exit 75）。
+- Worker Non-Response Fallback Policy により Claude Code が実装を直接代行した。Quality Gate は通常どおり適用。
 
 ## Summary
-本登録データの詳細ページが「データが見つかりませんでした」になる不具合（SOT-1284）を修正した。
-Firestore 移行（SOT-1278）以降、レコード id は文字列だが、詳細ページが `Number(params.id)` で
-数値化して `NaN` になり、詳細取得クエリが `enabled: Number.isFinite(id)` で無効化されていた。
-フロントの id 取り扱いを文字列対応にし、関連する id 型を `number | string` に拡張した。
+自動登録画面（`AutoRegisterPage.tsx`）の「文字起こしを整理中」(`phase === 'enriching'`) のカードに、
+「別の写真を追加」ボタンを追加。クリックで既存のファイル選択を開き、選んだ写真は既存の
+`handlePhotoSelect`→確認(`confirm`)→`startUpload` の通常フローに乗る。前の写真の enrich は
+バックグラウンドで継続し、新しい写真は別の draft として保存される。
+
+並行アップロード時に、進行中だった前の `startUpload` の `finally { setPhase('done') }` 等が
+新しいアップロードの画面状態を上書きする race を防ぐため、世代カウンタ `uploadSeqRef` を導入。
+`startUpload` 先頭で `seq` を採番し、共有UI状態の setter（setPhase/setSavedDraft/setEnrichFailed/
+setExtractError）を `applyIfCurrent`（最新世代のみ反映）でガード。サーバ保存（createInfo/
+uploadAttachment/updateInfo/extractInfoDraft）はガードせず全写真分実行する。
 
 ## Changed Files
-- `frontend/src/pages/DataDetailPage.tsx` — `Number(params.id)` を `params.id ?? ''` に変更、
-  `DataDetail` の prop 型を `id: string` に、詳細クエリの `enabled` を `Boolean(id)` に変更。
-- `frontend/src/types/index.ts` — `NurseryInfo.id` / `Attachment.id` / `Attachment.info_id` を
-  `number | string` に拡張。
-- `frontend/src/api/index.ts` — `getInfoById` / `updateInfo` / `deleteInfo` / `finalizeInfo` /
-  `uploadAttachment` / `deleteAttachment` / `getAttachmentFileUrl` の id パラメータを `number | string` に拡張。
-- `frontend/src/pages/DraftsPage.tsx` — 型拡張に伴い `busyId` / `editingId` state と
-  `handleSaveEdit` / `handleFinalize` / `handleDiscard` を `number | string` 対応に。
-- `frontend/src/pages/InfoListPage.tsx` — 型拡張に伴い `expandedId` / `deletingId` state と
-  `deleteMutation.onMutate` / `handleDelete` を `number | string` 対応に。
+- `frontend/src/pages/AutoRegisterPage.tsx` — enriching カードに「別の写真を追加」ボタン+専用file input追加、`uploadSeqRef`世代ガード(`applyIfCurrent`)で並行アップロードのstate raceを防止
+- `frontend/src/i18n/messages.ts` — `create.autoAddPhotoWhileProcessing` を ja「別の写真を追加」/ en「Add another photo」に追加
 
 ## Commands Run
-- `npm run lint` → exit 0
-- `npm run build`（tsc -b + vite）→ exit 0
-- `npm run e2e` → 11 passed（S3 一覧→詳細、S4 詳細編集保存、S5 詳細削除を含む）
+- (Quality gate は Claude Code が実行: lint / build / e2e)
 
 ## Acceptance Criteria
-- [x] 本登録データを一覧からクリックすると詳細が表示される（id 文字列で詳細取得が走る）
-- [x] 既存の数値 id 呼び出しを壊さない（型は `number | string` への拡張）
-- [x] lint / build / e2e すべて pass
+- [x] 文字起こし整理中(enriching)に「別の写真を追加」ボタンが表示される
+- [x] クリックでファイル選択→確認→追加写真の仮登録が走る
+- [x] 並行アップロードで前の写真の done が新写真UIを上書きしない（uploadSeqRef ガード）
+- [x] ja/en の i18n 追加
 
 ## Risks
-- バックエンドは SOT-1282 で既に文字列 id 対応済みのため変更不要。フロントのみの修正。
-- 反映には再デプロイが必要。
+- 確認(SOT-1288)/processing(SOT-1272)/leave-ok(SOT-1279) の既存挙動は不変。
+- objectURL の生成/破棄(clearPreview / unmount useEffect)は不変。
 
 ## Next Action
 READY_FOR_REVIEW
