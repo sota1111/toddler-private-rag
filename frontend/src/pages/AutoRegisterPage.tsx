@@ -16,6 +16,10 @@ const AutoRegisterPage: React.FC = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
   const photoInputRef = useRef<HTMLInputElement>(null);
+  // SOT-1289: 文字起こし整理中でも次の写真を追加できる。並行アップロード時、
+  // 進行中だった前のアップロードの setState（特に finally の done 昇格）が
+  // 新しいアップロードの画面状態を上書きしないよう、世代カウンタで最新のみ反映する。
+  const uploadSeqRef = useRef(0);
   // 'idle' 入力待ち / 'confirm' 写真確認待ち / 'saving' 仮登録保存中 / 'enriching' 文字起こし整理中 / 'done' 完了
   const [phase, setPhase] = useState<Phase>('idle');
   const [extractError, setExtractError] = useState<string | null>(null);
@@ -75,6 +79,14 @@ const AutoRegisterPage: React.FC = () => {
 
   // 確認画面で「この写真で登録」を押したときに初めてアップロード・仮登録を開始する。
   const startUpload = async (file: File) => {
+    // SOT-1289: このアップロードの世代を採番。以降の画面状態(setState)更新は、
+    // 自分が最新世代のときだけ反映する（保存処理 createInfo/uploadAttachment/
+    // updateInfo/extractInfoDraft 自体は全写真分そのまま実行する）。
+    const seq = ++uploadSeqRef.current;
+    const applyIfCurrent = (fn: () => void) => {
+      if (uploadSeqRef.current === seq) fn();
+    };
+
     // プレビューはここで破棄してよい（保存処理は圧縮後ファイルを使う）
     clearPreview();
     setExtractError(null);
@@ -112,18 +124,20 @@ const AutoRegisterPage: React.FC = () => {
       // 仮登録を保存し、写真を添付する（ここまで成功＝データは失われない）
       created = await createInfo(initial);
       await uploadAttachment(created.id, processed);
-      setSavedDraft(created);
+      applyIfCurrent(() => setSavedDraft(created));
     } catch (error) {
       console.error('Failed to save draft/photo on upload', error);
-      setExtractError(t('create.autoSaveFail'));
-      setPhase('idle');
+      applyIfCurrent(() => {
+        setExtractError(t('create.autoSaveFail'));
+        setPhase('idle');
+      });
       return;
     }
 
     // SOT-1214: 文字起こしを整理して仮登録本文へ反映するまで「整理中」を表示し、
     // 反映が完了してから完了カードを出す（完了時点で /drafts に本文が表示される）。
     // 抽出/補完は best-effort: 失敗しても保存済みのドラフトは破棄せず、失敗をユーザーに伝える。
-    setPhase('enriching');
+    applyIfCurrent(() => setPhase('enriching'));
     // SOT-1241: 文字起こしが空/失敗のとき draft が「（タイトルなし）種別:資料」のまま
     // 写真だけ残るのを防ぐ。識別できる仮タイトル（当日日付付き）を付与し手入力を促す。
     const fallbackTitle = `${t('create.autoFallbackTitle')}（${new Date().toISOString().slice(0, 10)}）`;
@@ -136,8 +150,10 @@ const AutoRegisterPage: React.FC = () => {
         // 文字起こしで何も得られなかった: 識別できる仮タイトルを付与し手入力を促す。
         // SOT-1272: ここで処理完了なので draft へ昇格し、仮登録一覧に表示する。
         const updated = await updateInfo(created.id, { title: fallbackTitle, registration_state: 'draft' });
-        setSavedDraft((prev) => (prev && prev.id === updated.id ? updated : prev));
-        setEnrichFailed(true);
+        applyIfCurrent(() => {
+          setSavedDraft((prev) => (prev && prev.id === updated.id ? updated : prev));
+          setEnrichFailed(true);
+        });
       } else {
         // 5カテゴリ抽出 (SOT-1092): 持ち物→items、注意事項→memo を補完プリフィル。
         const cats = draft.categories;
@@ -158,7 +174,7 @@ const AutoRegisterPage: React.FC = () => {
 
         const updated = await updateInfo(created.id, enrichment);
         // 補完後の内容に差し替える（別の写真を開始済みなら触らない）
-        setSavedDraft((prev) => (prev && prev.id === updated.id ? updated : prev));
+        applyIfCurrent(() => setSavedDraft((prev) => (prev && prev.id === updated.id ? updated : prev)));
       }
     } catch (error) {
       // 抽出/補完は任意。失敗してもアップ済みのドラフトはそのまま使える。
@@ -167,13 +183,13 @@ const AutoRegisterPage: React.FC = () => {
       try {
         // SOT-1272: 失敗しても処理は終わったので draft へ昇格し、仮登録一覧に表示する。
         const updated = await updateInfo(created.id, { title: fallbackTitle, registration_state: 'draft' });
-        setSavedDraft((prev) => (prev && prev.id === updated.id ? updated : prev));
+        applyIfCurrent(() => setSavedDraft((prev) => (prev && prev.id === updated.id ? updated : prev)));
       } catch (e2) {
         console.warn('Fallback title update also failed', e2);
       }
-      setEnrichFailed(true);
+      applyIfCurrent(() => setEnrichFailed(true));
     } finally {
-      setPhase('done');
+      applyIfCurrent(() => setPhase('done'));
     }
   };
 
@@ -225,6 +241,23 @@ const AutoRegisterPage: React.FC = () => {
             </div>
             <p className="text-sm text-foreground">{t('create.autoSavedDesc')}</p>
             <p className="text-sm text-muted-foreground">{t('create.autoEnrichingLeaveOk')}</p>
+            {/* SOT-1289: 文字起こし整理中でも、続けて別の写真を追加できる */}
+            <div className="pt-1">
+              <input
+                type="file"
+                accept="image/*"
+                ref={photoInputRef}
+                onChange={handlePhotoSelect}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                className="px-5 py-2.5 bg-surface text-foreground text-sm font-medium border border-border rounded-md hover:bg-surface-muted"
+              >
+                {t('create.autoAddPhotoWhileProcessing')}
+              </button>
+            </div>
           </div>
         ) : phase === 'done' && savedDraft ? (
           <div className="border border-green-300 bg-green-50 rounded-lg p-6 space-y-4">

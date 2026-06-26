@@ -141,6 +141,7 @@ export const messages: Record<Lang, Messages> = {
     'create.autoSavedBodyHeading': '整理した本文',
     'create.autoOpenDrafts': '登録ページ（仮登録一覧）を開く',
     'create.autoUploadAnother': '続けて写真をアップ',
+    'create.autoAddPhotoWhileProcessing': '別の写真を追加',
     'create.photoHeading': '写真から自動入力',
     'create.photoDesc':
       '掲示物の写真を選ぶと、解析を待たずにそのまま一時登録へ保存します。内容は自動で読み取ってフォームに反映され、次の確認画面で確認・修正してから登録できます。',
@@ -403,6 +404,7 @@ export const messages: Record<Lang, Messages> = {
     'create.autoSavedBodyHeading': 'Organized text',
     'create.autoOpenDrafts': 'Open registration page (drafts)',
     'create.autoUploadAnother': 'Upload another photo',
+    'create.autoAddPhotoWhileProcessing': 'Add another photo',
     'create.photoHeading': 'Auto-fill from photo',
     'create.photoDesc':
       'Pick a photo of a notice and it is saved to your temporary registration right away — no waiting for analysis. The content is read automatically and filled into the form; review and edit it on the next screen before registering.',
