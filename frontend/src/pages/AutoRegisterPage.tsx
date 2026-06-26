@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { extractInfoDraft, createInfo, updateInfo, uploadAttachment } from '../api';
 import type { NurseryInfo, NurseryInfoCreate } from '../types';
@@ -10,32 +10,73 @@ import RegisterMenu from '../components/RegisterMenu';
 // 自動登録 = データ登録 (SOT-1052 / SOT-1113)
 // 写真を選ぶとOCRで内容を読み取り、仮登録(draft)として永続化する。
 // アップ完了後はその場で完了表示し、登録ページ(仮登録一覧)から本登録できる。
-type Phase = 'idle' | 'saving' | 'enriching' | 'done';
+type Phase = 'idle' | 'confirm' | 'saving' | 'enriching' | 'done';
 
 const AutoRegisterPage: React.FC = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
   const photoInputRef = useRef<HTMLInputElement>(null);
-  // 'idle' 入力待ち / 'saving' 仮登録保存中 / 'enriching' 文字起こし整理中 / 'done' 完了
+  // 'idle' 入力待ち / 'confirm' 写真確認待ち / 'saving' 仮登録保存中 / 'enriching' 文字起こし整理中 / 'done' 完了
   const [phase, setPhase] = useState<Phase>('idle');
   const [extractError, setExtractError] = useState<string | null>(null);
   const [savedDraft, setSavedDraft] = useState<NurseryInfo | null>(null);
   // 文字起こし/整理(enrich)に失敗したか（写真は保存済み）
   const [enrichFailed, setEnrichFailed] = useState(false);
+  // SOT-1288: アップ前に「この写真で良いか」を確認する。確定するまでサーバ保存しない。
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  // プレビュー用の objectURL を破棄する（不要になった時点で必ず呼ぶ）
+  const clearPreview = () => {
+    setPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setPendingFile(null);
+  };
+
+  // アンマウント時に objectURL を解放する
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   const resetForAnother = () => {
+    clearPreview();
     setSavedDraft(null);
     setExtractError(null);
     setEnrichFailed(false);
     setPhase('idle');
   };
 
-  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 写真を選択したら確認画面へ。まだアップロードは始めない (SOT-1288)。
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     // input をリセットして同じファイルでも再選択できるようにする
     if (photoInputRef.current) photoInputRef.current.value = '';
     if (!file) return;
 
+    setExtractError(null);
+    setSavedDraft(null);
+    setEnrichFailed(false);
+    // 既存のプレビューがあれば破棄してから新しいものを保持する
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPendingFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+    setPhase('confirm');
+  };
+
+  // 「選び直す」: 確認待ちの写真を破棄して入力待ちに戻す（サーバ保存はしていない）
+  const handleRetake = () => {
+    clearPreview();
+    setPhase('idle');
+  };
+
+  // 確認画面で「この写真で登録」を押したときに初めてアップロード・仮登録を開始する。
+  const startUpload = async (file: File) => {
+    // プレビューはここで破棄してよい（保存処理は圧縮後ファイルを使う）
+    clearPreview();
     setExtractError(null);
     setSavedDraft(null);
     setEnrichFailed(false);
@@ -144,7 +185,36 @@ const AutoRegisterPage: React.FC = () => {
       <h1 className="text-2xl font-bold mb-6 text-foreground">{t('create.autoTitle')}</h1>
 
       <div className="bg-surface shadow-md rounded-lg p-6 space-y-4">
-        {phase === 'enriching' ? (
+        {phase === 'confirm' && previewUrl ? (
+          <div className="border border-brand bg-brand-soft rounded-lg p-6 space-y-4">
+            <h2 className="text-base font-semibold text-foreground text-center">
+              {t('create.confirmHeading')}
+            </h2>
+            <div className="flex justify-center">
+              <img
+                src={previewUrl}
+                alt={t('create.confirmImageAlt')}
+                className="max-h-72 w-auto rounded-md border border-border shadow-sm"
+              />
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center pt-1">
+              <button
+                type="button"
+                onClick={() => pendingFile && startUpload(pendingFile)}
+                className="px-5 py-2.5 bg-brand text-white text-sm font-medium rounded-md shadow-sm hover:bg-brand-strong"
+              >
+                {t('create.confirmRegister')}
+              </button>
+              <button
+                type="button"
+                onClick={handleRetake}
+                className="px-5 py-2.5 bg-surface text-foreground text-sm font-medium border border-border rounded-md hover:bg-surface-muted"
+              >
+                {t('create.confirmRetake')}
+              </button>
+            </div>
+          </div>
+        ) : phase === 'enriching' ? (
           <div className="border border-brand bg-brand-soft rounded-lg p-6 text-center space-y-3">
             <div className="flex items-center justify-center gap-2 text-brand-strong">
               <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden>

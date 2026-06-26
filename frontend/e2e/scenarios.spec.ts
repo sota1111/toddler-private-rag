@@ -105,6 +105,10 @@ test.describe('toddler-private-rag シナリオ', () => {
       ),
     })
 
+    // SOT-1288: 選択直後は確認画面が表示され、まだアップロードされない
+    await expect(page.getByText('この写真でよろしいですか？')).toBeVisible()
+    await page.getByRole('button', { name: 'この写真で登録' }).click()
+
     // 仮登録の完了カードと、抽出されたタイトルが表示される
     await expect(page.getByText('アップ完了（仮登録しました）')).toBeVisible()
     await expect(page.getByText('お知らせ_自動登録テスト', { exact: false })).toBeVisible()
