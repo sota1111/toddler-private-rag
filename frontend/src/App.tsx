@@ -81,7 +81,8 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { t } = useI18n();
 
   return (
-    <div className="min-h-screen bg-surface-muted font-sans text-foreground pb-16 md:pb-0">
+    <div className={`min-h-screen bg-surface-muted font-sans text-foreground ${isAuthenticated ? 'pb-16 md:pb-0' : ''}`}>
+      {isAuthenticated && (
       <nav className="bg-gradient-to-r from-brand to-brand-strong shadow-md sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -140,6 +141,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           </div>
         )}
       </nav>
+      )}
       {isAuthenticated && <ReminderBanner />}
       <main className="max-w-7xl mx-auto py-6 px-4 lg:px-8">{children}</main>
       <footer className="bg-surface border-t border-border py-4 mt-10">
