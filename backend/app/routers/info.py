@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import logging
 import os
@@ -246,14 +247,21 @@ async def extract_info_draft(
 
     items = "\n".join(detected_items) if detected_items else None
     info_type = _guess_info_type(safe_text, bool(detected_items))
-    title = _draft_title(safe_text)
+    heuristic_title = _draft_title(safe_text)
     content_text = safe_text
 
-    # LLM が利用可能なら title/content を洗練する（失敗時はヒューリスティックにフォールバック）。
-    # 判定は OCR・カテゴリ抽出・本文整理と同じ ai_client.gemini_available() に統一する。
-    # 以前は LLM_PROVIDER 環境変数に依存しており、本番(Vertex AI モード/LLM_PROVIDER 未設定)では
-    # タイトル付けだけがスキップされていた (SOT-1280)。
-    if safe_text.strip() and ai_client.gemini_available():
+    # OCR後の整理(enrich)は「タイトル整形・5カテゴリ抽出・本文整理」の3つのAI呼び出しから成る。
+    # これらは互いに独立(いずれも safe_text のみに依存)なので、直列ではなく並列に実行して
+    # レイテンシを「3呼び出し分」から「実質1呼び出し分」へ短縮する。直列実行のままだと本番で
+    # 24〜44秒かかり、クライアント/プロキシのタイムアウトを超えて「写真から登録（要手入力）」の
+    # フォールバック表示になっていた (SOT-1292)。各タスクは自分の例外を内部で握りつぶし、
+    # 1つの失敗が他へ波及しないようにする(graceful degradation)。
+
+    # タイトル整形: LLM が利用可能なら洗練、失敗/未利用ならヒューリスティック。
+    # 判定は OCR・カテゴリ抽出・本文整理と同じ ai_client.gemini_available() に統一する (SOT-1280)。
+    def _refine_title() -> str:
+        if not (safe_text.strip() and ai_client.gemini_available()):
+            return heuristic_title
         try:
             provider = get_llm_provider()
             refined = provider.generate(
@@ -261,25 +269,39 @@ async def extract_info_draft(
                 [safe_text],
             )
             if refined and refined.strip():
-                title = refined.strip().splitlines()[0][:40]
+                return refined.strip().splitlines()[0][:40]
         except Exception as e:  # graceful degradation
             logger.warning("LLM title refinement failed in /info/extract: %s", e)
+        return heuristic_title
 
     # 5カテゴリ構造化抽出 (提出物/持ち物/締切/行事予定/注意事項)。失敗時も空で返す。
-    try:
-        categories = schemas.ExtractedCategories(**extraction.extract_categories(safe_text))
-    except Exception as e:  # graceful degradation
-        logger.warning("Category extraction failed in /info/extract: %s", e)
-        categories = schemas.ExtractedCategories()
+    def _extract_categories() -> schemas.ExtractedCategories:
+        try:
+            return schemas.ExtractedCategories(**extraction.extract_categories(safe_text))
+        except Exception as e:  # graceful degradation
+            logger.warning("Category extraction failed in /info/extract: %s", e)
+            return schemas.ExtractedCategories()
 
-    # 文字起こし(OCR)結果を登録できる形に整理して本文へ出力する (SOT-1214)。
-    # 抽出済みカテゴリを再利用し、整理に失敗した場合は生テキストにフォールバックする。
-    try:
-        organized = extraction.organize_content(safe_text, categories.model_dump())
-        if organized:
-            content_text = organized
-    except Exception as e:  # graceful degradation
-        logger.warning("Content organize failed in /info/extract: %s", e)
+    # 本文整理 (SOT-1214): 整理本文(カテゴリ見出しは含まない)。失敗時は空で返す。
+    def _organize_body() -> str:
+        try:
+            return extraction.organize_body(safe_text)
+        except Exception as e:  # graceful degradation
+            logger.warning("Content organize failed in /info/extract: %s", e)
+            return ""
+
+    title, categories, organized_body = await asyncio.gather(
+        asyncio.to_thread(_refine_title),
+        asyncio.to_thread(_extract_categories),
+        asyncio.to_thread(_organize_body),
+    )
+
+    # 整理本文 + 空でないカテゴリ見出しセクション (organize_content と同じ出力形)。
+    section = extraction.format_category_section(categories.model_dump())
+    if organized_body and section:
+        content_text = f"{organized_body}\n\n{section}"
+    elif organized_body or section:
+        content_text = organized_body or section
 
     return schemas.InfoExtractDraft(
         title=title,
