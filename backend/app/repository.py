@@ -530,20 +530,26 @@ class FirestoreInfoRepository(InfoRepository):
         today = datetime.date.today()
         today_str = _from_date(today)
         next_week_str = _from_date(today + datetime.timedelta(days=7))
-        
+
+        # SOT-1285: 等価条件(info_type)と範囲条件(event_date >= / <=)を別フィールドで
+        # 組み合わせると Firestore は複合インデックスを要求し、未作成だとクエリが失敗して
+        # 「今週の予定」欄が読み込み中のまま固まる。等価条件のみで取得し、event_date の範囲は
+        # アプリ側でフィルタする(event_date は ISO 文字列 YYYY-MM-DD なので辞書順=日付順)。
         docs = self.db.collection("nursery_info") \
             .where("info_type", "==", "行事") \
-            .where("event_date", ">=", today_str) \
-            .where("event_date", "<=", next_week_str) \
             .stream()
-            
+
         results = []
         for doc in docs:
-            if not _is_registered_data(doc.to_dict()):  # 仮登録は除外 (SOT-1113)
+            data = doc.to_dict()
+            if not _is_registered_data(data):  # 仮登録は除外 (SOT-1113)
+                continue
+            event_date = data.get("event_date")
+            if not event_date or not (today_str <= event_date <= next_week_str):
                 continue
             att_refs = self.db.collection("attachments").where("info_id", "==", doc.id).stream()
             attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
-            results.append(_info_doc_to_obj(doc.id, doc.to_dict(), attachments))
+            results.append(_info_doc_to_obj(doc.id, data, attachments))
         return results
 
     def list_pending(self) -> List[FirestoreNurseryInfo]:
