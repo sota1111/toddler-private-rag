@@ -1,15 +1,39 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { askInfo } from '../api';
 import type { RagAnswer } from '../types';
 import { useI18n } from '../i18n/useI18n';
 
+// SOT-1286: 出典リンクで遷移→ブラウザ戻るで再マウントしても質問と回答が消えないよう、
+// query と result を sessionStorage に保存・復元する。
+const STORAGE_KEY = 'ask:lastSession';
+
+type SavedSession = { query: string; result: RagAnswer | null };
+
+const readSaved = (): SavedSession | null => {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as SavedSession) : null;
+  } catch {
+    return null;
+  }
+};
+
 const AskPage: React.FC = () => {
   const { t } = useI18n();
-  const [query, setQuery] = useState('');
-  const [result, setResult] = useState<RagAnswer | null>(null);
+  const [query, setQuery] = useState<string>(() => readSaved()?.query ?? '');
+  const [result, setResult] = useState<RagAnswer | null>(() => readSaved()?.result ?? null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // query / result が変わるたびに sessionStorage へ保存する（error / isLoading は一時状態なので保存しない）。
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ query, result }));
+    } catch {
+      // sessionStorage 不在（プライベートモード等）でも落とさない
+    }
+  }, [query, result]);
 
   const runQuery = async (raw: string) => {
     const q = raw.trim();
