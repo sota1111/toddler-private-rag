@@ -132,6 +132,9 @@ const DraftsPage: React.FC = () => {
         {drafts?.map((d: NurseryInfo) => {
           const imageAtt = d.attachments?.find((a) => a.mime_type?.startsWith('image/'));
           const busy = busyId === d.id;
+          // SOT-1323: いずれかの項目を処理中の間は、全カードのボタンを無効化して
+          // 多重リクエスト/状態競合を防ぐ（処理中の項目だけ「処理中…」表示を維持）。
+          const anyBusy = busyId !== null;
           const isEditing = editingId === d.id && editForm !== null;
           return (
             <div key={d.id} className="bg-surface shadow-sm border border-border rounded-lg p-5">
@@ -247,7 +250,7 @@ const DraftsPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={cancelEdit}
-                      disabled={busy}
+                      disabled={anyBusy}
                       className="px-4 py-2 text-sm font-medium text-foreground bg-surface border border-border rounded-md hover:bg-surface-muted disabled:opacity-50"
                     >
                       {t('drafts.cancel')}
@@ -255,7 +258,7 @@ const DraftsPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handleSaveEdit(d.id)}
-                      disabled={busy}
+                      disabled={anyBusy}
                       className="px-5 py-2 text-sm font-medium text-white bg-brand rounded-md shadow-sm hover:bg-brand-strong disabled:opacity-50"
                     >
                       {busy ? t('drafts.working') : t('drafts.save')}
@@ -266,7 +269,7 @@ const DraftsPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handleDiscard(d.id)}
-                      disabled={busy}
+                      disabled={anyBusy}
                       className="px-4 py-2 text-sm font-medium text-red-600 bg-surface border border-red-200 rounded-md hover:bg-red-50 disabled:opacity-50"
                     >
                       {busy ? t('drafts.working') : t('drafts.discard')}
@@ -274,7 +277,7 @@ const DraftsPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => startEdit(d)}
-                      disabled={busy}
+                      disabled={anyBusy}
                       className="px-4 py-2 text-sm font-medium text-foreground bg-surface border border-border rounded-md hover:bg-surface-muted disabled:opacity-50"
                     >
                       {t('drafts.edit')}
@@ -282,7 +285,7 @@ const DraftsPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handleFinalize(d.id)}
-                      disabled={busy}
+                      disabled={anyBusy}
                       className="px-5 py-2 text-sm font-medium text-white bg-brand rounded-md shadow-sm hover:bg-brand-strong disabled:opacity-50"
                     >
                       {busy ? t('drafts.working') : t('drafts.finalize')}
