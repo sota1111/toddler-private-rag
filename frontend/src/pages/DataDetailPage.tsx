@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { getInfoById, deleteInfo, getAttachmentFileUrl } from '../api';
 import { useI18n } from '../i18n/useI18n';
 
@@ -27,7 +27,7 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
       queryClient.invalidateQueries({ queryKey: ['tomorrow'] });
       queryClient.invalidateQueries({ queryKey: ['weekly'] });
       queryClient.invalidateQueries({ queryKey: ['pending'] });
-      navigate('/data');
+      navigate(-1);
     },
     onError: () => setDeleteError(t('records.deleteError')),
   });
@@ -41,9 +41,13 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
   };
 
   const backLink = (
-    <Link to="/data" className="inline-flex items-center text-sm font-medium text-brand hover:text-brand-strong mb-4">
+    <button
+      type="button"
+      onClick={() => navigate(-1)}
+      className="inline-flex items-center text-sm font-medium text-brand hover:text-brand-strong mb-4"
+    >
       ‹ {t('records.back')}
-    </Link>
+    </button>
   );
 
   if (isLoading) {

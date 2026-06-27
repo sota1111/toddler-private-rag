@@ -15,7 +15,6 @@ import DashboardPage from './pages/DashboardPage';
 import AutoRegisterPage from './pages/AutoRegisterPage';
 import InfoHubPage from './pages/InfoHubPage';
 import DraftsPage from './pages/DraftsPage';
-import DataListPage from './pages/DataListPage';
 import DataDetailPage from './pages/DataDetailPage';
 import SchedulePage from './pages/SchedulePage';
 import TasksPage from './pages/TasksPage';
@@ -44,9 +43,6 @@ const InfoIcon = () => (
 );
 const CreateIcon = () => (
   <svg {...navIconProps}><circle cx="12" cy="12" r="9" /><path d="M12 8v8" /><path d="M8 12h8" /></svg>
-);
-const DataIcon = () => (
-  <svg {...navIconProps}><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>
 );
 const ScheduleIcon = () => (
   <svg {...navIconProps}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /><line x1="8" y1="14" x2="8" y2="14" /><line x1="12" y1="14" x2="12" y2="14" /><line x1="16" y1="14" x2="16" y2="14" /></svg>
@@ -136,13 +132,6 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 <NavLink to="/" icon={<DashboardIcon />}>{t('nav.dashboard')}</NavLink>
                 <NavLink to="/info" icon={<InfoIcon />}>{t('nav.info')}</NavLink>
                 <NavLink
-                  to="/data"
-                  icon={<DataIcon />}
-                  activeWhen={(p) => p === '/data' || p.startsWith('/data/')}
-                >
-                  {t('nav.records')}
-                </NavLink>
-                <NavLink
                   to="/create/auto"
                   icon={<CreateIcon />}
                   activeWhen={(p) => p.startsWith('/create') || p === '/drafts'}
@@ -178,7 +167,6 @@ const App: React.FC = () => {
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
                 <Route path="/info" element={<ProtectedRoute><InfoHubPage /></ProtectedRoute>} />
-                <Route path="/data" element={<ProtectedRoute><DataListPage /></ProtectedRoute>} />
                 <Route path="/data/:id" element={<ProtectedRoute><DataDetailPage /></ProtectedRoute>} />
                 <Route path="/drafts" element={<ProtectedRoute><DraftsPage /></ProtectedRoute>} />
                 <Route path="/schedule" element={<ProtectedRoute><SchedulePage /></ProtectedRoute>} />

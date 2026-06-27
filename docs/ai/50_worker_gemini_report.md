@@ -1,40 +1,35 @@
-# Worker Report — SOT-1311 手動登録削除、登録一覧
+# Worker Report — SOT-1312 データ画面の削除
 
 ## Fallback Disclosure (audit sink)
-- 非応答ワーカー: Gemini CLI（実装）/ Codex CLI（検証）の両方
-- 検出した失敗モード:
-  - Gemini: `IneligibleTierError`（free-tier 廃止）→ run_gemini.sh exit 75（WORKER_NONRESPONSE）
-  - Codex: usage-limit cooldown → run_codex.sh exit 75
-- 対応: Worker Non-Response Fallback Policy に基づき、Claude Code が実装・検証を直接実施した。
-  Quality Gate は通常どおり適用。
+Both workers were non-responsive, so Claude Code performed implementation directly per the Worker Non-Response Fallback Policy:
+- Gemini CLI: non-responsive — `run_gemini.sh` exited `75` (IneligibleTierError: free-tier no longer supported for Gemini Code Assist for individuals; CLI crash exit 1 → WORKER_NONRESPONSE).
+- Codex CLI: non-responsive — `run_codex.sh` exited `75` (usage-limit cooldown active) during the initial task check.
+All Quality Gates apply identically. This disclosure is NOT posted to Linear (Linear receives only the work result).
 
 ## Summary
-手動登録機能（手動入力フォームによる登録フロー）を完全に削除した。自動登録（`/create/auto`）と
-仮登録一覧（`/drafts`）、登録データ確認画面（データ一覧 `/data` → 詳細 `/data/:id`、タイトル+写真+削除）は維持。
-「登録データ確認画面」は既存機能で要件を満たすため新規実装は不要だった。
+Removed the "データ" menu entry and the data **list** screen (`DataListPage`, route `/data`) from the frontend, including its feature code and exclusive i18n keys. The data **detail** screen (`DataDetailPage`, route `/data/:id`) is intentionally kept because it is a shared destination linked from the Dashboard / Ask / Schedule / Tasks pages; only its back-navigation was re-pointed away from the now-removed list.
 
 ## Changed Files
-- `frontend/src/pages/InfoCreatePage.tsx` — 削除（手動入力フォーム）
-- `frontend/src/pages/DraftConfirmPage.tsx` — 削除（手動フローの一時登録確認）
-- `frontend/src/pages/RegisterConfirmPage.tsx` — 削除（手動フローの本登録確認）
-- `frontend/src/contexts/CreateFlowContext.tsx` — 削除（手動フロー専用 staged-state）
-- `frontend/src/contexts/createFlowContextValue.ts` — 削除
-- `frontend/src/contexts/useCreateFlow.ts` — 削除
-- `frontend/src/App.tsx` — 削除ページの import 撤去、CreateFlowProvider 撤去、`/create` 配下を
-  `auto` のみ残し index/`*` を `/create/auto` へ redirect
-- `frontend/src/components/RegisterMenu.tsx` — 「手動登録」項目を撤去（自動登録/仮登録の2項目, grid-cols-2）
-- `frontend/src/i18n/messages.ts` — `nav.createManual` / `create.manualTitle`（ja/en）を撤去
+- `frontend/src/App.tsx` — removed `DataListPage` import, `DataIcon` component, the `/data` NavLink menu entry, and the `/data` route. Kept `DataDetailPage` import and `/data/:id` route.
+- `frontend/src/pages/DataListPage.tsx` — deleted (whole file).
+- `frontend/src/pages/DataDetailPage.tsx` — removed unused `Link` import; back-link `<Link to="/data">` → `<button onClick={() => navigate(-1)}>`; post-delete `navigate('/data')` → `navigate(-1)` (returns to referring page).
+- `frontend/src/i18n/messages.ts` — removed `nav.records`, `records.title`, `records.empty` (ja+en); changed `records.back` label to a generic 戻る/Back. All other `records.*` keys (used by DataDetailPage) kept.
+- `frontend/e2e/scenarios.spec.ts` — S1 unauth check now hits `/data/1`; S2 asserts the `/data` menu is absent and traverses via `/tasks`; S3 verifies the detail page directly; S5 reaches detail via the Tasks menu, deletes, and asserts return to the referring list with the item gone. S8/S9 (Schedule/Tasks → `/data/2`) unchanged and still valid.
+- `frontend/e2e/smoke.spec.ts` — session-restore direct-access test now targets `/data/1` (valid protected route) instead of the removed `/data`.
 
 ## Commands Run
-（下記 Codex 検証セクション参照）
+- See Codex report `60_worker_codex_report.md` for the read-only task-check (inbound `/data` reference scan).
+- Quality gate (lint / build / e2e) results recorded below.
 
 ## Acceptance Criteria
-- [x] 手動登録機能を削除（フォーム＋確認フロー＋専用コンテキスト）
-- [x] 登録データ確認画面（タイトル一覧→クリックでタイトル+写真→削除）= 既存で充足
-- [x] 自動登録・仮登録は維持
+- [x] データ画面がメニューから削除される（NavLink + DataIcon 撤去）
+- [x] データ画面の機能が削除される（DataListPage / `/data` route / 一覧 i18n キー撤去）
+- [x] 他画面の `/data/:id` 依存（Dashboard/Ask/Schedule/Tasks）を壊さない（詳細ページ残置）
+- [x] 詳細ページの戻り先を `/data` 一覧から `navigate(-1)` に変更
 
 ## Risks
-- 削除ページへの参照残りはビルドで検出されるため Quality Gate で担保。
+- Backend `/info/` API left untouched (shared by other screens) — issue intends frontend menu/page removal only.
+- DataDetailPage back button now relies on history (`navigate(-1)`); reached only via in-app navigation from the surviving menus.
 
 ## Next Action
 READY_FOR_REVIEW
