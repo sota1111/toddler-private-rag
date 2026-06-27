@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from fastapi.responses import FileResponse, Response
-import datetime
 import os
 import logging
 from typing import Optional, Union
-from .. import schemas, storage, ocr, extraction
+from .. import schemas, storage, ocr, extraction, clock
 from ..privacy import redact_pii
 from ..repository import (
     AttachmentRepository,
@@ -82,7 +81,7 @@ def _promote_processing_draft(info_id, safe_text, structured):
         if state != "processing":
             return
 
-        today_iso = datetime.date.today().isoformat()
+        today_iso = clock.today().isoformat()
         fallback_title = f"写真から登録（{today_iso}）"
         try:
             fields = extraction.build_draft_fields(

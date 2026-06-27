@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from fastapi import Depends
 
-from . import models, schemas, database
+from . import models, schemas, database, clock
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +157,7 @@ class SqliteInfoRepository(InfoRepository):
 
     def list_today(self) -> List[models.NurseryInfo]:
         # 今日やること: 本日が日付/行事日/提出期限のいずれかに該当する情報 (SOT-1093)
-        today = datetime.date.today()
+        today = clock.today()
         return self.db.query(models.NurseryInfo).filter(
             _sqlite_registered_only(),
             or_(
@@ -168,7 +168,7 @@ class SqliteInfoRepository(InfoRepository):
         ).all()
 
     def list_tomorrow(self) -> List[models.NurseryInfo]:
-        tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+        tomorrow = clock.today() + datetime.timedelta(days=1)
         return self.db.query(models.NurseryInfo).filter(
             _sqlite_registered_only(),
             or_(
@@ -178,7 +178,7 @@ class SqliteInfoRepository(InfoRepository):
         ).all()
 
     def list_weekly(self) -> List[models.NurseryInfo]:
-        today = datetime.date.today()
+        today = clock.today()
         next_week = today + datetime.timedelta(days=7)
         return self.db.query(models.NurseryInfo).filter(
             _sqlite_registered_only(),
@@ -189,7 +189,7 @@ class SqliteInfoRepository(InfoRepository):
 
     def list_next_week(self) -> List[models.NurseryInfo]:
         # 来週の予定 (SOT-1296): 今週 weekly[today..+7] と重複しない翌7日間の行事。
-        today = datetime.date.today()
+        today = clock.today()
         next_week_start = today + datetime.timedelta(days=7)
         next_week_end = today + datetime.timedelta(days=14)
         return self.db.query(models.NurseryInfo).filter(
@@ -501,7 +501,7 @@ class FirestoreInfoRepository(InfoRepository):
 
     def list_today(self) -> List[FirestoreNurseryInfo]:
         # 今日やること: 本日が date/event_date/due_date のいずれかに該当 (SOT-1093)
-        today_str = _from_date(datetime.date.today())
+        today_str = _from_date(clock.today())
 
         results_dict = {}
         for field_name in ("date", "event_date", "due_date"):
@@ -518,7 +518,7 @@ class FirestoreInfoRepository(InfoRepository):
         return results
 
     def list_tomorrow(self) -> List[FirestoreNurseryInfo]:
-        tomorrow_date = datetime.date.today() + datetime.timedelta(days=1)
+        tomorrow_date = clock.today() + datetime.timedelta(days=1)
         tomorrow_str = _from_date(tomorrow_date)
         
         # event_date == tomorrow
@@ -543,7 +543,7 @@ class FirestoreInfoRepository(InfoRepository):
         return results
 
     def list_weekly(self) -> List[FirestoreNurseryInfo]:
-        today = datetime.date.today()
+        today = clock.today()
         today_str = _from_date(today)
         next_week_str = _from_date(today + datetime.timedelta(days=7))
 
@@ -570,7 +570,7 @@ class FirestoreInfoRepository(InfoRepository):
 
     def list_next_week(self) -> List[FirestoreNurseryInfo]:
         # 来週の予定 (SOT-1296): 今週 weekly[today..+7] と重複しない翌7日間の行事。
-        today = datetime.date.today()
+        today = clock.today()
         next_week_start_str = _from_date(today + datetime.timedelta(days=7))
         next_week_end_str = _from_date(today + datetime.timedelta(days=14))
 

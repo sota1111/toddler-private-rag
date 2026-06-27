@@ -17,7 +17,7 @@ import logging
 import re
 from typing import Dict, List, Optional
 
-from . import ai_client
+from . import ai_client, clock
 
 logger = logging.getLogger(__name__)
 
@@ -361,7 +361,7 @@ def normalize_date(raw: Optional[str]) -> Optional[str]:
         m = re.match(r"^(\d{1,2})月(\d{1,2})日$", s)
         if not m:
             return None
-        year = datetime.date.today().year
+        year = clock.today().year
         month, day = int(m.group(1)), int(m.group(2))
 
     try:

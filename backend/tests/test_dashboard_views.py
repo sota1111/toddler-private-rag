@@ -4,8 +4,6 @@
 - /info/pending: 全カテゴリ横断で status=="未対応" を返す（提出物に限定しない）
 """
 
-import datetime
-
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -16,6 +14,7 @@ from app.main import app
 from app.database import Base, get_db
 from app.routers.auth import get_current_user
 from app import database
+from app import clock
 
 SQLALCHEMY_DATABASE_URL = "sqlite://"
 engine = create_engine(
@@ -56,7 +55,7 @@ def _create(**kwargs):
 
 
 def test_today_includes_due_event_and_date_today():
-    today = datetime.date.today().isoformat()
+    today = clock.today().isoformat()
     _create(title="due-today", info_type="提出物", due_date=today)
     _create(title="event-today", info_type="行事", event_date=today)
     _create(title="date-today", info_type="持ち物", date=today)
