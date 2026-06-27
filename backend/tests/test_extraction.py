@@ -97,3 +97,27 @@ def test_organize_content_no_categories_returns_body_only():
     organized = extraction.organize_content(raw, categories={k: [] for k in extraction.CATEGORY_KEYS})
     assert organized == "おしらせ\n本文です"
     assert "【" not in organized
+
+
+# --- build_task_drafts (SOT-1307) ---
+# テスト環境では Gemini 非利用なので、タスク分割は単一 draft へフォールバックする（決定的）。
+
+_TASK_DRAFT_KEYS = {"title", "info_type", "content", "items", "date", "event_date", "categories"}
+
+
+def test_build_task_drafts_falls_back_to_single_draft_offline():
+    drafts = extraction.build_task_drafts(SAMPLE)
+    # オフライン(LLM不可)では1件にフォールバックする（後方互換）
+    assert isinstance(drafts, list)
+    assert len(drafts) == 1
+    draft = drafts[0]
+    # build_draft_fields と同形のキー集合 ＋ event_date を必ず持つ
+    assert _TASK_DRAFT_KEYS.issubset(set(draft.keys()))
+    assert "event_date" in draft
+    assert draft["info_type"] in extraction.INFO_TYPES
+
+
+def test_build_task_drafts_empty_text_is_safe():
+    drafts = extraction.build_task_drafts("")
+    assert len(drafts) == 1
+    assert "event_date" in drafts[0]
