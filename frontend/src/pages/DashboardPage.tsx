@@ -25,7 +25,7 @@ const DashboardSection: React.FC<{
 }> = ({ title, items, isLoading, renderItem, emoji, accentClass }) => {
   const { t } = useI18n();
   return (
-    <div className="bg-surface rounded-2xl shadow-card overflow-hidden mb-6">
+    <div className="bg-surface rounded-2xl shadow-card overflow-hidden mb-[1.125rem]">
       <div className={`${accentClass} flex items-center gap-2 px-4 py-3 font-bold`}>
         <span aria-hidden className="text-lg">{emoji}</span>
         <span>{title}</span>
@@ -123,7 +123,7 @@ const DashboardPage: React.FC = () => {
 
       <ProactiveReminders />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-[1.125rem]">
         <DashboardSection
           title={t('dashboard.today')}
           items={todayQuery.data || []}
