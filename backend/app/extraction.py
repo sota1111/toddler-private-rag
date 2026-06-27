@@ -499,13 +499,14 @@ def translate_text(text: str, language: str = "ja") -> str:
         client = ai_client.get_genai_client()
         model = ai_client.get_model_name()
         prompt = (
-            f"以下のテキストを{language_name}に翻訳してください。"
-            "内容・意味・構成（改行や順序）はそのまま保ち、言語だけを変換します。"
-            "要約・並べ替え・情報の追加や削除は一切しないでください。"
-            f"すでに{language_name}で書かれている場合はそのまま出力してください。"
-            "翻訳結果のテキストのみを出力し、前置きや説明・引用符は付けないでください。\n\n"
-            f"# テキスト\n{text}\n\n"
-            f"# {language_name}訳"
+            f"Translate the following text into {language_name}. "
+            "Preserve the meaning, content, and structure (line breaks and order) exactly; "
+            "change only the language. "
+            "Do not summarize, reorder, add, or remove any information. "
+            f"If the text is already written in {language_name}, output it unchanged. "
+            "Output only the translated text, with no preamble, explanation, or surrounding quotes.\n\n"
+            f"# Text\n{text}\n\n"
+            f"# Translation ({language_name})"
         )
         cfg = ai_client.default_generate_config(max_output_tokens=4096)
 
@@ -534,21 +535,22 @@ def _llm_tasks(raw_text: str, language: str = "ja") -> List[dict]:
     model = ai_client.get_model_name()
     language_name = _LANGUAGE_NAMES.get(language, _LANGUAGE_NAMES["ja"])
     prompt = (
-        "あなたは保育園のお知らせから、保護者が対応すべきタスク(行動項目・予定)を抽出するアシスタントです。"
-        "以下の本文を、タスクごとに分割してJSON配列のみで出力してください。"
-        "1つの行動・予定・締切につき1要素にします。該当が無ければ空配列 [] を返してください。\n"
-        "各要素の形式:\n"
-        '{"title":"20文字程度の短い見出し",'
-        '"date":"予定/締切日。分かれば M月D日 または YYYY-MM-DD。無ければ空文字",'
-        '"detail":"そのタスクの内容(本文)",'
-        '"category":"submissions|belongings|deadlines|events|notes|other のいずれか"}\n'
-        "原文に無い情報を推測・追加しないでください。\n"
-        f"title と detail は必ず {language_name} で書いてください（category の値は指定の英語コードのまま）。\n\n"
-        f"# 本文\n{raw_text}\n\n"
-        "# 出力例\n"
+        "You are an assistant that extracts the tasks (action items / scheduled events / deadlines) "
+        "a parent must handle from a nursery-school notice. "
+        "Split the body below into individual tasks and output ONLY a JSON array. "
+        "Use one element per action, event, or deadline. If none apply, return an empty array [].\n"
+        "Each element has this shape:\n"
+        '{"title":"a short heading of about 20 characters",'
+        '"date":"the scheduled/due date if known, as M月D日 or YYYY-MM-DD; empty string if unknown",'
+        '"detail":"the content (body) of that task",'
+        '"category":"one of submissions|belongings|deadlines|events|notes|other"}\n'
+        "Do not infer or add any information that is not present in the source text.\n"
+        f"Write title and detail in {language_name} (keep the category value as the specified English code).\n\n"
+        f"# Body\n{raw_text}\n\n"
+        "# Example output\n"
         '[{"title":"運動会","date":"5月10日","detail":"5月10日に運動会を開催します","category":"events"},'
         '{"title":"健康調査票の提出","date":"5月1日","detail":"申込書は5月1日までにご提出ください","category":"submissions"}]\n\n'
-        "# 出力(JSON配列のみ)"
+        "# Output (JSON array only)"
     )
     cfg = ai_client.default_generate_config()
 
