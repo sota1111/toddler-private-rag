@@ -114,7 +114,7 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
         try:
             # 写真+タイトルの登録レコード: 全体タイトル/種別/本文を作り、event_date は持たせない。
             overall = extraction.build_draft_fields(
-                safe_text or "", detected_dates, detected_items
+                safe_text or "", detected_dates, detected_items, language=language
             )
             info_repo.update(
                 info_id,
