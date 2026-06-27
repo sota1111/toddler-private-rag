@@ -22,9 +22,6 @@ test.describe('toddler-private-rag シナリオ', () => {
     await page.locator('nav a[href="/data"]').first().click()
     await expect(page).toHaveURL(/\/data$/)
 
-    await page.locator('nav a[href="/memo"]').first().click()
-    await expect(page).toHaveURL(/\/memo/)
-
     await page.locator('nav a[href="/create/auto"]').first().click()
     await expect(page).toHaveURL(/\/create\/auto/)
     await expect(page.locator('input[type="file"]')).toBeAttached()

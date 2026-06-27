@@ -20,7 +20,6 @@ import InfoHubPage from './pages/InfoHubPage';
 import DraftsPage from './pages/DraftsPage';
 import DataListPage from './pages/DataListPage';
 import DataDetailPage from './pages/DataDetailPage';
-import MemoPage from './pages/MemoPage';
 import SchedulePage from './pages/SchedulePage';
 import { CreateFlowProvider } from './contexts/CreateFlowContext';
 
@@ -48,9 +47,6 @@ const InfoIcon = () => (
 );
 const CreateIcon = () => (
   <svg {...navIconProps}><circle cx="12" cy="12" r="9" /><path d="M12 8v8" /><path d="M8 12h8" /></svg>
-);
-const MemoIcon = () => (
-  <svg {...navIconProps}><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6" /><path d="M9 13l2 2 4-4" /></svg>
 );
 const DataIcon = () => (
   <svg {...navIconProps}><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>
@@ -153,7 +149,6 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 >
                   {t('nav.create')}
                 </NavLink>
-                <NavLink to="/memo" icon={<MemoIcon />}>{t('nav.memo')}</NavLink>
                 <NavLink to="/schedule" icon={<ScheduleIcon />}>{t('nav.schedule')}</NavLink>
               </div>
             </div>
@@ -185,7 +180,6 @@ const App: React.FC = () => {
                 <Route path="/data" element={<ProtectedRoute><DataListPage /></ProtectedRoute>} />
                 <Route path="/data/:id" element={<ProtectedRoute><DataDetailPage /></ProtectedRoute>} />
                 <Route path="/drafts" element={<ProtectedRoute><DraftsPage /></ProtectedRoute>} />
-                <Route path="/memo" element={<ProtectedRoute><MemoPage /></ProtectedRoute>} />
                 <Route path="/schedule" element={<ProtectedRoute><SchedulePage /></ProtectedRoute>} />
                 <Route path="/ask" element={<Navigate to="/info?tab=ask" replace />} />
                 <Route path="/search" element={<Navigate to="/info?tab=search" replace />} />

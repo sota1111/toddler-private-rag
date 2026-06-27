@@ -16,7 +16,6 @@ export const messages: Record<Lang, Messages> = {
     'nav.createAuto': '自動登録',
     'nav.drafts': '仮登録',
     'nav.records': 'データ',
-    'nav.memo': 'メモ',
     'nav.schedule': '予定',
     'nav.logout': 'ログアウト',
 
@@ -29,13 +28,6 @@ export const messages: Record<Lang, Messages> = {
     'schedule.clearFilter': 'すべての予定を表示',
     'schedule.filteredBy': '選択中の日付: ',
 
-    // memo
-    'memo.title': 'メモ',
-    'memo.desc': '自由にメモを記入して登録できます。',
-    'memo.placeholder': 'メモを入力...',
-    'memo.register': '登録',
-    'memo.empty': 'メモはまだありません。',
-    'memo.delete': '削除',
     'role.label': '表示モード',
     'role.admin': '管理者',
     'role.user': 'ユーザー',
@@ -292,7 +284,6 @@ export const messages: Record<Lang, Messages> = {
     'nav.createAuto': 'Auto',
     'nav.drafts': 'Drafts',
     'nav.records': 'Data',
-    'nav.memo': 'Memo',
     'nav.schedule': 'Schedule',
     'nav.logout': 'Log out',
 
@@ -305,13 +296,6 @@ export const messages: Record<Lang, Messages> = {
     'schedule.clearFilter': 'Show all schedule items',
     'schedule.filteredBy': 'Selected date: ',
 
-    // memo
-    'memo.title': 'Memo',
-    'memo.desc': 'Write and save free-form memos.',
-    'memo.placeholder': 'Write a memo...',
-    'memo.register': 'Save',
-    'memo.empty': 'No memos yet.',
-    'memo.delete': 'Delete',
     'role.label': 'Display mode',
     'role.admin': 'Admin',
     'role.user': 'User',
