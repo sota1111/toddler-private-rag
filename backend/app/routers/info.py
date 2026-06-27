@@ -4,7 +4,7 @@ import logging
 import os
 import tempfile
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File
 from typing import List, Optional, Union
 from .. import schemas, storage, ocr, tagging, extraction, reminders
 from ..privacy import redact_pii
@@ -12,6 +12,7 @@ from ..repository import InfoRepository, get_info_repository
 from ..routers.auth import get_current_user
 from ..rag.service import get_rag_service
 from ..rag.hybrid import hybrid_search
+from ..rag.indexing import index_info_id
 
 logger = logging.getLogger(__name__)
 
@@ -210,8 +211,11 @@ async def extract_info_draft(
 
 
 @router.post("/", response_model=schemas.NurseryInfoResponse)
-def create_info(info: schemas.NurseryInfoCreate, repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
-    return repo.create(info)
+def create_info(info: schemas.NurseryInfoCreate, background_tasks: BackgroundTasks, repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
+    created = repo.create(info)
+    # 登録時にベクトル化して永続化する (SOT-1294)。best-effort・background でリクエストを遅延させない。
+    background_tasks.add_task(index_info_id, getattr(created, "id", None))
+    return created
 
 @router.get("/today", response_model=List[schemas.NurseryInfoResponse])
 def get_today_info(repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
@@ -295,18 +299,22 @@ def get_info(id: Union[int, str], repo: InfoRepository = Depends(get_info_reposi
     return db_info
 
 @router.put("/{id}", response_model=schemas.NurseryInfoResponse)
-def update_info(id: Union[int, str], info: schemas.NurseryInfoUpdate, repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
+def update_info(id: Union[int, str], info: schemas.NurseryInfoUpdate, background_tasks: BackgroundTasks, repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
     db_info = repo.update(id, info)
     if db_info is None:
         raise HTTPException(status_code=404, detail="Info not found")
+    # 内容更新時もベクトルを作り直して永続化する (SOT-1294)。
+    background_tasks.add_task(index_info_id, id)
     return db_info
 
 # 本登録 (SOT-1113): 仮登録(draft)を registered に確定する。
 @router.post("/{id}/finalize", response_model=schemas.NurseryInfoResponse)
-def finalize_info(id: Union[int, str], repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
+def finalize_info(id: Union[int, str], background_tasks: BackgroundTasks, repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
     db_info = repo.finalize(id)
     if db_info is None:
         raise HTTPException(status_code=404, detail="Info not found")
+    # 本登録確定時にベクトルを永続化する (SOT-1294)。
+    background_tasks.add_task(index_info_id, id)
     return db_info
 
 

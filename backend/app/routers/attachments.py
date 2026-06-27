@@ -108,6 +108,15 @@ def _promote_processing_draft(info_id, safe_text, structured):
             )
 
         info_repo.update(info_id, update)
+
+        # draft 昇格で content が確定したので、ここでベクトル化して永続化する (SOT-1294)。
+        # best-effort: 失敗しても昇格処理は成功とみなす。
+        try:
+            from ..rag.indexing import index_info_id
+
+            index_info_id(info_id)
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning(f"RAG index after draft promote failed for info {info_id}: {e}")
     except Exception as e:
         logger.error(f"Failed to promote processing draft for info {info_id}: {e}")
     finally:

@@ -21,8 +21,14 @@ from . import ai_client
 
 logger = logging.getLogger(__name__)
 
-# スキーマと一致させる5カテゴリのキー
+# スキーマと一致させる5カテゴリのキー（LLM抽出の対象）
 CATEGORY_KEYS = ["submissions", "belongings", "deadlines", "events", "notes"]
+
+# その他（どのカテゴリにも該当しない事項。RAGから漏らさないための受け皿 SOT-1294）
+OTHER_KEY = "other"
+
+# 構造化content（RAG対象兼表示用）に出力する全カテゴリ。5カテゴリ＋その他。
+ALL_CONTENT_KEYS = CATEGORY_KEYS + [OTHER_KEY]
 
 # フロント (InfoCreatePage) の選択肢と一致させる種別一覧
 INFO_TYPES = ["資料", "掲示", "行事", "持ち物", "提出物", "お知らせ", "給食", "休園変更"]
@@ -34,6 +40,7 @@ CATEGORY_LABELS = {
     "deadlines": "締切",
     "events": "行事予定",
     "notes": "注意事項",
+    "other": "その他",
 }
 
 # 各カテゴリの判定キーワード（行単位のヒューリスティックで使用）
@@ -54,8 +61,12 @@ def _clean_line(line: str) -> str:
 
 
 def _heuristic_categories(raw_text: str) -> Dict[str, List[str]]:
-    """本文を行単位で走査し、キーワードで5カテゴリに振り分ける（決定的）。"""
-    result: Dict[str, List[str]] = {k: [] for k in CATEGORY_KEYS}
+    """本文を行単位で走査し、キーワードで5カテゴリ＋その他に振り分ける（決定的）。
+
+    どのキーワード／セクション文脈にも当てはまらない非空行は ``other``（その他）に収容し、
+    RAG対象の構造化contentから漏れないようにする (SOT-1294)。返り値は常に6キーを持つ。
+    """
+    result: Dict[str, List[str]] = {k: [] for k in ALL_CONTENT_KEYS}
     if not raw_text:
         return result
 
@@ -89,6 +100,9 @@ def _heuristic_categories(raw_text: str) -> Dict[str, List[str]]:
             bucket = current_section
         elif has_date:
             bucket = "events"
+        else:
+            # どのカテゴリにも該当しない行は「その他」へ（RAGから漏らさない SOT-1294）
+            bucket = OTHER_KEY
 
         if bucket and line not in result[bucket]:
             result[bucket].append(line)
@@ -123,11 +137,14 @@ def _llm_categories(raw_text: str) -> dict:
         "- belongings: 持ち物（当日持参・用意するもの）\n"
         "- deadlines: 締切（締切・期限・〆切。可能なら日付を含める）\n"
         "- events: 行事予定（運動会・遠足等の行事。可能なら日付を含める）\n"
-        "- notes: 注意事項（注意・お願い・禁止事項など）\n\n"
+        "- notes: 注意事項（注意・お願い・禁止事項など）\n"
+        "- other: その他（上記5カテゴリのどれにも当てはまらないが本文に含まれる事項。"
+        "情報を漏らさないため、分類できない内容は必ずここに入れる）\n\n"
         f"# 本文\n{raw_text}\n\n"
         '# 出力例\n{"title":"プール開きのお知らせ","submissions":["健康調査票"],'
         '"belongings":["水着","タオル"],"deadlines":["5月1日まで"],'
-        '"events":["5月10日 運動会"],"notes":["車での来園は禁止"]}\n\n'
+        '"events":["5月10日 運動会"],"notes":["車での来園は禁止"],'
+        '"other":["駐車場は北側を利用"]}\n\n'
         "# 出力(JSONのみ)"
     )
     cfg = ai_client.default_generate_config()
@@ -143,8 +160,8 @@ def _llm_categories(raw_text: str) -> dict:
     text = (getattr(response, "text", "") or "").strip()
     data = _extract_json(text)
 
-    out: dict = {k: [] for k in CATEGORY_KEYS}
-    for key in CATEGORY_KEYS:
+    out: dict = {k: [] for k in ALL_CONTENT_KEYS}
+    for key in ALL_CONTENT_KEYS:
         val = data.get(key)
         if isinstance(val, list):
             out[key] = [str(v).strip()[:120] for v in val if str(v).strip()][:12]
@@ -154,10 +171,10 @@ def _llm_categories(raw_text: str) -> dict:
 
 
 def extract_categories(raw_text: str) -> Dict[str, List[str]]:
-    """5カテゴリ（提出物/持ち物/締切/行事予定/注意事項）を抽出して返す。
+    """5カテゴリ＋その他（提出物/持ち物/締切/行事予定/注意事項/その他）を抽出して返す。
 
     LLM が利用可能なら LLM 結果を優先し、空カテゴリはヒューリスティックで補完する。
-    LLM が使えない/失敗した場合はヒューリスティックのみを返す。常に5キーを持つ。
+    LLM が使えない/失敗した場合はヒューリスティックのみを返す。常に6キー（5＋other）を持つ (SOT-1294)。
     """
     base = _heuristic_categories(raw_text)
 
@@ -170,9 +187,9 @@ def extract_categories(raw_text: str) -> Dict[str, List[str]]:
         logger.warning("LLM category extraction failed, using heuristic: %s", e)
         return base
 
-    # LLM 結果を優先しつつ、空カテゴリはヒューリスティックで補う
+    # LLM 結果を優先しつつ、空カテゴリはヒューリスティックで補う（other含む）
     merged: Dict[str, List[str]] = {}
-    for key in CATEGORY_KEYS:
+    for key in ALL_CONTENT_KEYS:
         merged[key] = ai.get(key) or base.get(key, [])
     return merged
 
@@ -185,7 +202,7 @@ def extract_titled_categories(raw_text: str) -> dict:
     LLM が使えない/失敗した場合は ``title=""`` ＋ ヒューリスティック5カテゴリを返す（例外は投げない）。
     """
     base = _heuristic_categories(raw_text)
-    result: dict = {"title": "", **{k: base.get(k, []) for k in CATEGORY_KEYS}}
+    result: dict = {"title": "", **{k: base.get(k, []) for k in ALL_CONTENT_KEYS}}
 
     if not raw_text or not raw_text.strip() or not ai_client.gemini_available():
         return result
@@ -197,7 +214,7 @@ def extract_titled_categories(raw_text: str) -> dict:
         return result
 
     result["title"] = ai.get("title") or ""
-    for key in CATEGORY_KEYS:
+    for key in ALL_CONTENT_KEYS:
         result[key] = ai.get(key) or base.get(key, [])
     return result
 
@@ -235,9 +252,12 @@ def _heuristic_organize(raw_text: str) -> str:
 
 
 def _format_category_section(categories: Dict[str, List[str]]) -> str:
-    """空でないカテゴリのみ、見出し付き箇条書きのセクション文字列を組み立てる。"""
+    """空でないカテゴリのみ、見出し付き箇条書きのセクション文字列を組み立てる。
+
+    5カテゴリに加え「その他」(SOT-1294) も末尾に出力し、未分類の事項を RAG content に残す。
+    """
     parts: List[str] = []
-    for key in CATEGORY_KEYS:
+    for key in ALL_CONTENT_KEYS:
         values = [str(v).strip() for v in (categories.get(key) or []) if str(v).strip()]
         if not values:
             continue
@@ -385,7 +405,7 @@ def build_draft_fields(
     - content: 整形済みカテゴリの構造化テキスト(全カテゴリ空なら safe_text にフォールバック)。RAG対象。
     - items: 検出した持ち物を改行連結("")
     - date: 検出日付の最初に解釈できたISO("")
-    - categories: ExtractedCategories 構築用 dict(title + 5カテゴリ)
+    - categories: ExtractedCategories 構築用 dict(title + 5カテゴリ + その他)
     """
     detected_dates = detected_dates or []
     detected_items = detected_items or []
@@ -411,7 +431,7 @@ def build_draft_fields(
         enriched = {"title": ""}
 
     title = (enriched.get("title") or "").strip()[:40] or heuristic_title
-    category_dict = {k: enriched.get(k, []) for k in CATEGORY_KEYS}
+    category_dict = {k: enriched.get(k, []) for k in ALL_CONTENT_KEYS}
 
     structured = build_structured_content(category_dict)
     if structured:
