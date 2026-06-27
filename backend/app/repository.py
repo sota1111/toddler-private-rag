@@ -42,6 +42,10 @@ class InfoRepository(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def list_next_week(self) -> List[Any]:
+        pass
+
+    @abc.abstractmethod
     def list_pending(self) -> List[Any]:
         pass
 
@@ -181,6 +185,18 @@ class SqliteInfoRepository(InfoRepository):
             models.NurseryInfo.info_type == "行事",
             models.NurseryInfo.event_date >= today,
             models.NurseryInfo.event_date <= next_week
+        ).all()
+
+    def list_next_week(self) -> List[models.NurseryInfo]:
+        # 来週の予定 (SOT-1296): 今週 weekly[today..+7] と重複しない翌7日間の行事。
+        today = datetime.date.today()
+        next_week_start = today + datetime.timedelta(days=7)
+        next_week_end = today + datetime.timedelta(days=14)
+        return self.db.query(models.NurseryInfo).filter(
+            _sqlite_registered_only(),
+            models.NurseryInfo.info_type == "行事",
+            models.NurseryInfo.event_date > next_week_start,
+            models.NurseryInfo.event_date <= next_week_end
         ).all()
 
     def list_pending(self) -> List[models.NurseryInfo]:
@@ -546,6 +562,32 @@ class FirestoreInfoRepository(InfoRepository):
                 continue
             event_date = data.get("event_date")
             if not event_date or not (today_str <= event_date <= next_week_str):
+                continue
+            att_refs = self.db.collection("attachments").where("info_id", "==", doc.id).stream()
+            attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
+            results.append(_info_doc_to_obj(doc.id, data, attachments))
+        return results
+
+    def list_next_week(self) -> List[FirestoreNurseryInfo]:
+        # 来週の予定 (SOT-1296): 今週 weekly[today..+7] と重複しない翌7日間の行事。
+        today = datetime.date.today()
+        next_week_start_str = _from_date(today + datetime.timedelta(days=7))
+        next_week_end_str = _from_date(today + datetime.timedelta(days=14))
+
+        # SOT-1285 の教訓: 等価条件(info_type)のみで取得し、event_date の範囲は
+        # アプリ側でフィルタする(複合インデックス未作成による読み込み固着を回避)。
+        # event_date は ISO 文字列 YYYY-MM-DD なので辞書順=日付順。
+        docs = self.db.collection("nursery_info") \
+            .where("info_type", "==", "行事") \
+            .stream()
+
+        results = []
+        for doc in docs:
+            data = doc.to_dict()
+            if not _is_registered_data(data):  # 仮登録は除外 (SOT-1113)
+                continue
+            event_date = data.get("event_date")
+            if not event_date or not (next_week_start_str < event_date <= next_week_end_str):
                 continue
             att_refs = self.db.collection("attachments").where("info_id", "==", doc.id).stream()
             attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]

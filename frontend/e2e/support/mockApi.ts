@@ -132,7 +132,7 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
       return json(route, 200, store.filter(r => r.registration_state === 'draft'))
     }
     if (path === '/info/reminders') return json(route, 200, { items: [] })
-    if (['/info/today', '/info/tomorrow', '/info/weekly', '/info/pending'].includes(path)) {
+    if (['/info/today', '/info/tomorrow', '/info/weekly', '/info/next-week', '/info/pending'].includes(path)) {
       return json(route, 200, [])
     }
     if (path === '/info/extract' && method === 'POST') {

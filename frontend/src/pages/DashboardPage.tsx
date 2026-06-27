@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getToday, getTomorrow, getWeekly, getPending, getReminders } from '../api';
+import { getToday, getTomorrow, getWeekly, getNextWeek, getReminders } from '../api';
 import type { NurseryInfo, ReminderItem, ReminderUrgency } from '../types';
 import { useI18n } from '../i18n/useI18n';
 
@@ -115,7 +115,7 @@ const DashboardPage: React.FC = () => {
   const todayQuery = useQuery({ queryKey: ['today'], queryFn: getToday });
   const tomorrowQuery = useQuery({ queryKey: ['tomorrow'], queryFn: getTomorrow });
   const weeklyQuery = useQuery({ queryKey: ['weekly'], queryFn: getWeekly });
-  const pendingQuery = useQuery({ queryKey: ['pending'], queryFn: getPending });
+  const nextWeekQuery = useQuery({ queryKey: ['nextWeek'], queryFn: getNextWeek });
 
   return (
     <div className="w-full lg:max-w-6xl lg:mx-auto">
@@ -175,19 +175,16 @@ const DashboardPage: React.FC = () => {
         />
 
         <DashboardSection
-          title={t('dashboard.pending')}
-          items={pendingQuery.data || []}
-          isLoading={pendingQuery.isLoading}
-          emoji="📮"
-          accentClass="bg-rose-50 text-rose-700"
+          title={t('dashboard.nextWeek')}
+          items={nextWeekQuery.data || []}
+          isLoading={nextWeekQuery.isLoading}
+          emoji="🗓️"
+          accentClass="bg-indigo-50 text-indigo-700"
           renderItem={(item) => (
             <div className="flex justify-between items-center">
-              <div>
-                <p className="font-medium text-foreground">{item.title}</p>
-                {item.due_date && <p className="text-xs text-red-600 font-semibold">{t('dashboard.dueLabel')}{item.due_date}</p>}
-              </div>
-              <span className="text-xs bg-rose-100 text-rose-800 px-2 py-1 rounded-full">
-                {item.priority}
+              <span className="font-medium text-foreground">{item.title}</span>
+              <span className="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">
+                {item.event_date}
               </span>
             </div>
           )}

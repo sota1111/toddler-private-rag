@@ -98,6 +98,11 @@ export const getWeekly = async (): Promise<NurseryInfo[]> => {
   return response.data;
 };
 
+export const getNextWeek = async (): Promise<NurseryInfo[]> => {
+  const response = await api.get('/info/next-week');
+  return response.data;
+};
+
 export const getPending = async (): Promise<NurseryInfo[]> => {
   const response = await api.get('/info/pending');
   return response.data;

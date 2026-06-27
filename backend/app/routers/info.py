@@ -229,6 +229,10 @@ def get_tomorrow_info(repo: InfoRepository = Depends(get_info_repository), curre
 def get_weekly_info(repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
     return repo.list_weekly()
 
+@router.get("/next-week", response_model=List[schemas.NurseryInfoResponse])
+def get_next_week_info(repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
+    return repo.list_next_week()
+
 @router.get("/pending", response_model=List[schemas.NurseryInfoResponse])
 def get_pending_info(repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
     return repo.list_pending()
