@@ -185,4 +185,25 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page.getByLabel('標準時間（タイムゾーン）')).toHaveValue('America/New_York')
     await expect(page.getByLabel('子どもの名前')).toHaveValue('たろう')
   })
+
+  test('S11: 登録一覧メニュー（仮登録の右）から本登録タイトル一覧を開き、タイトルクリックで詳細(タイトル+写真)へ遷移できる (SOT-1311)', async ({ page }) => {
+    await installApiMocks(page, { authed: true })
+    await login(page)
+
+    // 登録メニューは登録ページ上で表示されるため、まず自動登録へ遷移してから「登録一覧」を開く
+    await page.locator('nav a[href="/create/auto"]').first().click()
+    await expect(page).toHaveURL(/\/create\/auto/)
+    await page.locator('a[href="/registered"]').first().click()
+    await expect(page).toHaveURL(/\/registered/)
+    await expect(page.getByRole('heading', { name: '登録一覧' })).toBeVisible()
+
+    // 本登録データのタイトルがリンクとして並ぶ
+    await expect(page.getByRole('link', { name: /4月の給食メニュー/ })).toBeVisible()
+
+    // タイトルをクリックすると詳細でタイトル+写真が表示される
+    await page.getByRole('link', { name: /4月の給食メニュー/ }).click()
+    await expect(page).toHaveURL(/\/data\/1/)
+    await expect(page.getByRole('heading', { name: '4月の給食メニュー' })).toBeVisible()
+    await expect(page.locator('img').first()).toBeVisible()
+  })
 })

@@ -16,6 +16,7 @@ import DashboardPage from './pages/DashboardPage';
 import AutoRegisterPage from './pages/AutoRegisterPage';
 import InfoHubPage from './pages/InfoHubPage';
 import DraftsPage from './pages/DraftsPage';
+import RegisteredListPage from './pages/RegisteredListPage';
 import DataDetailPage from './pages/DataDetailPage';
 import SchedulePage from './pages/SchedulePage';
 import TasksPage from './pages/TasksPage';
@@ -176,6 +177,7 @@ const App: React.FC = () => {
                 <Route path="/info" element={<ProtectedRoute><InfoHubPage /></ProtectedRoute>} />
                 <Route path="/data/:id" element={<ProtectedRoute><DataDetailPage /></ProtectedRoute>} />
                 <Route path="/drafts" element={<ProtectedRoute><DraftsPage /></ProtectedRoute>} />
+                <Route path="/registered" element={<ProtectedRoute><RegisteredListPage /></ProtectedRoute>} />
                 <Route path="/schedule" element={<ProtectedRoute><SchedulePage /></ProtectedRoute>} />
                 <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
