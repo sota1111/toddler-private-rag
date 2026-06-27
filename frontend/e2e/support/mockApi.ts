@@ -214,7 +214,19 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
         file_size: 2048,
         created_at: NOW,
       }
-      if (rec) rec.attachments = [...(rec.attachments ?? []), att]
+      if (rec) {
+        rec.attachments = [...(rec.attachments ?? []), att]
+        // SOT-1293: サーバ側で OCR→enrich→draft 昇格が行われるのを再現する。
+        // processing のレコードは写真添付をトリガーに enrich 済み draft へ昇格する。
+        if (rec.registration_state === 'processing') {
+          rec.registration_state = 'draft'
+          rec.title = rec.title || 'お知らせ_自動登録テスト'
+          rec.info_type = 'お知らせ'
+          rec.content = '7月の予定をお知らせします。プールが始まります。'
+          rec.items = '水着, タオル'
+          rec.updated_at = NOW
+        }
+      }
       return json(route, 200, att)
     }
     const idMatch = path.match(/^\/info\/(\d+)$/)

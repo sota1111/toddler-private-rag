@@ -1,15 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { extractInfoDraft, createInfo, updateInfo, uploadAttachment } from '../api';
+import { createInfo, uploadAttachment, getInfoById } from '../api';
 import type { NurseryInfo, NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import { compressImageFile } from '../utils/imageCompression';
-import { INFO_TYPES } from './infoFormOptions';
 import RegisterMenu from '../components/RegisterMenu';
 
 // 自動登録 = データ登録 (SOT-1052 / SOT-1113)
 // 写真を選ぶとOCRで内容を読み取り、仮登録(draft)として永続化する。
-// アップ完了後はその場で完了表示し、登録ページ(仮登録一覧)から本登録できる。
+// SOT-1293: enrich(JSON生成)→Firestore永続化→draft昇格はサーバ側で行う。ブラウザは
+// createInfo(processing)+写真アップのみを行い、以降はサーバ任せ（タブを閉じても仮登録に出る）。
+// 完了表示のため、サーバ側の draft 昇格をポーリングで待って結果を反映する。
 type Phase = 'idle' | 'confirm' | 'saving' | 'enriching' | 'done';
 
 const AutoRegisterPage: React.FC = () => {
@@ -80,11 +81,12 @@ const AutoRegisterPage: React.FC = () => {
   // 確認画面で「この写真で登録」を押したときに初めてアップロード・仮登録を開始する。
   const startUpload = async (file: File) => {
     // SOT-1289: このアップロードの世代を採番。以降の画面状態(setState)更新は、
-    // 自分が最新世代のときだけ反映する（保存処理 createInfo/uploadAttachment/
-    // updateInfo/extractInfoDraft 自体は全写真分そのまま実行する）。
+    // 自分が最新世代のときだけ反映する（保存処理 createInfo/uploadAttachment 自体は
+    // 全写真分そのまま実行する）。
     const seq = ++uploadSeqRef.current;
+    const isCurrent = () => uploadSeqRef.current === seq;
     const applyIfCurrent = (fn: () => void) => {
-      if (uploadSeqRef.current === seq) fn();
+      if (isCurrent()) fn();
     };
 
     // プレビューはここで破棄してよい（保存処理は圧縮後ファイルを使う）
@@ -99,7 +101,7 @@ const AutoRegisterPage: React.FC = () => {
     const processed = await compressImageFile(file);
 
     // SOT-1175: 「画像アップ完了をトリガーに画像変換と仮登録を始める」。
-    // 重い画像変換(OCR/AI抽出)を待たずに、まず最小限の仮登録(draft)と写真添付を保存する。
+    // 重い画像変換(OCR/AI抽出)を待たずに、まず最小限の仮登録(processing)と写真添付を保存する。
     let created: NurseryInfo;
     try {
       const initial: NurseryInfoCreate = {
@@ -114,14 +116,14 @@ const AutoRegisterPage: React.FC = () => {
         priority: '普通',
         tags: '',
         memo: '',
-        // SOT-1272: 文字起こし(enrich)が完了するまでは仮登録一覧に出さない。
-        // まず非表示の処理中状態(processing)で保存し、enrich 完了時に draft へ昇格する。
-        // 通常一覧/仮登録一覧の既存フィルタは draft/registered 以外を除外するため、
-        // processing のレコードはどこにも表示されない (SOT-1113)。
+        // SOT-1272/SOT-1293: enrich が完了するまでは仮登録一覧に出さない。
+        // まず非表示の処理中状態(processing)で保存する。サーバ側の OCR background task が
+        // enrich→draft 昇格まで行うため、ここで write を続ける必要はない。
         registration_state: 'processing',
       };
 
-      // 仮登録を保存し、写真を添付する（ここまで成功＝データは失われない）
+      // 仮登録を保存し、写真を添付する（ここまで成功＝データは失われない）。
+      // 写真アップロードがサーバ側 enrich→draft 昇格のトリガーになる。
       created = await createInfo(initial);
       await uploadAttachment(created.id, processed);
       applyIfCurrent(() => setSavedDraft(created));
@@ -134,60 +136,40 @@ const AutoRegisterPage: React.FC = () => {
       return;
     }
 
-    // SOT-1214: 文字起こしを整理して仮登録本文へ反映するまで「整理中」を表示し、
-    // 反映が完了してから完了カードを出す（完了時点で /drafts に本文が表示される）。
-    // 抽出/補完は best-effort: 失敗しても保存済みのドラフトは破棄せず、失敗をユーザーに伝える。
+    // SOT-1293: 以降の enrich(JSON生成)→Firestore永続化→draft昇格はサーバ側で進む。
+    // ブラウザはここで PUT/extract を一切行わない（二重昇格レース防止 & タブを閉じても登録される）。
+    // 完了表示のため registration_state==='draft' になるまでポーリングして結果を反映する。
+    // タイムアウトしてもサーバ側で永続化されるため、仮登録一覧には間もなく出る。
     applyIfCurrent(() => setPhase('enriching'));
-    // SOT-1241: 文字起こしが空/失敗のとき draft が「（タイトルなし）種別:資料」のまま
-    // 写真だけ残るのを防ぐ。識別できる仮タイトル（当日日付付き）を付与し手入力を促す。
-    const fallbackTitle = `${t('create.autoFallbackTitle')}（${new Date().toISOString().slice(0, 10)}）`;
+    const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+    const maxAttempts = 20; // 約2秒間隔 × 20 ≒ 40秒
+    let promoted = false;
     try {
-      const draft = await extractInfoDraft(processed);
-
-      // 文字起こし(OCR)で実テキストが得られたか。空なら補完せずフォールバック扱い。
-      const hasText = (draft.raw_text || '').trim().length > 0;
-      if (!hasText) {
-        // 文字起こしで何も得られなかった: 識別できる仮タイトルを付与し手入力を促す。
-        // SOT-1272: ここで処理完了なので draft へ昇格し、仮登録一覧に表示する。
-        const updated = await updateInfo(created.id, { title: fallbackTitle, registration_state: 'draft' });
-        applyIfCurrent(() => {
-          setSavedDraft((prev) => (prev && prev.id === updated.id ? updated : prev));
-          setEnrichFailed(true);
-        });
-      } else {
-        // 5カテゴリ抽出 (SOT-1092): 持ち物→items、注意事項→memo を補完プリフィル。
-        const cats = draft.categories;
-        const items = draft.items || (cats?.belongings?.length ? cats.belongings.join(', ') : '');
-        const memo = cats?.notes?.length ? cats.notes.join('\n') : '';
-
-        const enrichment: Partial<NurseryInfoCreate> = {
-          title: draft.title || fallbackTitle,
-          // 推定種別が選択肢に存在する場合のみ採用
-          info_type: INFO_TYPES.includes(draft.info_type) ? draft.info_type : '資料',
-          content: draft.content || '',
-          date: draft.date || '',
-          items,
-          memo,
-          // SOT-1272: enrich 完了。draft へ昇格して仮登録一覧に表示する。
-          registration_state: 'draft',
-        };
-
-        const updated = await updateInfo(created.id, enrichment);
-        // 補完後の内容に差し替える（別の写真を開始済みなら触らない）
-        applyIfCurrent(() => setSavedDraft((prev) => (prev && prev.id === updated.id ? updated : prev)));
+      for (let i = 0; i < maxAttempts; i++) {
+        if (!isCurrent()) return; // 別の写真が開始されたら古いポーリングは打ち切る
+        let latest: NurseryInfo | null = null;
+        try {
+          latest = await getInfoById(created.id);
+        } catch (e) {
+          // 取得失敗は一時的なものとして次の試行へ
+          console.warn('Polling draft status failed, retrying', e);
+        }
+        if (latest && latest.registration_state === 'draft') {
+          promoted = true;
+          const hasBody = !!(latest.content && latest.content.trim());
+          applyIfCurrent(() => {
+            setSavedDraft((prev) => (prev && prev.id === latest!.id ? latest! : prev));
+            // 本文が無い＝OCR/enrich で実テキストが得られず仮タイトルのみ (SOT-1241)
+            setEnrichFailed(!hasBody);
+          });
+          break;
+        }
+        await sleep(2000);
       }
-    } catch (error) {
-      // 抽出/補完は任意。失敗してもアップ済みのドラフトはそのまま使える。
-      // 失敗時も仮タイトルだけは付与して /drafts で識別できるようにする (SOT-1241)。
-      console.warn('Draft enrichment from OCR/AI failed (draft already saved)', error);
-      try {
-        // SOT-1272: 失敗しても処理は終わったので draft へ昇格し、仮登録一覧に表示する。
-        const updated = await updateInfo(created.id, { title: fallbackTitle, registration_state: 'draft' });
-        applyIfCurrent(() => setSavedDraft((prev) => (prev && prev.id === updated.id ? updated : prev)));
-      } catch (e2) {
-        console.warn('Fallback title update also failed', e2);
+      if (!promoted) {
+        // タイムアウト: サーバ側で処理継続中。仮登録一覧には間もなく出る。
+        applyIfCurrent(() => setEnrichFailed(false));
       }
-      applyIfCurrent(() => setEnrichFailed(true));
     } finally {
       applyIfCurrent(() => setPhase('done'));
     }

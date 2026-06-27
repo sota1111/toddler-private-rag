@@ -709,7 +709,17 @@ def get_attachment_repo_standalone() -> Any:
     """Helper for background tasks where Depends() cannot be used."""
     if get_database_type() == "firestore":
         return FirestoreAttachmentRepository()
-    
+
     # For SQLite, we need a session
     db = database.SessionLocal()
     return SqliteAttachmentRepository(db)
+
+
+def get_info_repo_standalone() -> Any:
+    """Helper for background tasks where Depends() cannot be used (SOT-1293)."""
+    if get_database_type() == "firestore":
+        return FirestoreInfoRepository()
+
+    # For SQLite, we need a session
+    db = database.SessionLocal()
+    return SqliteInfoRepository(db)

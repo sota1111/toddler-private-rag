@@ -1,11 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from fastapi.responses import FileResponse, Response
+import datetime
 import os
 import logging
-from typing import Union
-from .. import schemas, storage, ocr
+from typing import Optional, Union
+from .. import schemas, storage, ocr, extraction
 from ..privacy import redact_pii
-from ..repository import AttachmentRepository, get_attachment_repository, get_attachment_repo_standalone, SqliteAttachmentRepository
+from ..repository import (
+    AttachmentRepository,
+    get_attachment_repository,
+    get_attachment_repo_standalone,
+    get_info_repo_standalone,
+    SqliteAttachmentRepository,
+    SqliteInfoRepository,
+)
 from ..routers.auth import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -18,30 +26,95 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 ALLOWED_CONTENT_TYPES = ["image/*", "application/pdf"]
 
 async def process_ocr(
-    att_id: int, 
-    ocr_path: str, 
-    content_type: str, 
-    cleanup_local: bool = False
+    att_id: int,
+    ocr_path: str,
+    content_type: str,
+    cleanup_local: bool = False,
+    info_id: Optional[Union[int, str]] = None,
 ):
     repo = get_attachment_repo_standalone()
+    safe_text = ""
+    structured = None
+    ocr_ok = False
     try:
         ocr_text = ocr.extract_text(ocr_path, content_type)
-        # 構造化抽出を生成（将来的に detected_dates 等を活用可能にするため）
+        # 構造化抽出を生成（detected_dates / detected_items を enrich に活用する）
         structured = ocr.build_extraction(ocr_text)
-        
+
         # PIIをマスクしてから保存
         safe_text = redact_pii(structured.raw_text)
         repo.set_ocr_result(att_id, ocr_text=safe_text, ocr_status="done")
+        ocr_ok = True
     except Exception as e:
         logger.error(f"OCR failed for attachment {att_id}: {str(e)}")
         repo.set_ocr_result(att_id, ocr_text=None, ocr_status="failed")
     finally:
         if cleanup_local and os.path.exists(ocr_path):
             os.remove(ocr_path)
-        
+
         # Close session if SQLite
         if isinstance(repo, SqliteAttachmentRepository):
             repo.db.close()
+
+    # SOT-1293: 自動登録(processing)のレコードは、ブラウザ操作に依存せず、ここ(サーバ側)で
+    # enrich(JSON生成)→Firestore永続化→draft昇格まで完了させる。OCR失敗時もフォールバック
+    # タイトルで draft へ昇格し、写真付きで仮登録一覧に必ず出るようにする。
+    if info_id is not None:
+        _promote_processing_draft(
+            info_id,
+            safe_text if ocr_ok else "",
+            structured if ocr_ok else None,
+        )
+
+
+def _promote_processing_draft(info_id, safe_text, structured):
+    """processing のレコードを enrich してサーバ側で draft へ昇格する (SOT-1293)。
+
+    対象が `registration_state == 'processing'`（自動登録の番兵）のときだけ作用する。
+    通常の手動添付(registered)には一切作用しない。
+    """
+    info_repo = get_info_repo_standalone()
+    try:
+        info = info_repo.get(info_id)
+        if info is None:
+            return
+        state = getattr(info, "registration_state", None) or "registered"
+        if state != "processing":
+            return
+
+        today_iso = datetime.date.today().isoformat()
+        fallback_title = f"写真から登録（{today_iso}）"
+        try:
+            fields = extraction.build_draft_fields(
+                safe_text or "",
+                getattr(structured, "detected_dates", None) if structured else None,
+                getattr(structured, "detected_items", None) if structured else None,
+            )
+            has_text = bool((safe_text or "").strip())
+            update = schemas.NurseryInfoUpdate(
+                title=(fields["title"] if has_text else fallback_title),
+                info_type=fields["info_type"],
+                content=fields["content"],
+                items=(fields["items"] or None),
+                date=(fields["date"] or None),
+                registration_state="draft",
+            )
+        except Exception as e:  # graceful degradation: 必ず draft へ昇格させる
+            logger.warning(
+                f"Enrich failed for info {info_id}, promoting with fallback title: {e}"
+            )
+            update = schemas.NurseryInfoUpdate(
+                title=fallback_title, registration_state="draft"
+            )
+
+        info_repo.update(info_id, update)
+    except Exception as e:
+        logger.error(f"Failed to promote processing draft for info {info_id}: {e}")
+    finally:
+        if isinstance(info_repo, SqliteInfoRepository):
+            db = getattr(info_repo, "db", None)
+            if db is not None:
+                db.close()
 
 @router.post("/info/{info_id}/attachments", response_model=schemas.AttachmentResponse)
 async def upload_attachment(
@@ -99,11 +172,12 @@ async def upload_attachment(
     # If backend is GCS, ocr_path is a temp file that should be cleaned up
     cleanup_local = (backend.name == "gcs")
     background_tasks.add_task(
-        process_ocr, 
-        db_attachment.id, 
-        str(ocr_path), 
-        content_type, 
-        cleanup_local
+        process_ocr,
+        db_attachment.id,
+        str(ocr_path),
+        content_type,
+        cleanup_local,
+        info_id,
     )
 
     return db_attachment
