@@ -14,7 +14,7 @@ import RegisterMenu from '../components/RegisterMenu';
 type Phase = 'idle' | 'confirm' | 'saving' | 'enriching' | 'done';
 
 const AutoRegisterPage: React.FC = () => {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const navigate = useNavigate();
   const photoInputRef = useRef<HTMLInputElement>(null);
   // SOT-1289: 文字起こし整理中でも次の写真を追加できる。並行アップロード時、
@@ -125,7 +125,8 @@ const AutoRegisterPage: React.FC = () => {
       // 仮登録を保存し、写真を添付する（ここまで成功＝データは失われない）。
       // 写真アップロードがサーバ側 enrich→draft 昇格のトリガーになる。
       created = await createInfo(initial);
-      await uploadAttachment(created.id, processed);
+      // SOT-1315: 設定言語(lang)を渡し、文字起こし後のタスク登録をその言語で生成させる。
+      await uploadAttachment(created.id, processed, lang);
       applyIfCurrent(() => setSavedDraft(created));
     } catch (error) {
       console.error('Failed to save draft/photo on upload', error);

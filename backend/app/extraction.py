@@ -477,13 +477,19 @@ _CATEGORY_INFO_TYPE = {
 _MAX_TASKS = 8
 
 
-def _llm_tasks(raw_text: str) -> List[dict]:
+# SOT-1315: タスク登録の出力言語。設定画面の言語に合わせて title/detail を生成する。
+_LANGUAGE_NAMES = {"ja": "日本語", "en": "English"}
+
+
+def _llm_tasks(raw_text: str, language: str = "ja") -> List[dict]:
     """Gemini / Vertex AI で本文をタスク(行動項目)ごとに分割する。失敗時は例外。
 
     返り値は ``{title, date, detail, category}`` の dict のリスト。
+    ``language`` は生成する title/detail の出力言語（既定 ja）。
     """
     client = ai_client.get_genai_client()
     model = ai_client.get_model_name()
+    language_name = _LANGUAGE_NAMES.get(language, _LANGUAGE_NAMES["ja"])
     prompt = (
         "あなたは保育園のお知らせから、保護者が対応すべきタスク(行動項目・予定)を抽出するアシスタントです。"
         "以下の本文を、タスクごとに分割してJSON配列のみで出力してください。"
@@ -493,7 +499,8 @@ def _llm_tasks(raw_text: str) -> List[dict]:
         '"date":"予定/締切日。分かれば M月D日 または YYYY-MM-DD。無ければ空文字",'
         '"detail":"そのタスクの内容(本文)",'
         '"category":"submissions|belongings|deadlines|events|notes|other のいずれか"}\n'
-        "原文に無い情報を推測・追加しないでください。\n\n"
+        "原文に無い情報を推測・追加しないでください。\n"
+        f"title と detail は必ず {language_name} で書いてください（category の値は指定の英語コードのまま）。\n\n"
         f"# 本文\n{raw_text}\n\n"
         "# 出力例\n"
         '[{"title":"運動会","date":"5月10日","detail":"5月10日に運動会を開催します","category":"events"},'
@@ -576,6 +583,7 @@ def build_task_drafts(
     safe_text: str,
     detected_dates: Optional[List[str]] = None,
     detected_items: Optional[List[str]] = None,
+    language: str = "ja",
 ) -> List[dict]:
     """OCR安全テキストを「タスクごと」の draft フィールド dict のリストにする (SOT-1307)。
 
@@ -591,7 +599,7 @@ def build_task_drafts(
         return [_single_task_fallback(safe_text, detected_dates, detected_items)]
 
     try:
-        tasks = _llm_tasks(safe_text)
+        tasks = _llm_tasks(safe_text, language)
     except Exception as e:  # graceful degradation
         logger.warning("LLM task split failed, using single draft: %s", e)
         tasks = []

@@ -53,10 +53,18 @@ export const finalizeInfo = async (id: number | string): Promise<NurseryInfo> =>
   return response.data;
 };
 
-export const uploadAttachment = async (infoId: number | string, file: File): Promise<Attachment> => {
+export const uploadAttachment = async (
+  infoId: number | string,
+  file: File,
+  // SOT-1315: 文字起こし後のタスク登録を、この言語で生成させる（未指定時はサーバ側が ja 既定）。
+  language?: string,
+): Promise<Attachment> => {
   const formData = new FormData();
   formData.append('file', file);
-  const response = await api.post<Attachment>(`/info/${infoId}/attachments`, formData, {
+  const url = language
+    ? `/info/${infoId}/attachments?language=${encodeURIComponent(language)}`
+    : `/info/${infoId}/attachments`;
+  const response = await api.post<Attachment>(url, formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
