@@ -7,6 +7,13 @@ export interface Attachment {
   created_at: string;
 }
 
+// SOT-1325: 添付の文字起こし(OCR原文)を設定言語に翻訳して取得する。
+export interface AttachmentTranscription {
+  text: string
+  ocr_status: string
+  language: string
+}
+
 export interface NurseryInfo {
   id: number | string
   title: string

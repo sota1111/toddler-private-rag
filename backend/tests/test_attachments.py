@@ -274,3 +274,74 @@ def test_list_include_attachments_param():
     assert light_target["title"] == "with-att"
     assert light_target["attachments"] == []
     assert "draft-x" not in {i["title"] for i in light_items}
+
+
+# --- SOT-1325: 文字起こし(OCR原文)を設定言語で表示するための翻訳・エンドポイント ---
+
+def test_translate_text_fallbacks(monkeypatch):
+    from app import extraction, ai_client
+
+    # 空テキストはそのまま空を返す（LLM を呼ばない）
+    assert extraction.translate_text("", "en") == ""
+    assert extraction.translate_text("   ", "ja") == "   "
+
+    # LLM 不可のときは原文をそのまま返す（決して例外を投げない）
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: False)
+    assert extraction.translate_text("今月の給食は和食中心です。", "en") == "今月の給食は和食中心です。"
+
+
+def test_get_attachment_transcription(monkeypatch):
+    from app import extraction
+
+    # 翻訳はモック化して内容を決定的にする（言語のみ変換のイメージ）
+    monkeypatch.setattr(
+        extraction, "translate_text", lambda text, language: f"[{language}] {text}"
+    )
+
+    info_id = client.post(
+        "/api/info/",
+        json={"title": "T", "info_type": "行事", "content": "c"},
+    ).json()["id"]
+    att_id = client.post(
+        f"/api/info/{info_id}/attachments",
+        files={"file": ("photo.png", b"img", "image/png")},
+    ).json()["id"]
+
+    # OCR 原文を直接保存（process_ocr 相当）
+    db = TestingSessionLocal()
+    att = db.query(models.Attachment).filter(models.Attachment.id == att_id).first()
+    att.ocr_text = "今月の給食は和食中心です。"
+    att.ocr_status = "done"
+    db.commit()
+    db.close()
+
+    resp = client.get(f"/api/attachments/{att_id}/transcription", params={"language": "en"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["text"] == "[en] 今月の給食は和食中心です。"
+    assert body["ocr_status"] == "done"
+    assert body["language"] == "en"
+
+    # 不正な言語は ja にフォールバックする
+    resp_bad = client.get(f"/api/attachments/{att_id}/transcription", params={"language": "fr"})
+    assert resp_bad.json()["language"] == "ja"
+
+
+def test_get_attachment_transcription_empty_when_no_ocr():
+    info_id = client.post(
+        "/api/info/",
+        json={"title": "T", "info_type": "行事", "content": "c"},
+    ).json()["id"]
+    att_id = client.post(
+        f"/api/info/{info_id}/attachments",
+        files={"file": ("photo.png", b"img", "image/png")},
+    ).json()["id"]
+
+    resp = client.get(f"/api/attachments/{att_id}/transcription")
+    assert resp.status_code == 200
+    assert resp.json()["text"] == ""
+
+
+def test_get_attachment_transcription_404():
+    resp = client.get("/api/attachments/999999/transcription")
+    assert resp.status_code == 404

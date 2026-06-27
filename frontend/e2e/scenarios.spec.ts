@@ -212,5 +212,9 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page).toHaveURL(/\/data\/1/)
     await expect(page.getByRole('heading', { name: '4月の給食メニュー' })).toBeVisible()
     await expect(page.locator('img').first()).toBeVisible()
+
+    // SOT-1325: 写真の下に文字起こし(OCR原文)が設定言語で表示される
+    await expect(page.getByRole('heading', { name: '文字起こし' })).toBeVisible()
+    await expect(page.getByText('今月の給食は和食中心です。', { exact: true })).toBeVisible()
   })
 })

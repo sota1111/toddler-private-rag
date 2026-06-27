@@ -27,6 +27,7 @@ export interface MockRecord {
     mime_type: string
     file_size: number
     created_at: string
+    ocr_text?: string
   }>
 }
 
@@ -61,6 +62,7 @@ export function defaultRecords(): MockRecord[] {
           mime_type: 'image/png',
           file_size: 1024,
           created_at: NOW,
+          ocr_text: '今月の給食は和食中心です。',
         },
       ],
     },
@@ -134,6 +136,20 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
     const fileMatch = path.match(/^\/attachments\/(\d+)\/file$/)
     if (fileMatch) {
       return route.fulfill({ status: 200, contentType: 'image/png', body: PNG_1x1 })
+    }
+    // SOT-1325: 文字起こし(OCR原文)を設定言語で返す。モックは翻訳せず ocr_text をそのまま返す。
+    const transcriptionMatch = path.match(/^\/attachments\/(\d+)\/transcription$/)
+    if (transcriptionMatch) {
+      const attId = Number(transcriptionMatch[1])
+      const language = new URL(req.url()).searchParams.get('language') || 'ja'
+      const att = store
+        .flatMap(r => r.attachments ?? [])
+        .find(a => a.id === attId)
+      return json(route, 200, {
+        text: att?.ocr_text ?? '',
+        ocr_status: att?.ocr_text ? 'done' : 'pending',
+        language,
+      })
     }
     if (/^\/attachments\/\d+$/.test(path) && method === 'DELETE') return json(route, 200, {})
 

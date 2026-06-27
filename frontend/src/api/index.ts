@@ -3,6 +3,7 @@ import type {
   NurseryInfo,
   NurseryInfoCreate,
   Attachment,
+  AttachmentTranscription,
   RagAnswer,
   InfoExtractDraft,
   InfoTagSuggestion,
@@ -89,6 +90,18 @@ export const deleteAttachment = async (attId: number | string): Promise<void> =>
 
 export const getAttachmentFileUrl = (attId: number | string): string => {
   return `/api/attachments/${attId}/file`;
+};
+
+// SOT-1325: 添付の文字起こし(OCR原文)を、内容を変えず設定言語に翻訳して取得する。
+export const getAttachmentTranscription = async (
+  attId: number | string,
+  language: string,
+): Promise<AttachmentTranscription> => {
+  const response = await api.get<AttachmentTranscription>(
+    `/attachments/${attId}/transcription`,
+    { params: { language } },
+  );
+  return response.data;
 };
 
 export const getToday = async (): Promise<NurseryInfo[]> => {

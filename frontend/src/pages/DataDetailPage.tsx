@@ -1,8 +1,64 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getInfoById, deleteInfo, getAttachmentFileUrl } from '../api';
+import { getInfoById, deleteInfo, getAttachmentFileUrl, getAttachmentTranscription } from '../api';
+import type { Attachment } from '../types';
 import { useI18n } from '../i18n/useI18n';
+
+// SOT-1325: 写真を大きく表示し、その下に文字起こし(OCR原文)を設定言語で表示する。
+// 画像ごとに独立した文字起こしクエリを持たせるため子コンポーネントに切り出す。
+const AttachmentBlock: React.FC<{ att: Attachment }> = ({ att }) => {
+  const { t, lang } = useI18n();
+  const isImage = att.mime_type.startsWith('image/');
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['attachment-transcription', att.id, lang],
+    queryFn: () => getAttachmentTranscription(att.id, lang),
+    enabled: isImage,
+  });
+
+  if (!isImage) {
+    return (
+      <a
+        href={getAttachmentFileUrl(att.id)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex flex-col items-center justify-center bg-surface rounded-md border border-border p-4 hover:bg-surface-muted transition-colors"
+      >
+        <svg className="w-8 h-8 text-muted-foreground mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+        </svg>
+        <span className="text-xs text-muted-foreground text-center break-all px-1">
+          {att.original_filename}
+        </span>
+      </a>
+    );
+  }
+
+  const text = data?.text ?? '';
+
+  return (
+    <div className="space-y-3">
+      <img
+        src={getAttachmentFileUrl(att.id)}
+        alt={att.original_filename}
+        className="w-full h-auto max-h-[70vh] object-contain rounded-md border border-border bg-border cursor-pointer hover:opacity-95 transition-opacity"
+        loading="lazy"
+        onClick={() => window.open(getAttachmentFileUrl(att.id), '_blank')}
+      />
+      <div>
+        <h2 className="text-sm font-semibold text-muted-foreground mb-1">{t('records.transcription')}</h2>
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">{t('records.transcriptionLoading')}</p>
+        ) : text.trim() ? (
+          <p className="whitespace-pre-wrap break-words text-foreground">{text}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground">{t('records.transcriptionEmpty')}</p>
+        )}
+      </div>
+    </div>
+  );
+};
 
 // SOT-1309: データ一覧の詳細ページ。タイトルと写真（添付）のみを表示し、削除できる。
 // 編集・ステータス変更などは廃止し、表示と削除に役割を絞った。
@@ -115,36 +171,11 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
             </div>
           )}
 
+          {/* SOT-1325: 写真を大きく表示し、その下に文字起こし(OCR原文)を設定言語で表示する。 */}
           {item.attachments && item.attachments.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            <div className="space-y-6">
               {item.attachments.map((att) => (
-                <div key={att.id} className="relative group">
-                  {att.mime_type.startsWith('image/') ? (
-                    <div className="aspect-square bg-border rounded-md overflow-hidden border border-border">
-                      <img
-                        src={getAttachmentFileUrl(att.id)}
-                        alt={att.original_filename}
-                        className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                        loading="lazy"
-                        onClick={() => window.open(getAttachmentFileUrl(att.id), '_blank')}
-                      />
-                    </div>
-                  ) : (
-                    <a
-                      href={getAttachmentFileUrl(att.id)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="aspect-square flex flex-col items-center justify-center bg-surface rounded-md border border-border p-2 hover:bg-surface-muted transition-colors"
-                    >
-                      <svg className="w-8 h-8 text-muted-foreground mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
-                      </svg>
-                      <span className="text-[10px] text-muted-foreground text-center line-clamp-2 break-all px-1">
-                        {att.original_filename}
-                      </span>
-                    </a>
-                  )}
-                </div>
+                <AttachmentBlock key={att.id} att={att} />
               ))}
             </div>
           )}
