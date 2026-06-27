@@ -37,6 +37,8 @@ export const messages: Record<Lang, Messages> = {
     'schedule.clearFilter': 'すべての予定を表示',
     'schedule.filteredBy': '選択中の日付: ',
     'schedule.showAll': 'すべて',
+    'schedule.showConfirmed': '確認済み',
+    'schedule.showPending': '未対応',
     'schedule.showDone': '対応済み',
 
     // tasks (SOT-1313)
@@ -338,6 +340,8 @@ export const messages: Record<Lang, Messages> = {
     'schedule.clearFilter': 'Show all schedule items',
     'schedule.filteredBy': 'Selected date: ',
     'schedule.showAll': 'All',
+    'schedule.showConfirmed': 'Confirmed',
+    'schedule.showPending': 'Pending',
     'schedule.showDone': 'Done',
 
     // tasks (SOT-1313)

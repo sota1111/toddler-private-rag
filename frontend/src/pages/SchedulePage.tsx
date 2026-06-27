@@ -29,8 +29,16 @@ const SchedulePage: React.FC = () => {
   const [viewYear, setViewYear] = useState<number>(today.getFullYear());
   const [viewMonth, setViewMonth] = useState<number>(today.getMonth()); // 0-11
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  // SOT-1307: 一覧の表示を「すべて」/「対応済みのみ」で切り替える。
-  const [statusFilter, setStatusFilter] = useState<'all' | 'done'>('all');
+  // SOT-1317: 一覧のステータス絞り込み。並び順は すべて → 確認済み → 未対応 → 対応済み
+  // （タスク一覧ページ TasksPage と同一）。'all' は全件、それ以外は実在ステータスで絞る。
+  type StatusFilter = 'all' | '未対応' | '対応済み' | '確認済み';
+  const STATUS_FILTERS: { key: StatusFilter; labelKey: string }[] = [
+    { key: 'all', labelKey: 'schedule.showAll' },
+    { key: '確認済み', labelKey: 'schedule.showConfirmed' },
+    { key: '未対応', labelKey: 'schedule.showPending' },
+    { key: '対応済み', labelKey: 'schedule.showDone' },
+  ];
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   // 日付つきの予定のみを対象にする。
   const events = useMemo<NurseryInfo[]>(
@@ -68,13 +76,13 @@ const SchedulePage: React.FC = () => {
   }, [viewYear, viewMonth]);
 
   // 一覧（既定: 日付つき予定をすべて日付昇順。カレンダーで日付選択時はその日のみ。
-  // ステータスフィルタが 'done' のときは「対応済み」のみ）。
+  // ステータスフィルタが 'all' 以外のときは該当ステータスのみ。selectedDate とは AND）。
   const listItems = useMemo<NurseryInfo[]>(() => {
     let filtered = selectedDate
       ? events.filter((ev) => ev.event_date === selectedDate)
       : events;
-    if (statusFilter === 'done') {
-      filtered = filtered.filter((ev) => ev.status === '対応済み');
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter((ev) => ev.status === statusFilter);
     }
     return [...filtered].sort((a, b) => (a.event_date as string).localeCompare(b.event_date as string));
   }, [events, selectedDate, statusFilter]);
@@ -206,9 +214,9 @@ const SchedulePage: React.FC = () => {
             </button>
           )}
         </div>
-        {/* SOT-1307: 「すべて / 対応済み」表示切替 */}
-        <div className="flex gap-2 px-4 pt-3" role="group" aria-label={t('schedule.listTitle')}>
-          {(['all', 'done'] as const).map((key) => {
+        {/* SOT-1317: ステータス絞り込み（すべて / 確認済み / 未対応 / 対応済み） */}
+        <div className="flex flex-wrap gap-2 px-4 pt-3" role="group" aria-label={t('schedule.listTitle')}>
+          {STATUS_FILTERS.map(({ key, labelKey }) => {
             const active = statusFilter === key;
             return (
               <button
@@ -222,7 +230,7 @@ const SchedulePage: React.FC = () => {
                     : 'bg-surface text-foreground border-border hover:bg-surface-muted'
                 }`}
               >
-                {key === 'all' ? t('schedule.showAll') : t('schedule.showDone')}
+                {t(labelKey)}
               </button>
             );
           })}

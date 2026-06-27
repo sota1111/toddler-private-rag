@@ -1,32 +1,32 @@
-# Worker Report (SOT-1313 reopen — Claude Code fallback)
+# Worker Report (SOT-1317 — Claude Code fallback)
 
 ## Worker Non-Response Disclosure
-- Task check + verification were delegated to Codex CLI (`scripts/ai/run_codex.sh`).
-- Codex was NON-RESPONSIVE: usage-limit cooldown active → script returned exit 75 (CODEX_COOLDOWN_ACTIVE).
-- Per Worker Non-Response Fallback Policy, Claude Code performed the task check and verification directly.
+- Task check was delegated to Codex CLI (`scripts/ai/run_codex.sh`).
+- Codex was NON-RESPONSIVE: usage-limit cooldown active → script returned exit 75 (CODEX_COOLDOWN_ACTIVE, ~16h out).
+- Per Worker Non-Response Fallback Policy, Claude Code performed the read-only task check directly.
 
 ## Summary
-SOT-1313 再オープン「クリックしてもタスクの詳細が表示されない」の調査と検証。
-- 調査: タスク一覧 `/tasks` の項目クリックは `<Link to={/data/:id}>` で正しく詳細へ遷移している
-  （E2E S9 で遷移成功を確認）。ナビは壊れていない。
-- 真因: 詳細画面 `DataDetailPage` は SOT-1309 で「タイトル＋写真のみ」に絞られ、日付/内容/ステータスを
-  表示しない。写真のないタスク（SOT-1307 の分割生成タスク）ではタイトルだけが出て「詳細が見えない」状態。
-- 修正（Gemini 報告 50 参照）: 値があるときのみ日付・ステータス・内容を詳細画面に表示。
+SOT-1317「タスク一覧表示」のタスクチェック。Issue は actionable。要求は「ステータス絞り込みの並び順を すべて → 確認済み → 未対応 → 対応済み にし、カレンダー下のタスク一覧も同様にする」。
+
+- `frontend/src/pages/TasksPage.tsx:22-27` — 現状 `STATUS_FILTERS` の並びは [すべて, 未対応, 対応済み, 確認済み]。要求順 [すべて, 確認済み, 未対応, 対応済み] に並べ替える。
+- `frontend/src/pages/SchedulePage.tsx:33,76-77,209-229` — カレンダー下の一覧は 2値（すべて / 対応済み）のみ。TasksPage と同様の4値・同順に拡張する必要あり。
+- `frontend/src/i18n/messages.ts:39-40,340-341` — `schedule.showPending` / `schedule.showConfirmed` が未定義。追加が必要（`tasks.*` 側は4種揃っている）。
+- e2e `frontend/e2e/scenarios.spec.ts:155-157` は `getByRole('button', { name: '確認済み' })` 等の名前指定で順序非依存 → 並べ替えで破綻しない。
+
+実在ステータスは 未対応 / 対応済み / 確認済み の3種（SOT-1314）。Issue 本文の語はすべて実在ステータスに対応。
 
 ## Changed Files
-- none（検証のみ。実装ファイルは Gemini 報告 50 を参照）
+- none (task check only)
 
 ## Commands Run
-- `npm run lint` → exit 0
-- `npm run build`（`tsc -b && vite build`）→ exit 0
-- `npx playwright test` → 16 passed（S9 に詳細の content 表示アサートを追加）
+- grep STATUS_FILTERS / statusFilter / 未対応 / 対応済み / 確認済み（TasksPage, SchedulePage, messages.ts, e2e）
 
 ## Acceptance Criteria
-- [x] タスク一覧の項目クリックで詳細が表示される（遷移は元々機能、内容も表示されるよう修正）
-- [x] Lint / Build / E2E すべて pass
+- [ ] TasksPage の絞り込み順が すべて → 確認済み → 未対応 → 対応済み
+- [ ] カレンダー下のタスク一覧（SchedulePage）も同じ4値・同順
 
 ## Risks
-- 反映には本番デプロイが必要。
+- SchedulePage は日付選択フィルタ（selectedDate）と併存。statusFilter 拡張時に selectedDate との AND が崩れないようにする。
 
 ## Next Action
 READY_FOR_REVIEW
