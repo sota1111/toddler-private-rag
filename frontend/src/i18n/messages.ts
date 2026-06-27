@@ -17,7 +17,17 @@ export const messages: Record<Lang, Messages> = {
     'nav.drafts': '仮登録',
     'nav.records': 'データ',
     'nav.memo': 'メモ',
+    'nav.schedule': '予定',
     'nav.logout': 'ログアウト',
+
+    // schedule (SOT-1306)
+    'schedule.title': '予定カレンダー',
+    'schedule.subtitle': '日付のある予定をカレンダーで確認できます。',
+    'schedule.listTitle': '予定一覧',
+    'schedule.prevMonth': '前の月',
+    'schedule.nextMonth': '次の月',
+    'schedule.clearFilter': 'すべての予定を表示',
+    'schedule.filteredBy': '選択中の日付: ',
 
     // memo
     'memo.title': 'メモ',
@@ -283,7 +293,17 @@ export const messages: Record<Lang, Messages> = {
     'nav.drafts': 'Drafts',
     'nav.records': 'Data',
     'nav.memo': 'Memo',
+    'nav.schedule': 'Schedule',
     'nav.logout': 'Log out',
+
+    // schedule (SOT-1306)
+    'schedule.title': 'Schedule',
+    'schedule.subtitle': 'Browse dated schedule items on a calendar.',
+    'schedule.listTitle': 'Schedule list',
+    'schedule.prevMonth': 'Previous month',
+    'schedule.nextMonth': 'Next month',
+    'schedule.clearFilter': 'Show all schedule items',
+    'schedule.filteredBy': 'Selected date: ',
 
     // memo
     'memo.title': 'Memo',
