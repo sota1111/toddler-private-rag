@@ -34,14 +34,17 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page).toHaveURL(/\/$/)
   })
 
-  test('S3: 詳細ページ(/data/:id)はタイトルが表示される (SOT-1312)', async ({ page }) => {
+  test('S3: 写真ありレコードの詳細は写真と文字起こしのみ表示しタイトルは出さない (SOT-1331)', async ({ page }) => {
     await installApiMocks(page, { authed: true })
     await login(page)
 
-    // SOT-1312: データ一覧は廃止。詳細ページは他画面のリンク先として残存し、直接遷移でも表示できる。
+    // SOT-1331: 写真一覧から開く写真ありレコードは、写真＋文字起こしのみを表示する。
     await page.goto('/data/1')
     await expect(page).toHaveURL(/\/data\/1$/)
-    await expect(page.getByRole('heading', { name: '4月の給食メニュー' })).toBeVisible()
+    await expect(page.locator('img').first()).toBeVisible()
+    await expect(page.getByRole('heading', { name: '文字起こし' })).toBeVisible()
+    // タイトル等（写真の上の文字）は表示しない。
+    await expect(page.getByRole('heading', { name: '4月の給食メニュー' })).toHaveCount(0)
   })
 
   test('S5: 詳細ページで削除すると元の画面へ戻り対象が消える (SOT-1312)', async ({ page }) => {
@@ -189,7 +192,7 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page.getByLabel('子どもの名前')).toHaveValue('たろう')
   })
 
-  test('S11: 登録一覧メニュー（仮登録の右）から本登録タイトル一覧を開き、タイトルクリックで詳細(タイトル+写真)へ遷移できる (SOT-1311)', async ({ page }) => {
+  test('S11: 登録一覧メニュー（仮登録の右）から本登録タイトル一覧を開き、タイトルクリックで詳細(写真+文字起こし)へ遷移できる (SOT-1311)', async ({ page }) => {
     await installApiMocks(page, { authed: true })
     await login(page)
 
@@ -206,11 +209,11 @@ test.describe('toddler-private-rag シナリオ', () => {
     // SOT-1318: タスク(予定日つき・写真なし)の「運動会のお知らせ」は登録一覧には出ない。
     await expect(page.getByRole('link', { name: /運動会のお知らせ/ })).toHaveCount(0)
 
-    // タイトルをクリックすると詳細でタイトル+写真が表示される
+    // SOT-1331: タイトルをクリックすると詳細で写真と文字起こしのみ表示される（タイトルは出さない）
     await page.getByRole('link', { name: /4月の給食メニュー/ }).click()
     await expect(page).toHaveURL(/\/data\/1/)
-    await expect(page.getByRole('heading', { name: '4月の給食メニュー' })).toBeVisible()
     await expect(page.locator('img').first()).toBeVisible()
+    await expect(page.getByRole('heading', { name: '4月の給食メニュー' })).toHaveCount(0)
 
     // SOT-1325: 写真の下に文字起こし(OCR原文)が設定言語で表示される
     await expect(page.getByRole('heading', { name: '文字起こし' })).toBeVisible()
