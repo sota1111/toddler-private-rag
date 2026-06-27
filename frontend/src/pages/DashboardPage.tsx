@@ -64,10 +64,19 @@ const ReminderRow: React.FC<{ item: ReminderItem }> = ({ item }) => {
     return label === key ? value : label;
   };
   const style = URGENCY_STYLES[item.urgency] ?? URGENCY_STYLES.upcoming;
+  // SOT-1316 / SOT-1339: 提出書類先回りエージェントが生成したリマインドは専用カテゴリ表示。
+  const isSubmission = item.kind === 'submission';
   return (
     <li className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 ${style.row}`}>
       <div className="min-w-0">
-        <p className="font-medium text-foreground truncate">{item.message}</p>
+        <div className="flex items-center gap-2">
+          {isSubmission && (
+            <span className="flex-shrink-0 text-xs px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 font-medium">
+              {t('reminder.kind.submission')}
+            </span>
+          )}
+          <p className="font-medium text-foreground truncate">{item.message}</p>
+        </div>
         <p className="text-xs text-muted-foreground">
           {optLabel('infoType', item.info_type)} ・ {item.target_date}
         </p>

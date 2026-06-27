@@ -196,7 +196,7 @@ class ReminderItem(BaseModel):
     info_id: Union[int, str]
     title: str
     info_type: str
-    kind: str            # "deadline" | "event" | "belongings"
+    kind: str            # "deadline" | "event" | "belongings" | "submission"
     target_date: str     # ISO YYYY-MM-DD
     days_until: int
     urgency: str         # "overdue" | "today" | "soon" | "upcoming"

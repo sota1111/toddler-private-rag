@@ -113,7 +113,7 @@ export interface ReminderItem {
   info_id: number | string
   title: string
   info_type: string
-  kind: 'deadline' | 'event' | 'belongings'
+  kind: 'deadline' | 'event' | 'belongings' | 'submission'
   target_date: string
   days_until: number
   urgency: ReminderUrgency

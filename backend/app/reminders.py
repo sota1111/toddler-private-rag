@@ -16,6 +16,7 @@ import logging
 from typing import Any, Dict, List
 
 from . import ai_client
+from .submission_agent import SUBMISSION_TAG
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,23 @@ def _deadline_message(title: str, days_until: int, urgency: str) -> str:
     return f"{days_until}日後: 「{title}」の提出期限です"
 
 
+def _submission_message(title: str, days_until: int, urgency: str) -> str:
+    """提出書類(先回りエージェント生成)向けのリマインド文 (SOT-1316 / SOT-1339)。"""
+    if urgency == "overdue":
+        return f"⚠️ 提出期限超過: 「{title}」（{abs(days_until)}日経過）"
+    if urgency == "today":
+        return f"本日提出: 「{title}」"
+    if urgency == "soon":
+        return f"あと{days_until}日: 「{title}」の提出準備を進めましょう"
+    return f"{days_until}日後: 「{title}」の提出準備を進めましょう"
+
+
+def _is_submission(info: Any) -> bool:
+    """提出書類先回りエージェントが付けた番兵タグ(提出書類)を持つかどうか。"""
+    tags = getattr(info, "tags", None)
+    return bool(tags) and SUBMISSION_TAG in str(tags)
+
+
 def _event_message(title: str, days_until: int, urgency: str) -> str:
     if urgency == "today":
         return f"本日: {title}"
@@ -95,20 +113,30 @@ def build_reminders(infos: List[Any], *, today: datetime.date,
         title = getattr(info, "title", "") or ""
         status = getattr(info, "status", "") or ""
 
-        # --- 締切 (deadline) ---
+        is_submission = _is_submission(info)
+
+        # --- 締切 (deadline) / 提出書類 (submission) ---
+        # 提出書類(先回りエージェント生成)は due_date を持ち、専用の submission カテゴリで通知する。
         due_date = getattr(info, "due_date", None)
         if isinstance(due_date, datetime.date) and status != DONE_STATUS:
             days = (due_date - today).days
             urgency = _classify(days, horizon_days)
             if urgency:
-                reminders.append(_reminder(
-                    info, kind="deadline", target=due_date, days_until=days,
-                    urgency=urgency, message=_deadline_message(title, days, urgency),
-                ))
+                if is_submission:
+                    reminders.append(_reminder(
+                        info, kind="submission", target=due_date, days_until=days,
+                        urgency=urgency, message=_submission_message(title, days, urgency),
+                    ))
+                else:
+                    reminders.append(_reminder(
+                        info, kind="deadline", target=due_date, days_until=days,
+                        urgency=urgency, message=_deadline_message(title, days, urgency),
+                    ))
 
         # --- 行事 (event) ---
+        # 提出書類は準備開始日(event_date)を持つが、上の submission 通知で代表させ、重複させない。
         event_date = getattr(info, "event_date", None)
-        if isinstance(event_date, datetime.date):
+        if isinstance(event_date, datetime.date) and not is_submission:
             days = (event_date - today).days
             # 過去の行事は通知しない（0..horizon のみ）
             if 0 <= days <= horizon_days:
