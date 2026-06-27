@@ -121,8 +121,7 @@ test.describe('toddler-private-rag シナリオ', () => {
     await page.locator('nav a[href="/schedule"]').first().click()
     await expect(page).toHaveURL(/\/schedule/)
 
-    // カレンダー見出しと予定一覧見出しが表示される
-    await expect(page.getByRole('heading', { name: '予定カレンダー' })).toBeVisible()
+    // 予定一覧見出しが表示される（カレンダー見出し「予定カレンダー」は SOT-1326 で削除）
     await expect(page.getByText('予定一覧')).toBeVisible()
 
     // 日付つき予定（運動会のお知らせ / 2026-10-15）が一覧に表示される

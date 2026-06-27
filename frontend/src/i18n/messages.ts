@@ -29,8 +29,6 @@ export const messages: Record<Lang, Messages> = {
     'settings.childNamePlaceholder': '例: たろう',
 
     // schedule (SOT-1306)
-    'schedule.title': '予定カレンダー',
-    'schedule.subtitle': '日付のある予定をカレンダーで確認できます。',
     'schedule.listTitle': '予定一覧',
     'schedule.prevMonth': '前の月',
     'schedule.nextMonth': '次の月',
@@ -333,8 +331,6 @@ export const messages: Record<Lang, Messages> = {
     'settings.childNamePlaceholder': 'e.g. Taro',
 
     // schedule (SOT-1306)
-    'schedule.title': 'Schedule',
-    'schedule.subtitle': 'Browse dated schedule items on a calendar.',
     'schedule.listTitle': 'Schedule list',
     'schedule.prevMonth': 'Previous month',
     'schedule.nextMonth': 'Next month',
