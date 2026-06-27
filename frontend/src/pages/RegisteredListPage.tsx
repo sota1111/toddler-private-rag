@@ -9,12 +9,17 @@ import RegisterMenu from '../components/RegisterMenu';
 // 登録一覧 (SOT-1311): 本登録(registered)データのタイトル一覧。
 // タイトルをクリックすると詳細画面 /data/:id（タイトル+写真+削除）へ遷移する。
 // データ取得は getInfoList(GET /info/)=本登録のみ（draft は除外）。
+// SOT-1318: タスクと写真を別扱いにする。登録一覧は「写真(添付)を持つレコード」のみ表示し、
+// タスク(予定日つき・写真なし)は出さない（タスクは TasksPage /tasks に表示される）。
 const RegisteredListPage: React.FC = () => {
   const { t } = useI18n();
-  const { data: items, isLoading, isError } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['info', 'registered'],
     queryFn: () => getInfoList(),
   });
+
+  // 写真(添付)を持つレコードのみを登録一覧に表示する。
+  const items = (data ?? []).filter((it) => (it.attachments?.length ?? 0) > 0);
 
   return (
     <div className="w-full lg:max-w-4xl lg:mx-auto pb-12">
