@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, List, Optional, Tuple
 
 from .chunking import Chunk, build_documents
+from .embedding_cache import EmbeddingCache, get_embedding_cache, text_hash
 from .providers import (
     EmbeddingProvider,
     LLMProvider,
@@ -39,20 +40,64 @@ class RagService:
         llm_provider: Optional[LLMProvider] = None,
         chunk_size: int = 500,
         overlap: int = 50,
+        embedding_cache: Optional[EmbeddingCache] = None,
     ) -> None:
         self.embedding_provider = embedding_provider or get_embedding_provider()
         self.llm_provider = llm_provider or get_llm_provider()
         self.chunk_size = chunk_size
         self.overlap = overlap
         self.store = InMemoryVectorStore()
+        # 永続埋め込みキャッシュ (SOT-1294): chunk 埋め込みを Firestore に永続化し再利用する。
+        self.embedding_cache = embedding_cache or get_embedding_cache()
+
+    def _embed_cached(self, texts: List[str]) -> List[List[float]]:
+        """``texts`` の埋め込みを返す。保存済みは再利用し、未保存分のみ embed して永続化する。
+
+        これにより「登録時にベクトル化して保存 → 質問時は保存済みを再利用」となり、
+        質問のたびに全件 re-embed していた従来コストを無くす (SOT-1294)。
+        """
+        model = getattr(self.embedding_provider, "_model", "")
+        dim = getattr(self.embedding_provider, "dimension", 0)
+        keys = [text_hash(t, model, dim) for t in texts]
+
+        cached = self.embedding_cache.get_many(keys)
+
+        # キャッシュミスのテキストだけを（重複排除して）embed する。
+        missing_keys = [k for k in dict.fromkeys(keys) if k not in cached]
+        if missing_keys:
+            key_to_text = {k: t for k, t in zip(keys, texts)}
+            miss_texts = [key_to_text[k] for k in missing_keys]
+            miss_vectors = self.embedding_provider.embed(miss_texts)
+            new_items = dict(zip(missing_keys, miss_vectors))
+            self.embedding_cache.put_many(new_items, model=model, dim=dim or 0)
+            cached = {**cached, **new_items}
+
+        return [cached[k] for k in keys]
 
     def build_index(self, infos: List[Any]) -> int:
-        """Chunk + embed all infos and populate the vector store. Returns chunk count."""
+        """Chunk + (cached) embed all infos and populate the vector store. Returns chunk count.
+
+        埋め込みは ``_embed_cached`` 経由で保存済みベクトルを再利用する。既存データも初回質問時に
+        ここでミスを埋めて永続化されるため、別途バックフィルは不要 (SOT-1294)。
+        """
         chunks = build_documents(infos, self.chunk_size, self.overlap)
         if not chunks:
             return 0
-        vectors = self.embedding_provider.embed([c.text for c in chunks])
+        vectors = self._embed_cached([c.text for c in chunks])
         self.store.add(chunks, vectors)
+        return len(chunks)
+
+    def index_info(self, info: Any) -> int:
+        """単一 info を chunk → 埋め込み → 永続化する（登録/更新時の eager 実行用 SOT-1294）。
+
+        ベクトル検索インデックス（self.store）は構築せず、埋め込みキャッシュの永続化のみ行う。
+        返り値は処理した chunk 数。
+        """
+        chunks = build_documents([info], self.chunk_size, self.overlap)
+        if not chunks:
+            return 0
+        # _embed_cached が未保存分を embed して put_many する（保存が目的）。
+        self._embed_cached([c.text for c in chunks])
         return len(chunks)
 
     def _search_chunks(self, query: str, top_k: int = 4) -> List[Tuple[Chunk, float]]:
