@@ -21,6 +21,10 @@ const AutoRegisterPage: React.FC = () => {
   // 進行中だった前のアップロードの setState（特に finally の done 昇格）が
   // 新しいアップロードの画面状態を上書きしないよう、世代カウンタで最新のみ反映する。
   const uploadSeqRef = useRef(0);
+  // SOT-1322: 「写真をアップしています…」表示を短くするため、画像圧縮(端末側で数秒かかる)を
+  // 確認フェーズ(プレビュー表示中)で先行実行しておく。圧縮はキャンセル不可なので Promise を
+  // 保持し、アップロード確定時に最新のものを await して再利用する(間に合っていなければ従来同様に待つ)。
+  const compressedRef = useRef<Promise<File> | null>(null);
   // 'idle' 入力待ち / 'confirm' 写真確認待ち / 'saving' 仮登録保存中 / 'enriching' 文字起こし整理中 / 'done' 完了
   const [phase, setPhase] = useState<Phase>('idle');
   const [extractError, setExtractError] = useState<string | null>(null);
@@ -49,6 +53,8 @@ const AutoRegisterPage: React.FC = () => {
 
   const resetForAnother = () => {
     clearPreview();
+    // SOT-1322: 先行圧縮結果をクリア
+    compressedRef.current = null;
     setSavedDraft(null);
     setExtractError(null);
     setEnrichFailed(false);
@@ -69,12 +75,17 @@ const AutoRegisterPage: React.FC = () => {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPendingFile(file);
     setPreviewUrl(URL.createObjectURL(file));
+    // SOT-1322: 確認中に画像圧縮を先行実行しておく(失敗時は元ファイルにフォールバックし throw しない)。
+    // 古い圧縮結果を使わないよう、新しい file の圧縮で必ず上書きする。
+    compressedRef.current = compressImageFile(file);
     setPhase('confirm');
   };
 
   // 「選び直す」: 確認待ちの写真を破棄して入力待ちに戻す（サーバ保存はしていない）
   const handleRetake = () => {
     clearPreview();
+    // SOT-1322: 破棄した写真の先行圧縮結果は使わない
+    compressedRef.current = null;
     setPhase('idle');
   };
 
@@ -98,7 +109,10 @@ const AutoRegisterPage: React.FC = () => {
 
     // アップロード前に圧縮・JPEG変換し、OCR・添付ともに変換後ファイルのみを使う（生データは保持しない）
     // 圧縮は失敗しても元ファイルにフォールバックするため throw しない。
-    const processed = await compressImageFile(file);
+    // SOT-1322: 確認フェーズで先行実行した圧縮があれば再利用し、「写真をアップしています…」表示中の
+    // 圧縮待ちを無くす。間に合っていなければここで待つだけなので従来と同等（退行なし）。
+    const processed = await (compressedRef.current ?? compressImageFile(file));
+    compressedRef.current = null;
 
     // SOT-1175: 「画像アップ完了をトリガーに画像変換と仮登録を始める」。
     // 重い画像変換(OCR/AI抽出)を待たずに、まず最小限の仮登録(processing)と写真添付を保存する。
