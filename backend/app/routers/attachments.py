@@ -89,32 +89,36 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
         detected_dates = getattr(structured, "detected_dates", None) if structured else None
         detected_items = getattr(structured, "detected_items", None) if structured else None
 
-        # SOT-1307 (案B): 文字起こし結果を「タスク(行動項目)ごと」に分割し、それぞれを仮登録(draft)に
-        # する。先頭タスクは元の processing レコードに割り当てて draft 昇格し（写真紐付けを維持）、
-        # 残りのタスクは新規 draft レコードとして作成する。仮登録画面で各タスクを個別に編集/登録/削除できる。
+        # SOT-1318: 文字起こし結果を「写真+タイトル(登録レコード)」と「タスク(行動項目)」に分離する。
+        #   - 元の processing レコード（写真添付を保持）は、全体タイトルだけを持つ登録一覧用レコードに
+        #     する（event_date なし＝タスクではない）。→ 登録一覧(RegisteredListPage)にのみ出る。
+        #   - 抽出したタスクはすべて新規 draft レコードにする（写真添付なし / event_date あり）。
+        #     → タスク一覧(TasksPage)にのみ出る。
+        # これにより同じレコードがタスク一覧と登録一覧の両方に出る問題を解消する (旧 SOT-1307 の写真紐付け)。
         extra_ids = []
         try:
-            tasks = extraction.build_task_drafts(
-                safe_text or "", detected_dates, detected_items, language=language
+            # 写真+タイトルの登録レコード: 全体タイトル/種別/本文を作り、event_date は持たせない。
+            overall = extraction.build_draft_fields(
+                safe_text or "", detected_dates, detected_items
             )
-            if not tasks:
-                raise ValueError("no task drafts")
-
-            first = tasks[0]
             info_repo.update(
                 info_id,
                 schemas.NurseryInfoUpdate(
-                    title=(first["title"] if has_text else fallback_title),
-                    info_type=first["info_type"],
-                    content=first["content"],
-                    items=(first["items"] or None),
-                    date=(first["date"] or None),
-                    event_date=(first.get("event_date") or None),
+                    title=(overall["title"] if has_text else fallback_title),
+                    info_type=overall["info_type"],
+                    content=overall["content"],
+                    items=(overall["items"] or None),
+                    date=(overall["date"] or None),
+                    event_date=None,  # 登録レコードはタスクではないので予定日を持たせない
                     registration_state="draft",
                 ),
             )
 
-            for task in tasks[1:]:
+            # タスクは別レコードに分離する（写真添付なし）。
+            tasks = extraction.build_task_drafts(
+                safe_text or "", detected_dates, detected_items, language=language
+            )
+            for task in tasks:
                 try:
                     created = info_repo.create(
                         schemas.NurseryInfoCreate(
@@ -134,9 +138,9 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
                         extra_ids.append(cid)
                 except Exception as e:  # 1タスクの失敗で全体を止めない
                     logger.warning(
-                        f"Failed to create extra task draft for info {info_id}: {e}"
+                        f"Failed to create task draft for info {info_id}: {e}"
                     )
-        except Exception as e:  # graceful degradation: 必ず先頭レコードを draft へ昇格させる
+        except Exception as e:  # graceful degradation: 必ず元レコードを draft へ昇格させる
             logger.warning(
                 f"Enrich failed for info {info_id}, promoting with fallback title: {e}"
             )

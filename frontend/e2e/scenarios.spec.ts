@@ -201,8 +201,11 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page).toHaveURL(/\/registered/)
     await expect(page.getByRole('heading', { name: '登録一覧' })).toBeVisible()
 
-    // 本登録データのタイトルがリンクとして並ぶ
+    // 本登録データのタイトルがリンクとして並ぶ（写真ありのレコードのみ）
     await expect(page.getByRole('link', { name: /4月の給食メニュー/ })).toBeVisible()
+
+    // SOT-1318: タスク(予定日つき・写真なし)の「運動会のお知らせ」は登録一覧には出ない。
+    await expect(page.getByRole('link', { name: /運動会のお知らせ/ })).toHaveCount(0)
 
     // タイトルをクリックすると詳細でタイトル+写真が表示される
     await page.getByRole('link', { name: /4月の給食メニュー/ }).click()
