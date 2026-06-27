@@ -291,6 +291,36 @@ def get_attachment_file(
         content_disposition_type="inline",
     )
 
+@router.get(
+    "/attachments/{att_id}/transcription",
+    response_model=schemas.AttachmentTranscriptionResponse,
+)
+def get_attachment_transcription(
+    att_id: Union[int, str],
+    language: str = "ja",
+    repo: AttachmentRepository = Depends(get_attachment_repository),
+    current_user: str = Depends(get_current_user),
+):
+    """添付の文字起こし(OCR原文)を、内容を変えず設定言語に翻訳して返す (SOT-1325)。
+
+    `content`(LLMで再構成済み)ではなく生の `ocr_text` を対象とし、言語のみ変換する。
+    """
+    db_attachment = repo.get(att_id)
+    if not db_attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    lang = language if language in ("ja", "en") else "ja"
+    ocr_text = getattr(db_attachment, "ocr_text", None) or ""
+    ocr_status = getattr(db_attachment, "ocr_status", "pending") or "pending"
+
+    translated = extraction.translate_text(ocr_text, lang) if ocr_text.strip() else ""
+
+    return schemas.AttachmentTranscriptionResponse(
+        text=translated,
+        ocr_status=ocr_status,
+        language=lang,
+    )
+
 @router.delete("/attachments/{att_id}")
 def delete_attachment(
     att_id: Union[int, str],

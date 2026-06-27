@@ -481,6 +481,50 @@ _MAX_TASKS = 8
 _LANGUAGE_NAMES = {"ja": "日本語", "en": "English"}
 
 
+def translate_text(text: str, language: str = "ja") -> str:
+    """文字起こし(OCR原文)を、内容を変えずに ``language`` の言語へ翻訳する (SOT-1325)。
+
+    「言語のみ設定言語で表示する」ための翻訳。意味・構成・改行・順序は保ち、要約や
+    並べ替え・追記・削除は行わない（言語だけを変換する）。
+
+    LLM が使えない / 入力が空 / 失敗・空応答のときは、入力テキストをそのまま返す
+    （決して例外を投げない）。
+    """
+    if not text or not text.strip():
+        return text
+    language_name = _LANGUAGE_NAMES.get(language, _LANGUAGE_NAMES["ja"])
+    if not ai_client.gemini_available():
+        return text
+
+    try:
+        client = ai_client.get_genai_client()
+        model = ai_client.get_model_name()
+        prompt = (
+            f"以下のテキストを{language_name}に翻訳してください。"
+            "内容・意味・構成（改行や順序）はそのまま保ち、言語だけを変換します。"
+            "要約・並べ替え・情報の追加や削除は一切しないでください。"
+            f"すでに{language_name}で書かれている場合はそのまま出力してください。"
+            "翻訳結果のテキストのみを出力し、前置きや説明・引用符は付けないでください。\n\n"
+            f"# テキスト\n{text}\n\n"
+            f"# {language_name}訳"
+        )
+        cfg = ai_client.default_generate_config(max_output_tokens=4096)
+
+        def _gen():
+            if cfg is not None:
+                return client.models.generate_content(
+                    model=model, contents=prompt, config=cfg
+                )
+            return client.models.generate_content(model=model, contents=prompt)
+
+        response = ai_client.with_retry(_gen)
+        translated = (getattr(response, "text", "") or "").strip()
+        return translated or text
+    except Exception as e:  # graceful degradation
+        logger.warning("translate_text failed, returning original text: %s", e)
+        return text
+
+
 def _llm_tasks(raw_text: str, language: str = "ja") -> List[dict]:
     """Gemini / Vertex AI で本文をタスク(行動項目)ごとに分割する。失敗時は例外。
 

@@ -152,6 +152,9 @@ export const messages: Record<Lang, Messages> = {
     'records.eventDate': '日付',
     'records.status': 'ステータス',
     'records.content': '内容',
+    'records.transcription': '文字起こし',
+    'records.transcriptionLoading': '文字起こしを読み込み中…',
+    'records.transcriptionEmpty': '文字起こしはありません',
 
     // create
     'create.title': '情報登録',
@@ -453,6 +456,9 @@ export const messages: Record<Lang, Messages> = {
     'records.eventDate': 'Date',
     'records.status': 'Status',
     'records.content': 'Details',
+    'records.transcription': 'Transcription',
+    'records.transcriptionLoading': 'Loading transcription…',
+    'records.transcriptionEmpty': 'No transcription',
 
     // create
     'create.title': 'Add information',

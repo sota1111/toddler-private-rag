@@ -25,6 +25,12 @@ class AttachmentResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class AttachmentTranscriptionResponse(BaseModel):
+    """添付の文字起こし(OCR原文)を設定言語に翻訳して返す (SOT-1325)。"""
+    text: str = ""
+    ocr_status: str = "pending"
+    language: str = "ja"
+
 class NurseryInfoBase(BaseModel):
     title: str
     info_type: str
