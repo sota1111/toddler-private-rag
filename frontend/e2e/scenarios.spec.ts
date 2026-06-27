@@ -161,6 +161,10 @@ test.describe('toddler-private-rag シナリオ', () => {
     await eventLink.click()
     await expect(page).toHaveURL(/\/data\/2$/)
     await expect(page.getByRole('heading', { name: '運動会のお知らせ' })).toBeVisible()
+    // SOT-1313 reopen: 詳細でタスクの内容（本文）が確認できる
+    await expect(
+      page.getByText('10月15日に運動会を開催します。お弁当の準備をお願いします。'),
+    ).toBeVisible()
   })
 
   test('S10: 設定メニューで言語・標準時間・子どもの名前を設定でき、再読込後も保持される (SOT-1315)', async ({ page }) => {
