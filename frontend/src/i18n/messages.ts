@@ -76,7 +76,6 @@ export const messages: Record<Lang, Messages> = {
 
     // dashboard
     'dashboard.title': '掲示板',
-    'dashboard.subtitle': '今日やること・明日の持ち物・今週の予定・来週の予定をまとめた園からのお知らせボードです。',
     'dashboard.today': '今日やること',
     'dashboard.tomorrow': '明日の持ち物',
     'dashboard.weekly': '今週の予定',
@@ -379,7 +378,6 @@ export const messages: Record<Lang, Messages> = {
 
     // dashboard
     'dashboard.title': 'Bulletin Board',
-    'dashboard.subtitle': "A friendly board of today's to-dos, tomorrow's items, this week's plans and next week's plans.",
     'dashboard.today': 'Today’s to-dos',
     'dashboard.tomorrow': "Tomorrow's items",
     'dashboard.weekly': "This week's plans",

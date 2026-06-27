@@ -119,8 +119,7 @@ const DashboardPage: React.FC = () => {
 
   return (
     <div className="w-full lg:max-w-6xl lg:mx-auto">
-      <h1 className="text-2xl font-bold mb-1 text-foreground">{t('dashboard.title')}</h1>
-      <p className="text-sm text-muted-foreground mb-6">{t('dashboard.subtitle')}</p>
+      <h1 className="text-2xl font-bold mb-6 text-foreground">{t('dashboard.title')}</h1>
 
       <ProactiveReminders />
 
