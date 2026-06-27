@@ -124,14 +124,22 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
     );
   }
 
+  // SOT-1331: 写真一覧から開く写真ありレコードは「写真＋文字起こしのみ」を表示し、
+  // 写真の上のタイトル・日付・ステータス・本文(content)は出さない。
+  // 一方で /tasks から開く写真なしのタスクレコードは、SOT-1313 どおりタイトル等を表示する
+  // （この詳細画面はタスク一覧と写真一覧で共有されているため）。
+  const hasPhoto = Boolean(item.attachments && item.attachments.length > 0);
+
   return (
     <div className="w-full lg:max-w-3xl lg:mx-auto pb-12">
       {backLink}
 
       <div className="bg-surface rounded-lg shadow-sm border border-border overflow-hidden">
         <div className="p-4 sm:p-6">
-          <div className="flex items-start justify-between gap-3 mb-4">
-            <h1 className="text-2xl font-bold text-foreground break-words">{item.title}</h1>
+          <div className={`flex items-start gap-3 mb-4 ${hasPhoto ? 'justify-end' : 'justify-between'}`}>
+            {!hasPhoto && (
+              <h1 className="text-2xl font-bold text-foreground break-words">{item.title}</h1>
+            )}
             <button
               type="button"
               onClick={handleDelete}
@@ -149,8 +157,8 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
           )}
 
           {/* SOT-1313: タスク等の詳細を確認できるよう、日付・ステータス・内容を値があるときのみ表示する。
-              写真のみのデータ（これらを持たない）は SOT-1309 どおり最小表示のまま。 */}
-          {item.event_date && (
+              SOT-1331: 写真ありレコードはこれらを出さず、写真＋文字起こしのみにする。 */}
+          {!hasPhoto && item.event_date && (
             <div className="mb-3">
               <span className="inline-flex items-center gap-1 text-sm font-medium bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full">
                 📅 {t('records.eventDate')}: {item.event_date}
@@ -158,13 +166,13 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
             </div>
           )}
 
-          {item.status && (
+          {!hasPhoto && item.status && (
             <div className="mb-3 text-sm text-muted-foreground">
               {t('records.status')}: <span className="font-medium text-foreground">{item.status}</span>
             </div>
           )}
 
-          {item.content && (
+          {!hasPhoto && item.content && (
             <div className="mb-4">
               <h2 className="text-sm font-semibold text-muted-foreground mb-1">{t('records.content')}</h2>
               <p className="whitespace-pre-wrap break-words text-foreground">{item.content}</p>
