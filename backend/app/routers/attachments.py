@@ -83,30 +83,67 @@ def _promote_processing_draft(info_id, safe_text, structured):
 
         today_iso = clock.today().isoformat()
         fallback_title = f"写真から登録（{today_iso}）"
+        has_text = bool((safe_text or "").strip())
+        detected_dates = getattr(structured, "detected_dates", None) if structured else None
+        detected_items = getattr(structured, "detected_items", None) if structured else None
+
+        # SOT-1307 (案B): 文字起こし結果を「タスク(行動項目)ごと」に分割し、それぞれを仮登録(draft)に
+        # する。先頭タスクは元の processing レコードに割り当てて draft 昇格し（写真紐付けを維持）、
+        # 残りのタスクは新規 draft レコードとして作成する。仮登録画面で各タスクを個別に編集/登録/削除できる。
+        extra_ids = []
         try:
-            fields = extraction.build_draft_fields(
-                safe_text or "",
-                getattr(structured, "detected_dates", None) if structured else None,
-                getattr(structured, "detected_items", None) if structured else None,
+            tasks = extraction.build_task_drafts(
+                safe_text or "", detected_dates, detected_items
             )
-            has_text = bool((safe_text or "").strip())
-            update = schemas.NurseryInfoUpdate(
-                title=(fields["title"] if has_text else fallback_title),
-                info_type=fields["info_type"],
-                content=fields["content"],
-                items=(fields["items"] or None),
-                date=(fields["date"] or None),
-                registration_state="draft",
+            if not tasks:
+                raise ValueError("no task drafts")
+
+            first = tasks[0]
+            info_repo.update(
+                info_id,
+                schemas.NurseryInfoUpdate(
+                    title=(first["title"] if has_text else fallback_title),
+                    info_type=first["info_type"],
+                    content=first["content"],
+                    items=(first["items"] or None),
+                    date=(first["date"] or None),
+                    event_date=(first.get("event_date") or None),
+                    registration_state="draft",
+                ),
             )
-        except Exception as e:  # graceful degradation: 必ず draft へ昇格させる
+
+            for task in tasks[1:]:
+                try:
+                    created = info_repo.create(
+                        schemas.NurseryInfoCreate(
+                            title=task["title"],
+                            info_type=task["info_type"],
+                            content=task["content"],
+                            items=(task["items"] or None),
+                            date=(task["date"] or None),
+                            event_date=(task.get("event_date") or None),
+                            status="未対応",
+                            priority="普通",
+                            registration_state="draft",
+                        )
+                    )
+                    cid = getattr(created, "id", None)
+                    if cid is not None:
+                        extra_ids.append(cid)
+                except Exception as e:  # 1タスクの失敗で全体を止めない
+                    logger.warning(
+                        f"Failed to create extra task draft for info {info_id}: {e}"
+                    )
+        except Exception as e:  # graceful degradation: 必ず先頭レコードを draft へ昇格させる
             logger.warning(
                 f"Enrich failed for info {info_id}, promoting with fallback title: {e}"
             )
-            update = schemas.NurseryInfoUpdate(
-                title=fallback_title, registration_state="draft"
+            info_repo.update(
+                info_id,
+                schemas.NurseryInfoUpdate(
+                    title=fallback_title, registration_state="draft"
+                ),
             )
-
-        info_repo.update(info_id, update)
 
         # draft 昇格で content が確定したので、ここでベクトル化して永続化する (SOT-1294)。
         # best-effort: 失敗しても昇格処理は成功とみなす。
@@ -114,6 +151,11 @@ def _promote_processing_draft(info_id, safe_text, structured):
             from ..rag.indexing import index_info_id
 
             index_info_id(info_id)
+            for cid in extra_ids:
+                try:
+                    index_info_id(cid)
+                except Exception as e:  # pragma: no cover - defensive
+                    logger.warning(f"RAG index for extra task draft {cid} failed: {e}")
         except Exception as e:  # pragma: no cover - defensive
             logger.warning(f"RAG index after draft promote failed for info {info_id}: {e}")
     except Exception as e:

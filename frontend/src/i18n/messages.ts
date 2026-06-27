@@ -27,6 +27,15 @@ export const messages: Record<Lang, Messages> = {
     'schedule.nextMonth': '次の月',
     'schedule.clearFilter': 'すべての予定を表示',
     'schedule.filteredBy': '選択中の日付: ',
+    'schedule.showAll': 'すべて',
+    'schedule.showDone': '対応済み',
+
+    // date picker (SOT-1307)
+    'datePicker.year': '年',
+    'datePicker.month': '月',
+    'datePicker.day': '日',
+    'datePicker.clear': 'クリア',
+    'datePicker.unset': '未設定',
 
     'role.label': '表示モード',
     'role.admin': '管理者',
@@ -209,6 +218,7 @@ export const messages: Record<Lang, Messages> = {
     'drafts.untitled': '（タイトルなし）',
     'drafts.type': '種別',
     'drafts.date': '日付',
+    'drafts.eventDate': '予定日',
     'drafts.items': '持ち物',
     'drafts.memo': 'メモ',
     'drafts.finalize': '本登録する',
@@ -295,6 +305,15 @@ export const messages: Record<Lang, Messages> = {
     'schedule.nextMonth': 'Next month',
     'schedule.clearFilter': 'Show all schedule items',
     'schedule.filteredBy': 'Selected date: ',
+    'schedule.showAll': 'All',
+    'schedule.showDone': 'Done',
+
+    // date picker (SOT-1307)
+    'datePicker.year': 'Year',
+    'datePicker.month': 'Month',
+    'datePicker.day': 'Day',
+    'datePicker.clear': 'Clear',
+    'datePicker.unset': 'Not set',
 
     'role.label': 'Display mode',
     'role.admin': 'Admin',
@@ -477,6 +496,7 @@ export const messages: Record<Lang, Messages> = {
     'drafts.untitled': '(untitled)',
     'drafts.type': 'Type',
     'drafts.date': 'Date',
+    'drafts.eventDate': 'Event date',
     'drafts.items': 'Items',
     'drafts.memo': 'Memo',
     'drafts.finalize': 'Finalize',

@@ -121,6 +121,17 @@ def _extract_json(text: str) -> dict:
     return json.loads(text[start : end + 1])
 
 
+def _extract_json_array(text: str) -> list:
+    """LLM 応答テキストから最初の JSON 配列を取り出してパースする (SOT-1307)。"""
+    if not text:
+        raise ValueError("empty LLM response")
+    start = text.find("[")
+    end = text.rfind("]")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("no JSON array in LLM response")
+    return json.loads(text[start : end + 1])
+
+
 def _llm_categories(raw_text: str) -> dict:
     """Gemini / Vertex AI でタイトル＋5カテゴリを抽出する。失敗時は例外を投げる（呼び出し側でフォールバック）。
 
@@ -445,3 +456,147 @@ def build_draft_fields(
         "date": date_iso or "",
         "categories": {"title": title, **category_dict},
     }
+
+
+# --- タスクごとの仮登録(draft)生成 (SOT-1307 / 案B) ----------------------------
+# 文字起こし(OCR/enrich)結果を「タスク(行動項目)」単位に分割し、各タスクを1件の draft
+# フィールド dict にする。各 draft は build_draft_fields と同形のキー集合に加えて
+# ``event_date``（タスクの予定日 ISO or ""）を必ず持つ。仮登録画面では各 draft レコードを
+# 個別に編集・登録・削除できる（既存UIを流用）。
+
+# タスクのカテゴリ(submissions/...) を保育園情報の種別(INFO_TYPES)へ写像する。
+_CATEGORY_INFO_TYPE = {
+    "events": "行事",
+    "belongings": "持ち物",
+    "submissions": "提出物",
+    "deadlines": "お知らせ",
+    "notes": "お知らせ",
+}
+
+# 1写真から作るタスク(=draft)の上限。誤検出が大量の draft になるのを防ぐ。
+_MAX_TASKS = 8
+
+
+def _llm_tasks(raw_text: str) -> List[dict]:
+    """Gemini / Vertex AI で本文をタスク(行動項目)ごとに分割する。失敗時は例外。
+
+    返り値は ``{title, date, detail, category}`` の dict のリスト。
+    """
+    client = ai_client.get_genai_client()
+    model = ai_client.get_model_name()
+    prompt = (
+        "あなたは保育園のお知らせから、保護者が対応すべきタスク(行動項目・予定)を抽出するアシスタントです。"
+        "以下の本文を、タスクごとに分割してJSON配列のみで出力してください。"
+        "1つの行動・予定・締切につき1要素にします。該当が無ければ空配列 [] を返してください。\n"
+        "各要素の形式:\n"
+        '{"title":"20文字程度の短い見出し",'
+        '"date":"予定/締切日。分かれば M月D日 または YYYY-MM-DD。無ければ空文字",'
+        '"detail":"そのタスクの内容(本文)",'
+        '"category":"submissions|belongings|deadlines|events|notes|other のいずれか"}\n'
+        "原文に無い情報を推測・追加しないでください。\n\n"
+        f"# 本文\n{raw_text}\n\n"
+        "# 出力例\n"
+        '[{"title":"運動会","date":"5月10日","detail":"5月10日に運動会を開催します","category":"events"},'
+        '{"title":"健康調査票の提出","date":"5月1日","detail":"申込書は5月1日までにご提出ください","category":"submissions"}]\n\n'
+        "# 出力(JSON配列のみ)"
+    )
+    cfg = ai_client.default_generate_config()
+
+    def _gen():
+        if cfg is not None:
+            return client.models.generate_content(
+                model=model, contents=prompt, config=cfg
+            )
+        return client.models.generate_content(model=model, contents=prompt)
+
+    response = ai_client.with_retry(_gen)
+    text = (getattr(response, "text", "") or "").strip()
+    data = _extract_json_array(text)
+
+    tasks: List[dict] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title", "")).strip().splitlines()[0][:40] if item.get("title") else ""
+        date = str(item.get("date", "")).strip()
+        detail = str(item.get("detail", "")).strip()
+        category = str(item.get("category", "")).strip()
+        if category not in ALL_CONTENT_KEYS:
+            category = OTHER_KEY
+        if not (title or detail):
+            continue
+        tasks.append({"title": title, "date": date, "detail": detail, "category": category})
+    return tasks[:_MAX_TASKS]
+
+
+def _task_to_draft(task: dict, safe_text: str) -> dict:
+    """1タスク dict を draft フィールド dict（build_draft_fields と同形 + event_date）に写像する。"""
+    category = task.get("category") if task.get("category") in ALL_CONTENT_KEYS else OTHER_KEY
+    detail = (task.get("detail") or "").strip()
+    title = (task.get("title") or "").strip()[:40] or draft_title(detail or safe_text)
+    event_iso = normalize_date(task.get("date")) or ""
+    is_belonging = category == "belongings"
+
+    if category in _CATEGORY_INFO_TYPE:
+        info_type = _CATEGORY_INFO_TYPE[category]
+    else:
+        info_type = guess_info_type(detail or safe_text, is_belonging)
+    if info_type not in INFO_TYPES:
+        info_type = "資料"
+
+    items = detail if is_belonging else ""
+    category_dict = {k: [] for k in ALL_CONTENT_KEYS}
+    if detail:
+        category_dict[category] = [detail[:120]]
+    content = build_structured_content(category_dict) or detail or safe_text
+
+    return {
+        "title": title,
+        "info_type": info_type,
+        "content": content,
+        "items": items,
+        "date": "",
+        "event_date": event_iso,
+        "categories": {"title": title, **category_dict},
+    }
+
+
+def _single_task_fallback(
+    safe_text: str,
+    detected_dates: Optional[List[str]],
+    detected_items: Optional[List[str]],
+) -> dict:
+    """タスク分割ができない場合の後方互換 draft（従来の単一 draft に event_date キーを補う）。"""
+    fields = build_draft_fields(safe_text, detected_dates, detected_items)
+    fields.setdefault("event_date", "")
+    return fields
+
+
+def build_task_drafts(
+    safe_text: str,
+    detected_dates: Optional[List[str]] = None,
+    detected_items: Optional[List[str]] = None,
+) -> List[dict]:
+    """OCR安全テキストを「タスクごと」の draft フィールド dict のリストにする (SOT-1307)。
+
+    LLM が使えるときは本文をタスク(行動項目)単位に分割し、各タスクを1件の draft にする。
+    LLM が使えない・失敗した・1件も抽出できない場合は、従来の単一 draft を1件返す（後方互換）。
+    各 draft dict のキー集合は build_draft_fields と同形＋``event_date``。常に1件以上を返す。
+    """
+    safe_text = safe_text or ""
+    detected_dates = detected_dates or []
+    detected_items = detected_items or []
+
+    if not safe_text.strip() or not ai_client.gemini_available():
+        return [_single_task_fallback(safe_text, detected_dates, detected_items)]
+
+    try:
+        tasks = _llm_tasks(safe_text)
+    except Exception as e:  # graceful degradation
+        logger.warning("LLM task split failed, using single draft: %s", e)
+        tasks = []
+
+    if not tasks:
+        return [_single_task_fallback(safe_text, detected_dates, detected_items)]
+
+    return [_task_to_draft(task, safe_text) for task in tasks]

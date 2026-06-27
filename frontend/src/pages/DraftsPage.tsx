@@ -4,6 +4,7 @@ import { getDrafts, finalizeInfo, deleteInfo, updateInfo, getAttachmentFileUrl }
 import type { NurseryInfo, NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import RegisterMenu from '../components/RegisterMenu';
+import ScrollableDatePicker from '../components/ScrollableDatePicker';
 import { INFO_TYPES, STATUS_TYPES, PRIORITY_TYPES } from './infoFormOptions';
 
 // 登録ページ (SOT-1113): 自動登録した写真の仮登録(draft)一覧。
@@ -174,7 +175,12 @@ const DraftsPage: React.FC = () => {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-foreground">{t('create.fieldEventDate')}</label>
-                        <input type="date" name="event_date" className={inputCls} value={editForm.event_date} onChange={handleEditChange} />
+                        {/* SOT-1307: 予定日はスクロールで選択する */}
+                        <ScrollableDatePicker
+                          value={editForm.event_date ?? ''}
+                          onChange={(iso) => setEditForm(prev => (prev ? { ...prev, event_date: iso } : prev))}
+                          ariaLabel={t('create.fieldEventDate')}
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-foreground">{t('create.fieldDueDate')}</label>
@@ -209,6 +215,12 @@ const DraftsPage: React.FC = () => {
                         <>
                           {' ・ '}
                           <span className="font-semibold text-foreground">{t('drafts.date')}:</span> {d.date}
+                        </>
+                      ) : ''}
+                      {d.event_date ? (
+                        <>
+                          {' ・ '}
+                          <span className="font-semibold text-foreground">{t('drafts.eventDate')}:</span> {d.event_date}
                         </>
                       ) : ''}
                     </p>

@@ -29,6 +29,8 @@ const SchedulePage: React.FC = () => {
   const [viewYear, setViewYear] = useState<number>(today.getFullYear());
   const [viewMonth, setViewMonth] = useState<number>(today.getMonth()); // 0-11
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  // SOT-1307: 一覧の表示を「すべて」/「対応済みのみ」で切り替える。
+  const [statusFilter, setStatusFilter] = useState<'all' | 'done'>('all');
 
   // 日付つきの予定のみを対象にする。
   const events = useMemo<NurseryInfo[]>(
@@ -65,13 +67,17 @@ const SchedulePage: React.FC = () => {
     return rows;
   }, [viewYear, viewMonth]);
 
-  // 一覧（既定: 日付つき予定をすべて日付昇順。カレンダーで日付選択時はその日のみ）。
+  // 一覧（既定: 日付つき予定をすべて日付昇順。カレンダーで日付選択時はその日のみ。
+  // ステータスフィルタが 'done' のときは「対応済み」のみ）。
   const listItems = useMemo<NurseryInfo[]>(() => {
-    const filtered = selectedDate
+    let filtered = selectedDate
       ? events.filter((ev) => ev.event_date === selectedDate)
       : events;
+    if (statusFilter === 'done') {
+      filtered = filtered.filter((ev) => ev.status === '対応済み');
+    }
     return [...filtered].sort((a, b) => (a.event_date as string).localeCompare(b.event_date as string));
-  }, [events, selectedDate]);
+  }, [events, selectedDate, statusFilter]);
 
   const todayStr = fmtDate(today);
 
@@ -199,6 +205,27 @@ const SchedulePage: React.FC = () => {
               {t('schedule.clearFilter')}
             </button>
           )}
+        </div>
+        {/* SOT-1307: 「すべて / 対応済み」表示切替 */}
+        <div className="flex gap-2 px-4 pt-3" role="group" aria-label={t('schedule.listTitle')}>
+          {(['all', 'done'] as const).map((key) => {
+            const active = statusFilter === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setStatusFilter(key)}
+                aria-pressed={active}
+                className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-brand/40 ${
+                  active
+                    ? 'bg-brand text-white border-brand'
+                    : 'bg-surface text-foreground border-border hover:bg-surface-muted'
+                }`}
+              >
+                {key === 'all' ? t('schedule.showAll') : t('schedule.showDone')}
+              </button>
+            );
+          })}
         </div>
         <div className="p-4">
           {selectedDate && (
