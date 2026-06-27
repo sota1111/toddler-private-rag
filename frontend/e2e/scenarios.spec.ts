@@ -199,7 +199,7 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page).toHaveURL(/\/create\/auto/)
     await page.locator('a[href="/registered"]').first().click()
     await expect(page).toHaveURL(/\/registered/)
-    await expect(page.getByRole('heading', { name: '登録一覧' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '写真一覧' })).toBeVisible()
 
     // 本登録データのタイトルがリンクとして並ぶ（写真ありのレコードのみ）
     await expect(page.getByRole('link', { name: /4月の給食メニュー/ })).toBeVisible()

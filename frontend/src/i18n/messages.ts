@@ -229,7 +229,7 @@ export const messages: Record<Lang, Messages> = {
     'create.aiTagNeedInput': 'タイトルまたは内容を入力してください。',
 
     // 仮登録 / 登録ページ (SOT-1113)
-    'registered.title': '登録一覧',
+    'registered.title': '写真一覧',
     'registered.desc': '本登録したデータの一覧です。タイトルを選ぶと写真を確認・削除できます。',
     'registered.empty': '登録済みのデータはありません。',
     'registered.loadError': '一覧の取得に失敗しました。時間をおいて再度お試しください。',
@@ -530,7 +530,7 @@ export const messages: Record<Lang, Messages> = {
     'create.aiTagNeedInput': 'Please enter a title or content.',
 
     // Drafts / registration page (SOT-1113)
-    'registered.title': 'Registered',
+    'registered.title': 'Photos',
     'registered.desc': 'List of registered data. Select a title to view the photo or delete it.',
     'registered.empty': 'No registered data yet.',
     'registered.loadError': 'Failed to load the list. Please try again later.',
