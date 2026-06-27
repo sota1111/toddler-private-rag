@@ -63,14 +63,14 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page.getByRole('link', { name: /運動会のお知らせ/ })).toHaveCount(0)
   })
 
-  test('S6: 写真を選んで自動登録すると仮登録(drafts)に反映される', async ({ page }) => {
+  test('S6: 写真を選んで自動登録すると本登録を介さず写真一覧(registered)に反映される', async ({ page }) => {
     await installApiMocks(page, { authed: true })
     await login(page)
 
     await page.locator('nav a[href="/create/auto"]').first().click()
     await expect(page).toHaveURL(/\/create\/auto/)
 
-    // 1x1 PNG を file input へ投入してOCR→仮登録フローを起動する
+    // 1x1 PNG を file input へ投入してOCR→自動登録フローを起動する
     await page.locator('input[type="file"]').setInputFiles({
       name: 'photo.png',
       mimeType: 'image/png',
@@ -84,13 +84,13 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page.getByText('この写真でよろしいですか？')).toBeVisible()
     await page.getByRole('button', { name: 'この写真で登録' }).click()
 
-    // 仮登録の完了カードと、抽出されたタイトルが表示される
-    await expect(page.getByText('アップ完了（仮登録しました）')).toBeVisible()
+    // SOT-1324: 本登録を介さず直接登録された完了カードと、抽出されたタイトルが表示される
+    await expect(page.getByText('アップ完了（登録しました）')).toBeVisible()
     await expect(page.getByText('お知らせ_自動登録テスト', { exact: false })).toBeVisible()
 
-    // 「登録ページ（仮登録一覧）を開く」で /drafts へ遷移し、登録した仮登録が並ぶ
-    await page.getByRole('button', { name: '登録ページ（仮登録一覧）を開く' }).click()
-    await expect(page).toHaveURL(/\/drafts/)
+    // 「写真一覧を開く」で /registered へ遷移し、本登録された写真がタイトルで並ぶ
+    await page.getByRole('button', { name: '写真一覧を開く' }).click()
+    await expect(page).toHaveURL(/\/registered/)
     await expect(page.getByText('お知らせ_自動登録テスト', { exact: false })).toBeVisible()
   })
 

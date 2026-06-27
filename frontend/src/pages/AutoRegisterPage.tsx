@@ -151,10 +151,11 @@ const AutoRegisterPage: React.FC = () => {
       return;
     }
 
-    // SOT-1293: 以降の enrich(JSON生成)→Firestore永続化→draft昇格はサーバ側で進む。
+    // SOT-1293: 以降の enrich(JSON生成)→Firestore永続化→登録昇格はサーバ側で進む。
     // ブラウザはここで PUT/extract を一切行わない（二重昇格レース防止 & タブを閉じても登録される）。
-    // 完了表示のため registration_state==='draft' になるまでポーリングして結果を反映する。
-    // タイムアウトしてもサーバ側で永続化されるため、仮登録一覧には間もなく出る。
+    // SOT-1324: 写真は本登録(finalize)を介さず直接 registered へ昇格するので、完了表示のため
+    // registration_state==='registered' になるまでポーリングして結果を反映する。
+    // タイムアウトしてもサーバ側で永続化されるため、写真一覧には間もなく出る。
     applyIfCurrent(() => setPhase('enriching'));
     const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
     const maxAttempts = 20; // 約2秒間隔 × 20 ≒ 40秒
@@ -169,7 +170,7 @@ const AutoRegisterPage: React.FC = () => {
           // 取得失敗は一時的なものとして次の試行へ
           console.warn('Polling draft status failed, retrying', e);
         }
-        if (latest && latest.registration_state === 'draft') {
+        if (latest && latest.registration_state === 'registered') {
           promoted = true;
           const hasBody = !!(latest.content && latest.content.trim());
           applyIfCurrent(() => {
@@ -182,7 +183,7 @@ const AutoRegisterPage: React.FC = () => {
         await sleep(2000);
       }
       if (!promoted) {
-        // タイムアウト: サーバ側で処理継続中。仮登録一覧には間もなく出る。
+        // タイムアウト: サーバ側で処理継続中。写真一覧には間もなく出る。
         applyIfCurrent(() => setEnrichFailed(false));
       }
     } finally {
@@ -280,7 +281,7 @@ const AutoRegisterPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
               <button
                 type="button"
-                onClick={() => navigate('/drafts')}
+                onClick={() => navigate('/registered')}
                 className="px-5 py-2.5 bg-brand text-white text-sm font-medium rounded-md shadow-sm hover:bg-brand-strong"
               >
                 {t('create.autoOpenDrafts')}
