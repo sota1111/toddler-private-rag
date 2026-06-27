@@ -120,9 +120,18 @@ class RagService:
             for c, score in hits
         ]
 
-    def answer(self, query: str, top_k: int = 4) -> Answer:
+    def answer(
+        self,
+        query: str,
+        top_k: int = 4,
+        extra_contexts: Optional[List[str]] = None,
+    ) -> Answer:
         sources = self.search(query, top_k=top_k)
         contexts = [s.text for s in sources]
+        # SOT-1304: ベクトル検索に漏れるが回答に必要な文脈（例: 日付つきの直近行事）を先頭に追加する。
+        # 相対日付クエリ（今週/来週/再来週）は語が一致せず検索で取りこぼすため、ここで補う。
+        if extra_contexts:
+            contexts = [c for c in extra_contexts if c] + contexts
         answer_text = self.llm_provider.generate(query, contexts)
         return Answer(answer=answer_text, sources=sources)
 
