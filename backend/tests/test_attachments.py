@@ -327,6 +327,42 @@ def test_get_attachment_transcription(monkeypatch):
     assert resp_bad.json()["language"] == "ja"
 
 
+def test_transcription_translation_is_cached(monkeypatch):
+    """SOT-1330: 同一(添付, 言語)への複数回アクセスでも翻訳は一度きり（読み込みの度に翻訳しない）。"""
+    from app import extraction
+
+    calls = {"n": 0}
+
+    def fake_translate(text, language):
+        calls["n"] += 1
+        return f"[{language}] {text}"
+
+    monkeypatch.setattr(extraction, "translate_text", fake_translate)
+
+    info_id = client.post(
+        "/api/info/",
+        json={"title": "T", "info_type": "行事", "content": "c"},
+    ).json()["id"]
+    att_id = client.post(
+        f"/api/info/{info_id}/attachments",
+        files={"file": ("photo.png", b"img", "image/png")},
+    ).json()["id"]
+
+    db = TestingSessionLocal()
+    att = db.query(models.Attachment).filter(models.Attachment.id == att_id).first()
+    att.ocr_text = "今月の給食は和食中心です。"
+    att.ocr_status = "done"
+    db.commit()
+    db.close()
+
+    r1 = client.get(f"/api/attachments/{att_id}/transcription", params={"language": "en"})
+    r2 = client.get(f"/api/attachments/{att_id}/transcription", params={"language": "en"})
+    assert r1.json()["text"] == "[en] 今月の給食は和食中心です。"
+    assert r2.json()["text"] == "[en] 今月の給食は和食中心です。"
+    # 2回目はキャッシュ再利用 → 翻訳呼び出しは1回のみ
+    assert calls["n"] == 1
+
+
 def test_get_attachment_transcription_empty_when_no_ocr():
     info_id = client.post(
         "/api/info/",
