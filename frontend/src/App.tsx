@@ -18,6 +18,7 @@ import DraftsPage from './pages/DraftsPage';
 import DataListPage from './pages/DataListPage';
 import DataDetailPage from './pages/DataDetailPage';
 import SchedulePage from './pages/SchedulePage';
+import TasksPage from './pages/TasksPage';
 
 const queryClient = new QueryClient();
 
@@ -49,6 +50,9 @@ const DataIcon = () => (
 );
 const ScheduleIcon = () => (
   <svg {...navIconProps}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /><line x1="8" y1="14" x2="8" y2="14" /><line x1="12" y1="14" x2="12" y2="14" /><line x1="16" y1="14" x2="16" y2="14" /></svg>
+);
+const TasksIcon = () => (
+  <svg {...navIconProps}><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
 );
 
 const NavLink: React.FC<{
@@ -146,6 +150,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                   {t('nav.create')}
                 </NavLink>
                 <NavLink to="/schedule" icon={<ScheduleIcon />}>{t('nav.schedule')}</NavLink>
+                <NavLink to="/tasks" icon={<TasksIcon />}>{t('nav.tasks')}</NavLink>
               </div>
             </div>
           </div>
@@ -177,6 +182,7 @@ const App: React.FC = () => {
                 <Route path="/data/:id" element={<ProtectedRoute><DataDetailPage /></ProtectedRoute>} />
                 <Route path="/drafts" element={<ProtectedRoute><DraftsPage /></ProtectedRoute>} />
                 <Route path="/schedule" element={<ProtectedRoute><SchedulePage /></ProtectedRoute>} />
+                <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
                 <Route path="/ask" element={<Navigate to="/info?tab=ask" replace />} />
                 <Route path="/search" element={<Navigate to="/info?tab=search" replace />} />
                 <Route path="/list" element={<Navigate to="/info?tab=list" replace />} />

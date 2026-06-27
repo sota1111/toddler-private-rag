@@ -136,4 +136,25 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page).toHaveURL(/\/data\/2$/)
     await expect(page.getByRole('heading', { name: '運動会のお知らせ' })).toBeVisible()
   })
+
+  test('S9: タスク一覧メニューでカレンダー下と同じ一覧が表示され、項目から詳細へ遷移できる (SOT-1313)', async ({ page }) => {
+    await installApiMocks(page, { authed: true })
+    await login(page)
+
+    await page.locator('nav a[href="/tasks"]').first().click()
+    await expect(page).toHaveURL(/\/tasks/)
+
+    // タスク一覧見出しが表示される
+    await expect(page.getByRole('heading', { name: 'タスク一覧' })).toBeVisible()
+
+    // 日付つき予定（運動会のお知らせ / 2026-10-15）が一覧に表示される
+    const eventLink = page.getByRole('link', { name: /運動会のお知らせ/ })
+    await expect(eventLink).toBeVisible()
+    await expect(page.getByText('2026-10-15')).toBeVisible()
+
+    // 項目クリックで該当データ詳細へ遷移する
+    await eventLink.click()
+    await expect(page).toHaveURL(/\/data\/2$/)
+    await expect(page.getByRole('heading', { name: '運動会のお知らせ' })).toBeVisible()
+  })
 })
