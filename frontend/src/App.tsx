@@ -82,6 +82,20 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   return (
     <div className={`min-h-screen bg-surface-muted font-sans text-foreground ${isAuthenticated ? 'pb-16 md:pb-0' : ''}`}>
+      {!isAuthenticated && (
+        // ログイン前はタイトルと言語切替のみを表示する（SOT-1302）。
+        // ナビメニュー・ロール切替・ログアウトは認証後のみ。
+        <nav className="bg-gradient-to-r from-brand to-brand-strong shadow-md sticky top-0 z-20">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+              <div className="flex-shrink-0 flex items-center gap-2 text-white font-bold text-xl">
+                {t('app.title')}
+              </div>
+              <LanguageToggle />
+            </div>
+          </div>
+        </nav>
+      )}
       {isAuthenticated && (
       <nav className="bg-gradient-to-r from-brand to-brand-strong shadow-md sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

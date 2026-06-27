@@ -3,6 +3,7 @@ import { AuthContext } from './authContextValue'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [email, setEmail] = useState<string | null>(null)
 
   useEffect(() => {
@@ -18,6 +19,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         setIsAuthenticated(false)
         setEmail(null)
+      })
+      .finally(() => {
+        setLoading(false)
       })
   }, [])
 
@@ -43,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, email, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, loading, email, login, logout }}>
       {children}
     </AuthContext.Provider>
   )
