@@ -14,6 +14,7 @@ export const messages: Record<Lang, Messages> = {
     'nav.create': '登録',
     'nav.createAuto': '自動登録',
     'nav.drafts': '仮登録',
+    'nav.registered': '登録一覧',
     'nav.schedule': '予定',
     'nav.tasks': 'タスク一覧',
     'nav.settings': '設定',
@@ -225,6 +226,11 @@ export const messages: Record<Lang, Messages> = {
     'create.aiTagNeedInput': 'タイトルまたは内容を入力してください。',
 
     // 仮登録 / 登録ページ (SOT-1113)
+    'registered.title': '登録一覧',
+    'registered.desc': '本登録したデータの一覧です。タイトルを選ぶと写真を確認・削除できます。',
+    'registered.empty': '登録済みのデータはありません。',
+    'registered.loadError': '一覧の取得に失敗しました。時間をおいて再度お試しください。',
+    'registered.untitled': '（無題）',
     'drafts.title': '登録ページ（仮登録）',
     'drafts.desc': '自動登録した写真の仮登録一覧です。内容を確認のうえ本登録してください。',
     'drafts.empty': '仮登録はありません。自動登録から写真をアップすると、ここに表示されます。',
@@ -306,6 +312,7 @@ export const messages: Record<Lang, Messages> = {
     'nav.create': 'Add',
     'nav.createAuto': 'Auto',
     'nav.drafts': 'Drafts',
+    'nav.registered': 'Registered',
     'nav.schedule': 'Schedule',
     'nav.tasks': 'Tasks',
     'nav.settings': 'Settings',
@@ -517,6 +524,11 @@ export const messages: Record<Lang, Messages> = {
     'create.aiTagNeedInput': 'Please enter a title or content.',
 
     // Drafts / registration page (SOT-1113)
+    'registered.title': 'Registered',
+    'registered.desc': 'List of registered data. Select a title to view the photo or delete it.',
+    'registered.empty': 'No registered data yet.',
+    'registered.loadError': 'Failed to load the list. Please try again later.',
+    'registered.untitled': '(untitled)',
     'drafts.title': 'Registration page (drafts)',
     'drafts.desc': 'These are draft registrations created from auto-uploaded photos. Review and finalize them.',
     'drafts.empty': 'No drafts yet. Upload a photo from auto registration and it will appear here.',

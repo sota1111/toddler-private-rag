@@ -53,6 +53,16 @@ export function defaultRecords(): MockRecord[] {
       registration_state: 'registered',
       created_at: NOW,
       updated_at: NOW,
+      attachments: [
+        {
+          id: 92,
+          info_id: 1,
+          original_filename: 'menu.png',
+          mime_type: 'image/png',
+          file_size: 1024,
+          created_at: NOW,
+        },
+      ],
     },
     {
       id: 2,

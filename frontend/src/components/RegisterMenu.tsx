@@ -4,7 +4,8 @@ import { useI18n } from '../i18n/useI18n';
 
 // SOT-1174 メニュー改善: 自動登録 / 仮登録 を「アイコン＋テキスト」の同一メニューに統合する。
 // 各登録ページ上部に共通表示し、ここから相互に切り替えられる。初期画面(ナビの「登録」)は自動登録。
-// SOT-1311: 手動登録機能の削除に伴い「手動登録」項目を撤去（自動登録 / 仮登録 の2項目）。
+// SOT-1311: 手動登録機能の削除に伴い「手動登録」項目を撤去。
+// さらに本登録データのタイトル一覧へ遷移する「登録一覧」を仮登録の右に追加（自動登録 / 仮登録 / 登録一覧 の3項目）。
 
 type RegisterMenuItem = {
   to: string;
@@ -53,6 +54,18 @@ const ITEMS: RegisterMenuItem[] = [
       </svg>
     ),
   },
+  {
+    // 登録一覧 (本登録データのタイトル一覧) — 箇条書きリスト
+    to: '/registered',
+    labelKey: 'nav.registered',
+    isActive: (p) => p === '/registered',
+    icon: (
+      <svg {...iconProps}>
+        <path d="M8 6h13M8 12h13M8 18h13" />
+        <path d="M3 6h.01M3 12h.01M3 18h.01" />
+      </svg>
+    ),
+  },
 ];
 
 const RegisterMenu: React.FC = () => {
@@ -62,7 +75,7 @@ const RegisterMenu: React.FC = () => {
   return (
     <nav
       aria-label={t('nav.create')}
-      className="mb-6 grid grid-cols-2 gap-2 sm:inline-flex sm:gap-3"
+      className="mb-6 grid grid-cols-3 gap-2 sm:inline-flex sm:gap-3"
     >
       {ITEMS.map((item) => {
         const active = item.isActive(pathname);
