@@ -442,11 +442,10 @@ def build_draft_fields(
         enriched = {"title": ""}
 
     title = (enriched.get("title") or "").strip()[:40] or heuristic_title
+    # SOT-1329: 文字起こし後のカテゴリ分類(【提出物】等の見出し付き本文)は廃止する。
+    # content は分類せずプレーンな文字起こし本文(safe_text)のままにする。
+    # （title 抽出と categories キーは /info/extract の互換のため維持する。）
     category_dict = {k: enriched.get(k, []) for k in ALL_CONTENT_KEYS}
-
-    structured = build_structured_content(category_dict)
-    if structured:
-        content_text = structured
 
     return {
         "title": title,
@@ -596,10 +595,9 @@ def _task_to_draft(task: dict, safe_text: str) -> dict:
         info_type = "資料"
 
     items = detail if is_belonging else ""
+    # SOT-1329: タスク本文をカテゴリ分類(【提出物】等)せず、プレーンなタスク本文にする。
+    content = detail or safe_text
     category_dict = {k: [] for k in ALL_CONTENT_KEYS}
-    if detail:
-        category_dict[category] = [detail[:120]]
-    content = build_structured_content(category_dict) or detail or safe_text
 
     return {
         "title": title,

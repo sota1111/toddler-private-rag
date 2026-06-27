@@ -110,8 +110,9 @@ def test_extract_rejects_oversize_file(monkeypatch):
     assert response.status_code == 413
 
 
-def test_extract_organizes_content_with_category_section(monkeypatch):
-    # OCR生テキストにノイズ(連続空行)とカテゴリ手掛かりを含める
+def test_extract_content_is_plain_without_category_section(monkeypatch):
+    # SOT-1329: 文字起こし後のカテゴリ分類(【提出物】等の見出し付き本文)は廃止する。
+    # content は分類せずプレーンな文字起こし本文のままにする。
     text = "運動会のお知らせ\n\n\n持ち物\n・水筒\n・タオル\n注意: 車での来園は禁止です。"
     monkeypatch.setattr(info_router.ocr, "extract_text", lambda path, ct: text)
     response = client.post(
@@ -120,10 +121,12 @@ def test_extract_organizes_content_with_category_section(monkeypatch):
     )
     assert response.status_code == 200
     data = response.json()
-    # content は生ダンプではなく整理済み(カテゴリ見出し付き)になっている
-    assert "【持ち物】" in data["content"]
-    assert "【注意事項】" in data["content"]
-    assert "\n\n\n" not in data["content"]  # 連続空行が整理されている
+    # content にカテゴリ見出し(【...】)は付かない
+    assert "【" not in data["content"]
+    assert "】" not in data["content"]
+    # 本文の中身はプレーンに保持されている
+    assert "持ち物" in data["content"]
+    assert "水筒" in data["content"]
     # raw_text は生の文字起こしを保持している
     assert "持ち物" in data["raw_text"]
 
