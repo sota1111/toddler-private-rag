@@ -119,8 +119,6 @@ const DashboardPage: React.FC = () => {
 
   return (
     <div className="w-full lg:max-w-6xl lg:mx-auto">
-      <h1 className="text-2xl font-bold mb-6 text-foreground">{t('dashboard.title')}</h1>
-
       <ProactiveReminders />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-[1.125rem]">

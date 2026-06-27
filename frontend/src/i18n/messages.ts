@@ -75,7 +75,6 @@ export const messages: Record<Lang, Messages> = {
     'login.failed': 'ログインに失敗しました',
 
     // dashboard
-    'dashboard.title': '掲示板',
     'dashboard.today': '今日やること',
     'dashboard.tomorrow': '明日の持ち物',
     'dashboard.weekly': '今週の予定',
@@ -377,7 +376,6 @@ export const messages: Record<Lang, Messages> = {
     'login.failed': 'Login failed',
 
     // dashboard
-    'dashboard.title': 'Bulletin Board',
     'dashboard.today': 'Today’s to-dos',
     'dashboard.tomorrow': "Tomorrow's items",
     'dashboard.weekly': "This week's plans",
