@@ -92,6 +92,29 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
             </div>
           )}
 
+          {/* SOT-1313: タスク等の詳細を確認できるよう、日付・ステータス・内容を値があるときのみ表示する。
+              写真のみのデータ（これらを持たない）は SOT-1309 どおり最小表示のまま。 */}
+          {item.event_date && (
+            <div className="mb-3">
+              <span className="inline-flex items-center gap-1 text-sm font-medium bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full">
+                📅 {t('records.eventDate')}: {item.event_date}
+              </span>
+            </div>
+          )}
+
+          {item.status && (
+            <div className="mb-3 text-sm text-muted-foreground">
+              {t('records.status')}: <span className="font-medium text-foreground">{item.status}</span>
+            </div>
+          )}
+
+          {item.content && (
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold text-muted-foreground mb-1">{t('records.content')}</h2>
+              <p className="whitespace-pre-wrap break-words text-foreground">{item.content}</p>
+            </div>
+          )}
+
           {item.attachments && item.attachments.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {item.attachments.map((att) => (

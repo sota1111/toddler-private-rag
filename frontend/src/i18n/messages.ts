@@ -149,6 +149,9 @@ export const messages: Record<Lang, Messages> = {
     'records.statusError': 'ステータスの変更に失敗しました。時間をおいて再度お試しください。',
     'records.notFound': 'データが見つかりませんでした。',
     'records.attachmentsHeading': '元の画像データ',
+    'records.eventDate': '日付',
+    'records.status': 'ステータス',
+    'records.content': '内容',
 
     // create
     'create.title': '情報登録',
@@ -447,6 +450,9 @@ export const messages: Record<Lang, Messages> = {
     'records.statusError': 'Failed to change status. Please try again later.',
     'records.notFound': 'Data not found.',
     'records.attachmentsHeading': 'Original image data',
+    'records.eventDate': 'Date',
+    'records.status': 'Status',
+    'records.content': 'Details',
 
     // create
     'create.title': 'Add information',
