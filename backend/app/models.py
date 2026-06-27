@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Date, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, Date, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
@@ -38,6 +38,9 @@ class Attachment(Base):
     object_key = Column(String, nullable=True)
     ocr_text = Column(Text, nullable=True, default=None)
     ocr_status = Column(String(20), nullable=False, server_default="pending")
+    # SOT-1330: 文字起こし(OCR原文)の翻訳を言語ごとに一度だけ保存して再利用する
+    # （読み込みの度に翻訳しない）。例: {"ja": "...", "en": "..."}
+    translations = Column(JSON, nullable=True, default=None)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     info = relationship("NurseryInfo", back_populates="attachments")

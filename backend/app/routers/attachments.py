@@ -45,6 +45,17 @@ async def process_ocr(
         safe_text = redact_pii(structured.raw_text)
         repo.set_ocr_result(att_id, ocr_text=safe_text, ocr_status="done")
         ocr_ok = True
+        # SOT-1330: 文字起こし完了直後に一度だけ翻訳して保存する（読み込みの度に翻訳しない）。
+        if safe_text.strip():
+            try:
+                pre_lang = language if language in ("ja", "en") else "ja"
+                repo.set_translation(
+                    att_id,
+                    language=pre_lang,
+                    text=extraction.translate_text(safe_text, pre_lang),
+                )
+            except Exception as te:
+                logger.warning("pre-translate failed for attachment %s: %s", att_id, te)
     except Exception as e:
         logger.error(f"OCR failed for attachment {att_id}: {str(e)}")
         repo.set_ocr_result(att_id, ocr_text=None, ocr_status="failed")
@@ -313,7 +324,19 @@ def get_attachment_transcription(
     ocr_text = getattr(db_attachment, "ocr_text", None) or ""
     ocr_status = getattr(db_attachment, "ocr_status", "pending") or "pending"
 
-    translated = extraction.translate_text(ocr_text, lang) if ocr_text.strip() else ""
+    # SOT-1330: 保存済みの翻訳があれば再利用する。無ければ翻訳して保存してから返す
+    # （遅延キャッシュ）。これにより読み込みの度に翻訳を実行しない。
+    translations = getattr(db_attachment, "translations", None) or {}
+    if lang in translations and translations[lang]:
+        translated = translations[lang]
+    elif ocr_text.strip():
+        translated = extraction.translate_text(ocr_text, lang)
+        try:
+            repo.set_translation(att_id, language=lang, text=translated)
+        except Exception as ce:
+            logger.warning("cache-fill translation failed for attachment %s: %s", att_id, ce)
+    else:
+        translated = ""
 
     return schemas.AttachmentTranscriptionResponse(
         text=translated,

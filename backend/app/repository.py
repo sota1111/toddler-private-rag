@@ -91,6 +91,11 @@ class AttachmentRepository(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def set_translation(self, att_id: Union[int, str], *, language: str, text: str) -> None:
+        """文字起こしの翻訳を言語ごとに保存する (SOT-1330)。読み込みの度に翻訳しないためのキャッシュ。"""
+        pass
+
+    @abc.abstractmethod
     def delete(self, att_id: Union[int, str]) -> bool:
         pass
 
@@ -287,11 +292,20 @@ class SqliteAttachmentRepository(AttachmentRepository):
             db_attachment.ocr_status = ocr_status
             self.db.commit()
 
+    def set_translation(self, att_id: Union[int, str], *, language: str, text: str) -> None:
+        db_attachment = self.get(att_id)
+        if db_attachment:
+            # SQLAlchemy の JSON 変更検知のため、新しい dict を代入する
+            current = dict(db_attachment.translations or {})
+            current[language] = text
+            db_attachment.translations = current
+            self.db.commit()
+
     def delete(self, att_id: Union[int, str]) -> bool:
         db_attachment = self.get(att_id)
         if not db_attachment:
             return False
-        
+
         self.db.delete(db_attachment)
         self.db.commit()
         return True
@@ -312,6 +326,7 @@ class FirestoreAttachment:
     ocr_text: Optional[str]
     ocr_status: str
     created_at: datetime.datetime
+    translations: Optional[dict] = None
 
 @dataclass
 class FirestoreNurseryInfo:
@@ -389,7 +404,8 @@ def _att_doc_to_obj(doc_id: str, data: dict) -> FirestoreAttachment:
         object_key=data.get("object_key"),
         ocr_text=data.get("ocr_text"),
         ocr_status=data.get("ocr_status", "pending"),
-        created_at=data.get("created_at") or datetime.datetime.now()
+        created_at=data.get("created_at") or datetime.datetime.now(),
+        translations=data.get("translations") or {}
     )
 
 def _is_registered_data(data: dict) -> bool:
@@ -723,6 +739,12 @@ class FirestoreAttachmentRepository(AttachmentRepository):
                 "ocr_text": ocr_text,
                 "ocr_status": ocr_status
             })
+
+    def set_translation(self, att_id: Union[int, str], *, language: str, text: str) -> None:
+        doc_ref = self.db.collection("attachments").document(str(att_id))
+        if doc_ref.get().exists:
+            # ドット記法でネストフィールドを更新（translations マップが無ければ作成される）
+            doc_ref.update({f"translations.{language}": text})
 
     def delete(self, att_id: Union[int, str]) -> bool:
         doc_ref = self.db.collection("attachments").document(str(att_id))
