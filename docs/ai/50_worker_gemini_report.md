@@ -1,31 +1,28 @@
-# Worker Report (SOT-1313 reopen — Claude Code fallback)
+# Worker Report (SOT-1317 — Claude Code fallback)
 
 ## Worker Non-Response Disclosure
-- Delegated implementation to Gemini CLI (`scripts/ai/run_gemini.sh`).
-- Gemini was NON-RESPONSIVE: `IneligibleTierError` (free-tier no longer supported), crash exit 1 → script returned exit 75.
+- Implementation was delegated to Gemini CLI (`scripts/ai/run_gemini.sh`).
+- Gemini was NON-RESPONSIVE: IneligibleTierError (UNSUPPORTED_CLIENT, free-tier discontinued) → crash, script returned exit 75.
+- Codex was also NON-RESPONSIVE (usage-limit cooldown, exit 75).
 - Per Worker Non-Response Fallback Policy, Claude Code performed the implementation directly.
 
 ## Summary
-共有詳細画面 `DataDetailPage`（`/data/:id`）に、日付(event_date)・ステータス(status)・内容(content)を
-**値があるときのみ条件付きで** 表示するよう追加。タスク一覧からのクリックでタスク詳細が確認できるようにし、
-写真のみの登録データ（これらの値を持たない）は SOT-1309 どおり最小表示を維持する。
+SOT-1317「タスク一覧表示」。ステータス絞り込みの並び順を **すべて → 確認済み → 未対応 → 対応済み** に統一し、カレンダー下のタスク一覧（SchedulePage）も同じ4値・同順に拡張した。
 
 ## Changed Files
-- `frontend/src/pages/DataDetailPage.tsx` — タイトル行の下に event_date バッジ / status / content を条件付き描画
-- `frontend/src/i18n/messages.ts` — `records.eventDate` / `records.status` / `records.content`（ja/en）追加
-- `frontend/e2e/scenarios.spec.ts` — S9 に詳細画面で content が表示されることのアサートを追記
+- `frontend/src/pages/TasksPage.tsx` — `STATUS_FILTERS` を すべて→確認済み→未対応→対応済み に並べ替え（ロジック不変）。
+- `frontend/src/pages/SchedulePage.tsx` — カレンダー下一覧の絞り込みを2値（all/done）→4値（all/確認済み/未対応/対応済み）に拡張。`statusFilter` 型・`STATUS_FILTERS` 追加、`listItems` を `statusFilter !== 'all'` で `ev.status===statusFilter` 絞り込みに変更（selectedDate との AND 維持）。
+- `frontend/src/i18n/messages.ts` — `schedule.showConfirmed` / `schedule.showPending` を ja/en に追加。
 
 ## Commands Run
-- （検証は Codex 報告 60 を参照）
+（検証は Codex 非応答のため Claude Code が直接実行。下記 Codex レポート参照）
 
 ## Acceptance Criteria
-- [x] タスク一覧の項目クリックで詳細 `/data/:id` が表示される（遷移は元々機能。E2E S9）
-- [x] 詳細画面でタスクの内容（日付・本文・ステータス）が確認できる
-- [x] 写真のみのデータは従来どおり最小表示（条件付き表示のため）
+- [x] TasksPage の絞り込み順が すべて → 確認済み → 未対応 → 対応済み
+- [x] カレンダー下のタスク一覧（SchedulePage）も同じ4値・同順
 
 ## Risks
-- DataDetailPage は一覧/カレンダー/ダッシュボード/登録一覧と共有。追加は値があるときのみの読み取り表示で、
-  既存の削除・写真・戻る挙動は不変。
+- なし。backend / API は無変更。e2e S9 は名前指定で順序非依存。
 
 ## Next Action
 READY_FOR_REVIEW
