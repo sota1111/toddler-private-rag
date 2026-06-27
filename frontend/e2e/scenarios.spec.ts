@@ -138,4 +138,26 @@ test.describe('toddler-private-rag シナリオ', () => {
       page.getByText('仮登録はありません。自動登録から写真をアップすると、ここに表示されます。'),
     ).toBeVisible()
   })
+
+  test('S8: 予定画面でカレンダーと日付つき予定一覧が表示され、項目から詳細へ遷移できる (SOT-1306)', async ({ page }) => {
+    await installApiMocks(page, { authed: true })
+    await login(page)
+
+    await page.locator('nav a[href="/schedule"]').first().click()
+    await expect(page).toHaveURL(/\/schedule/)
+
+    // カレンダー見出しと予定一覧見出しが表示される
+    await expect(page.getByRole('heading', { name: '予定カレンダー' })).toBeVisible()
+    await expect(page.getByText('予定一覧')).toBeVisible()
+
+    // 日付つき予定（運動会のお知らせ / 2026-10-15）が一覧に表示される
+    const eventLink = page.getByRole('link', { name: /運動会のお知らせ/ })
+    await expect(eventLink).toBeVisible()
+    await expect(page.getByText('2026-10-15')).toBeVisible()
+
+    // 項目クリックで該当データ詳細へ遷移する
+    await eventLink.click()
+    await expect(page).toHaveURL(/\/data\/2$/)
+    await expect(page.getByRole('heading', { name: '運動会のお知らせ' })).toBeVisible()
+  })
 })
