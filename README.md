@@ -7,14 +7,15 @@
 
 ## 主な機能
 
-- **ダッシュボード / 掲示板**: 今日・明日の持ち物、今週の行事、未対応の提出物をクイックビュー
-  （`GET /api/info/today` / `tomorrow` / `weekly` / `pending`）
+- **ダッシュボード / 掲示板**: 今日・明日の持ち物、今週・来週の行事、未対応の提出物をクイックビュー
+  （`GET /api/info/today` / `tomorrow` / `weekly` / `next-week` / `pending`）
 - **能動リマインド**: 締切・行事の緊急度別リマインドとダイジェスト（`GET /api/info/reminders` / `reminders/digest`）
 - **情報一覧**: キーワード・種別・ステータスによる検索／フィルタリング
 - **ハイブリッド検索**: キーワード＋ベクトル＋ファセットの統合検索（`GET /api/info/hybrid-search`）
 - **AI 自動タグ付け**: 内容からタグ候補を生成（`POST /api/info/suggest-tags`）
 - **情報登録 / 自動登録**: 手動登録と、写真/PDFをOCR・構造化して登録フォームのドラフトを自動生成
   （`POST /api/info/extract`、DB未保存）。添付ファイル（画像/PDF）アップロードはOCR連携
+- **仮登録 / 本登録**: ドラフト（仮登録）の一覧取得（`GET /api/info/drafts`）と本登録への確定（`POST /api/info/{id}/finalize`）
 - **5カテゴリ抽出**: 提出物 / 持ち物 / 締切 / 行事 / 注意事項を抽出
 - **情報の編集・削除（管理）**: 情報一覧から各レコードの編集（`PUT /api/info/{id}`）・削除（`DELETE /api/info/{id}`）
 - **RAG（ベクトル検索＋LLM回答生成）**: 埋め込みベースのベクトル検索で関連情報を取得し、
@@ -194,6 +195,7 @@ docker run -p 8080:8080 toddler-private-rag-frontend
 | 変数名 | 説明 | 既定・例 |
 |--------|------|----------|
 | `APP_ENV` | 実行環境。`production` で cookie secure 有効・起動時 seed 無効 | `local` |
+| `APP_TIMEZONE` | 掲示板・リマインドの日付計算に使うタイムゾーン（zoneinfo 名）。Cloud Run の UTC ズレ回避に使用 | `Asia/Tokyo` |
 | `FIREBASE_WEB_API_KEY` | Firebase Web API key（推奨名・優先、本番は `rag-firebase-api-key`） | `your-firebase-web-api-key` |
 | `FIREBASE_API_KEY` | Firebase Web API key（後方互換の fallback 名） | `your-firebase-web-api-key` |
 | `ALLOWED_USER_EMAILS` | ログインを許可するメール（カンマ区切り、本番は Secret Manager 推奨） | `you@example.com` |
