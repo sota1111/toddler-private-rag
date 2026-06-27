@@ -165,6 +165,7 @@ class ExtractedCategories(BaseModel):
     deadlines: List[str] = []     # 締切
     events: List[str] = []        # 行事予定
     notes: List[str] = []         # 注意事項
+    other: List[str] = []         # その他（どのカテゴリにも該当しない事項。RAGから漏らさないため SOT-1294）
 
 
 # --- 写真のみ登録: OCR からの登録ドラフト (SOT-829 / SOT-831) ---

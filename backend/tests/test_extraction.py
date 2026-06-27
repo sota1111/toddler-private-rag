@@ -17,9 +17,10 @@ SAMPLE = """運動会のお知らせ
 """
 
 
-def test_extract_categories_has_all_five_keys():
+def test_extract_categories_has_all_content_keys():
+    # 5カテゴリ＋その他 (SOT-1294)
     result = extraction.extract_categories(SAMPLE)
-    assert set(result.keys()) == set(extraction.CATEGORY_KEYS)
+    assert set(result.keys()) == set(extraction.ALL_CONTENT_KEYS)
 
 
 def test_extract_categories_detects_each_category():
@@ -34,7 +35,17 @@ def test_extract_categories_detects_each_category():
 
 def test_extract_categories_empty_text_is_safe():
     result = extraction.extract_categories("")
-    assert result == {k: [] for k in extraction.CATEGORY_KEYS}
+    assert result == {k: [] for k in extraction.ALL_CONTENT_KEYS}
+
+
+def test_unclassified_lines_go_to_other_and_appear_in_content():
+    # どのカテゴリにも当てはまらない行は「その他」に収容され、構造化contentに残る (SOT-1294)。
+    text = "本日は園庭で自由遊びを行いました。\n駐車場は北側をご利用ください。"
+    result = extraction.extract_categories(text)
+    assert result["other"], "未分類行が other に入っていない"
+    structured = extraction.build_structured_content(result)
+    assert "【その他】" in structured
+    assert "駐車場は北側" in structured
 
 
 def test_extracted_categories_schema_default():
