@@ -11,7 +11,7 @@ import RegisterMenu from '../components/RegisterMenu';
 // SOT-1293: enrich(JSON生成)→Firestore永続化→draft昇格はサーバ側で行う。ブラウザは
 // createInfo(processing)+写真アップのみを行い、以降はサーバ任せ（タブを閉じても仮登録に出る）。
 // 完了表示のため、サーバ側の draft 昇格をポーリングで待って結果を反映する。
-type Phase = 'idle' | 'confirm' | 'saving' | 'enriching' | 'done';
+type Phase = 'idle' | 'confirm' | 'saving' | 'done';
 
 const AutoRegisterPage: React.FC = () => {
   const { t, lang } = useI18n();
@@ -25,7 +25,9 @@ const AutoRegisterPage: React.FC = () => {
   // 確認フェーズ(プレビュー表示中)で先行実行しておく。圧縮はキャンセル不可なので Promise を
   // 保持し、アップロード確定時に最新のものを await して再利用する(間に合っていなければ従来同様に待つ)。
   const compressedRef = useRef<Promise<File> | null>(null);
-  // 'idle' 入力待ち / 'confirm' 写真確認待ち / 'saving' 仮登録保存中 / 'enriching' 文字起こし整理中 / 'done' 完了
+  // 'idle' 入力待ち / 'confirm' 写真確認待ち / 'saving' 仮登録保存中 / 'done' 完了
+  // SOT-1322: アップロード成功＝写真は保存済みなので即 'done'。整理(OCR/enrich)はサーバ側の
+  // バックグラウンドで進み、完了したら done カードのタイトル/本文をバックグラウンドで更新する。
   const [phase, setPhase] = useState<Phase>('idle');
   const [extractError, setExtractError] = useState<string | null>(null);
   const [savedDraft, setSavedDraft] = useState<NurseryInfo | null>(null);
@@ -52,6 +54,8 @@ const AutoRegisterPage: React.FC = () => {
   }, [previewUrl]);
 
   const resetForAnother = () => {
+    // SOT-1322: 進行中のバックグラウンドポーリングを無効化し、idle 画面を上書きさせない
+    uploadSeqRef.current += 1;
     clearPreview();
     // SOT-1322: 先行圧縮結果をクリア
     compressedRef.current = null;
@@ -68,6 +72,8 @@ const AutoRegisterPage: React.FC = () => {
     if (photoInputRef.current) photoInputRef.current.value = '';
     if (!file) return;
 
+    // SOT-1322: 進行中のバックグラウンドポーリングを無効化し、新しい写真の画面を上書きさせない
+    uploadSeqRef.current += 1;
     setExtractError(null);
     setSavedDraft(null);
     setEnrichFailed(false);
@@ -83,6 +89,8 @@ const AutoRegisterPage: React.FC = () => {
 
   // 「選び直す」: 確認待ちの写真を破棄して入力待ちに戻す（サーバ保存はしていない）
   const handleRetake = () => {
+    // SOT-1322: 進行中のバックグラウンドポーリングを無効化する
+    uploadSeqRef.current += 1;
     clearPreview();
     // SOT-1322: 破棄した写真の先行圧縮結果は使わない
     compressedRef.current = null;
@@ -141,7 +149,12 @@ const AutoRegisterPage: React.FC = () => {
       created = await createInfo(initial);
       // SOT-1315: 設定言語(lang)を渡し、文字起こし後のタスク登録をその言語で生成させる。
       await uploadAttachment(created.id, processed, lang);
-      applyIfCurrent(() => setSavedDraft(created));
+      // SOT-1322: アップロード成功＝写真はサーバ保存済み。整理(OCR/enrich)はサーバ側の
+      // バックグラウンドで進むため、ユーザーを待たせず即「完了」表示にする。
+      applyIfCurrent(() => {
+        setSavedDraft(created);
+        setPhase('done');
+      });
     } catch (error) {
       console.error('Failed to save draft/photo on upload', error);
       applyIfCurrent(() => {
@@ -151,47 +164,35 @@ const AutoRegisterPage: React.FC = () => {
       return;
     }
 
-    // SOT-1293: 以降の enrich(JSON生成)→Firestore永続化→登録昇格はサーバ側で進む。
-    // ブラウザはここで PUT/extract を一切行わない（二重昇格レース防止 & タブを閉じても登録される）。
-    // SOT-1324: 写真は本登録(finalize)を介さず直接 registered へ昇格するので、完了表示のため
-    // registration_state==='registered' になるまでポーリングして結果を反映する。
+    // SOT-1293/SOT-1324: enrich(JSON生成)→Firestore永続化→登録昇格はサーバ側で進む。
+    // SOT-1322: ユーザーは既に完了画面にいる。バックグラウンドで登録昇格をポーリングし、
+    // 完了したら完了カードのタイトル/本文だけを更新する（待ち画面で足止めしない）。
     // タイムアウトしてもサーバ側で永続化されるため、写真一覧には間もなく出る。
-    applyIfCurrent(() => setPhase('enriching'));
     const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
     const maxAttempts = 20; // 約2秒間隔 × 20 ≒ 40秒
-    let promoted = false;
-    try {
-      for (let i = 0; i < maxAttempts; i++) {
-        if (!isCurrent()) return; // 別の写真が開始されたら古いポーリングは打ち切る
-        let latest: NurseryInfo | null = null;
-        try {
-          latest = await getInfoById(created.id);
-        } catch (e) {
-          // 取得失敗は一時的なものとして次の試行へ
-          console.warn('Polling draft status failed, retrying', e);
-        }
-        if (latest && latest.registration_state === 'registered') {
-          promoted = true;
-          const hasBody = !!(latest.content && latest.content.trim());
-          applyIfCurrent(() => {
-            setSavedDraft((prev) => (prev && prev.id === latest!.id ? latest! : prev));
-            // 本文が無い＝OCR/enrich で実テキストが得られず仮タイトルのみ (SOT-1241)
-            setEnrichFailed(!hasBody);
-          });
-          break;
-        }
-        await sleep(2000);
+    for (let i = 0; i < maxAttempts; i++) {
+      if (!isCurrent()) return; // 別の写真が開始/画面を離れたら古いポーリングは打ち切る
+      let latest: NurseryInfo | null = null;
+      try {
+        latest = await getInfoById(created.id);
+      } catch (e) {
+        // 取得失敗は一時的なものとして次の試行へ
+        console.warn('Polling draft status failed, retrying', e);
       }
-      if (!promoted) {
-        // タイムアウト: サーバ側で処理継続中。写真一覧には間もなく出る。
-        applyIfCurrent(() => setEnrichFailed(false));
+      if (latest && latest.registration_state === 'registered') {
+        const hasBody = !!(latest.content && latest.content.trim());
+        applyIfCurrent(() => {
+          setSavedDraft((prev) => (prev && prev.id === latest!.id ? latest! : prev));
+          // 本文が無い＝OCR/enrich で実テキストが得られず仮タイトルのみ (SOT-1241)
+          setEnrichFailed(!hasBody);
+        });
+        return;
       }
-    } finally {
-      applyIfCurrent(() => setPhase('done'));
+      await sleep(2000);
     }
   };
 
-  const busy = phase === 'saving' || phase === 'enriching';
+  const busy = phase === 'saving';
 
   return (
     <div className="w-full lg:max-w-3xl lg:mx-auto pb-12">
@@ -225,35 +226,6 @@ const AutoRegisterPage: React.FC = () => {
                 className="px-5 py-2.5 bg-surface text-foreground text-sm font-medium border border-border rounded-md hover:bg-surface-muted"
               >
                 {t('create.confirmRetake')}
-              </button>
-            </div>
-          </div>
-        ) : phase === 'enriching' ? (
-          <div className="border border-brand bg-brand-soft rounded-lg p-6 text-center space-y-3">
-            <div className="flex items-center justify-center gap-2 text-brand-strong">
-              <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden>
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <span className="text-base font-semibold">{t('create.autoEnriching')}</span>
-            </div>
-            <p className="text-sm text-foreground">{t('create.autoSavedDesc')}</p>
-            <p className="text-sm text-muted-foreground">{t('create.autoEnrichingLeaveOk')}</p>
-            {/* SOT-1289: 文字起こし整理中でも、続けて別の写真を追加できる */}
-            <div className="pt-1">
-              <input
-                type="file"
-                accept="image/*"
-                ref={photoInputRef}
-                onChange={handlePhotoSelect}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => photoInputRef.current?.click()}
-                className="px-5 py-2.5 bg-surface text-foreground text-sm font-medium border border-border rounded-md hover:bg-surface-muted"
-              >
-                {t('create.autoAddPhotoWhileProcessing')}
               </button>
             </div>
           </div>
