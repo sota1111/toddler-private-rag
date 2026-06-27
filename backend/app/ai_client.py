@@ -129,6 +129,71 @@ def _is_quota_error(exc: Exception) -> bool:
     )
 
 
+def _grounded_config(max_output_tokens: int):
+    """``GenerateContentConfig`` with the Google Search tool + thinking disabled.
+
+    Returns ``None`` when the installed SDK lacks ``Tool``/``GoogleSearch`` so the caller
+    can fall back to a non-grounded request (SOT-1316 / 決定2=W1).
+    """
+    try:
+        from google.genai import types
+
+        return types.GenerateContentConfig(
+            max_output_tokens=max_output_tokens,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+            tools=[types.Tool(google_search=types.GoogleSearch())],
+        )
+    except Exception:  # SDK 差異で Tool/GoogleSearch が無い場合は grounding 不可
+        return None
+
+
+def generate_grounded(prompt: str, *, max_output_tokens: int = 2048) -> str:
+    """Generate text using Google Search grounding, degrading gracefully (SOT-1316).
+
+    Tries a grounded request first (Vertex AI Google Search tool). On ANY failure —
+    grounding unavailable, SDK mismatch, quota, etc. — it falls back to a plain
+    (non-grounded) request, and if that also fails it returns ``""``. Never raises,
+    mirroring ``extraction.translate_text`` so the agent works (degraded) without
+    live grounding.
+    """
+    # 1) grounded attempt
+    try:
+        client = get_genai_client()
+        model = get_model_name()
+        cfg = _grounded_config(max_output_tokens)
+        if cfg is not None:
+            def _gen():
+                return client.models.generate_content(
+                    model=model, contents=prompt, config=cfg
+                )
+
+            response = with_retry(_gen)
+            text = (getattr(response, "text", "") or "").strip()
+            if text:
+                return text
+    except Exception as e:  # noqa: BLE001 - grounding best-effort
+        logger.warning("generate_grounded: grounded request failed, falling back: %s", e)
+
+    # 2) non-grounded fallback (LLM known-knowledge)
+    try:
+        client = get_genai_client()
+        model = get_model_name()
+        cfg = default_generate_config(max_output_tokens)
+
+        def _gen_plain():
+            if cfg is not None:
+                return client.models.generate_content(
+                    model=model, contents=prompt, config=cfg
+                )
+            return client.models.generate_content(model=model, contents=prompt)
+
+        response = with_retry(_gen_plain)
+        return (getattr(response, "text", "") or "").strip()
+    except Exception as e:  # noqa: BLE001 - graceful degradation
+        logger.warning("generate_grounded: fallback request failed, returning empty: %s", e)
+        return ""
+
+
 def with_retry(fn: Callable[[], T], *, attempts: int = 3, base_delay: float = 1.0) -> T:
     """Run ``fn`` with bounded exponential backoff on Vertex AI quota/429 errors.
 
