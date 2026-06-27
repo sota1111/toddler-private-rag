@@ -103,22 +103,27 @@ def _extract_json(text: str) -> dict:
     return json.loads(text[start : end + 1])
 
 
-def _llm_categories(raw_text: str) -> Dict[str, List[str]]:
-    """Gemini / Vertex AI で5カテゴリを抽出する。失敗時は例外を投げる（呼び出し側でフォールバック）。"""
+def _llm_categories(raw_text: str) -> dict:
+    """Gemini / Vertex AI でタイトル＋5カテゴリを抽出する。失敗時は例外を投げる（呼び出し側でフォールバック）。
+
+    返り値は5カテゴリ(list) に加えて ``title``(str) を含む dict。
+    """
     client = ai_client.get_genai_client()
     model = ai_client.get_model_name()
     prompt = (
-        "あなたは保育園のお知らせから保護者の行動項目を抽出するアシスタントです。"
-        "以下の本文から次の5カテゴリを抽出し、JSONのみを出力してください。"
-        "各値は短い日本語の文字列の配列とし、該当が無ければ空配列にしてください。\n"
+        "あなたは保育園のお知らせからタイトルと保護者の行動項目を抽出するアシスタントです。"
+        "以下の本文からタイトルと次の5カテゴリを抽出し、JSONのみを出力してください。\n"
+        "- title: お知らせ全体の簡潔なタイトル（日本語1行、20文字程度まで）\n"
+        "各カテゴリの値は短い日本語の文字列の配列とし、該当が無ければ空配列にしてください。\n"
         "- submissions: 提出物（提出・申込・返却・記入が必要なもの）\n"
         "- belongings: 持ち物（当日持参・用意するもの）\n"
         "- deadlines: 締切（締切・期限・〆切。可能なら日付を含める）\n"
         "- events: 行事予定（運動会・遠足等の行事。可能なら日付を含める）\n"
         "- notes: 注意事項（注意・お願い・禁止事項など）\n\n"
         f"# 本文\n{raw_text}\n\n"
-        '# 出力例\n{"submissions":["健康調査票"],"belongings":["水着","タオル"],'
-        '"deadlines":["5月1日まで"],"events":["5月10日 運動会"],"notes":["車での来園は禁止"]}\n\n'
+        '# 出力例\n{"title":"プール開きのお知らせ","submissions":["健康調査票"],'
+        '"belongings":["水着","タオル"],"deadlines":["5月1日まで"],'
+        '"events":["5月10日 運動会"],"notes":["車での来園は禁止"]}\n\n'
         "# 出力(JSONのみ)"
     )
     cfg = ai_client.default_generate_config()
@@ -134,11 +139,13 @@ def _llm_categories(raw_text: str) -> Dict[str, List[str]]:
     text = (getattr(response, "text", "") or "").strip()
     data = _extract_json(text)
 
-    out: Dict[str, List[str]] = {k: [] for k in CATEGORY_KEYS}
+    out: dict = {k: [] for k in CATEGORY_KEYS}
     for key in CATEGORY_KEYS:
         val = data.get(key)
         if isinstance(val, list):
             out[key] = [str(v).strip()[:120] for v in val if str(v).strip()][:12]
+    title = data.get("title")
+    out["title"] = str(title).strip().splitlines()[0][:40] if title and str(title).strip() else ""
     return out
 
 
@@ -164,6 +171,39 @@ def extract_categories(raw_text: str) -> Dict[str, List[str]]:
     for key in CATEGORY_KEYS:
         merged[key] = ai.get(key) or base.get(key, [])
     return merged
+
+
+def extract_titled_categories(raw_text: str) -> dict:
+    """タイトル＋5カテゴリを1回のLLM呼び出しでまとめて抽出する (SOT-1292)。
+
+    enrich を AI 1呼び出しに集約するための関数。返り値は ``title``(str) と5カテゴリ(list) を持つ dict。
+    LLM が利用可能なら ``_llm_categories`` を1回だけ呼び、空カテゴリはヒューリスティックで補完する。
+    LLM が使えない/失敗した場合は ``title=""`` ＋ ヒューリスティック5カテゴリを返す（例外は投げない）。
+    """
+    base = _heuristic_categories(raw_text)
+    result: dict = {"title": "", **{k: base.get(k, []) for k in CATEGORY_KEYS}}
+
+    if not raw_text or not raw_text.strip() or not ai_client.gemini_available():
+        return result
+
+    try:
+        ai = _llm_categories(raw_text)
+    except Exception as e:  # graceful degradation
+        logger.warning("LLM titled-category extraction failed, using heuristic: %s", e)
+        return result
+
+    result["title"] = ai.get("title") or ""
+    for key in CATEGORY_KEYS:
+        result[key] = ai.get(key) or base.get(key, [])
+    return result
+
+
+def build_structured_content(categories: Dict[str, List[str]]) -> str:
+    """整形済みカテゴリから、RAG対象兼表示用の構造化テキストを組み立てる (SOT-1292)。
+
+    空でないカテゴリのみ見出し付き箇条書き（``【提出物】\\n・xxx`` 形式）で返す。全カテゴリが空なら空文字。
+    """
+    return _format_category_section(categories)
 
 
 def _heuristic_organize(raw_text: str) -> str:
