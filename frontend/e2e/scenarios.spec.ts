@@ -30,7 +30,7 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page).toHaveURL(/\/$/)
   })
 
-  test('S3: データ一覧から行を選ぶと詳細ページへ遷移し内容が表示される', async ({ page }) => {
+  test('S3: データ一覧から行を選ぶと詳細ページへ遷移しタイトルが表示される', async ({ page }) => {
     await installApiMocks(page, { authed: true })
     await login(page)
 
@@ -39,31 +39,10 @@ test.describe('toddler-private-rag シナリオ', () => {
     // 一覧に本登録済みデータが表示される
     await expect(page.getByRole('button', { name: '4月の給食メニュー' })).toBeVisible()
 
+    // SOT-1309: 詳細はタイトルと写真のみ表示する
     await page.getByRole('button', { name: '4月の給食メニュー' }).click()
     await expect(page).toHaveURL(/\/data\/1$/)
     await expect(page.getByRole('heading', { name: '4月の給食メニュー' })).toBeVisible()
-    await expect(page.getByText('今月の給食は和食中心です', { exact: false })).toBeVisible()
-  })
-
-  test('S4: 詳細ページで編集して保存すると内容が更新される', async ({ page }) => {
-    await installApiMocks(page, { authed: true })
-    await login(page)
-
-    // 認証は in-memory のため、保護ページはリロードでなくクライアント遷移で開く
-    await page.locator('nav a[href="/data"]').first().click()
-    await page.getByRole('button', { name: '運動会のお知らせ' }).click()
-    await expect(page).toHaveURL(/\/data\/2$/)
-    await expect(page.getByRole('heading', { name: '運動会のお知らせ' })).toBeVisible()
-
-    await page.getByRole('button', { name: '編集' }).click()
-    const titleInput = page.locator('input[name="title"]')
-    await expect(titleInput).toBeVisible()
-    await titleInput.fill('運動会のお知らせ（更新版）')
-    await page.getByRole('button', { name: '保存' }).click()
-
-    // 保存後は表示モードに戻り、更新後タイトルが表示される
-    await expect(page.getByRole('heading', { name: '運動会のお知らせ（更新版）' })).toBeVisible()
-    await expect(titleInput).toHaveCount(0)
   })
 
   test('S5: 詳細ページで削除すると一覧へ戻り対象が消える', async ({ page }) => {

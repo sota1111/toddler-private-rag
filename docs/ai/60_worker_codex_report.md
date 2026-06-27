@@ -1,70 +1,59 @@
 # Worker Report
 
 ## Summary
-SOT-1297「今日の日付」の初期タスク確認。**actionable**。
-要件: アプリが「今日の日付」を取得し、(1) 掲示板（ダッシュボード）表示と (2) 質問（RAG/Ask）の
-両方で使えるようにする。
+SOT-1309 タスク確認。Codex CLI は usage-limit cooldown により非応答（exit 75）。
+Worker Non-Response Fallback Policy に従い、Claude Code が read-only タスク確認を実施した。
 
-調査の結果、現状には2つの問題がある:
-1. **タイムゾーン未適用（バグリスク）**: 掲示板の日付算出は全て `datetime.date.today()`
-   = サーバローカル時刻（Cloud Run は UTC）。タイムゾーン(Asia/Tokyo)未適用のため、
-   JST 00:00〜09:00 の間はサーバが「前日」と判定し、今日/明日/今週/来週が1日ズレる。
-2. **質問が今日の日付を認識しない**: RAG/Ask のプロンプト(`rag/providers.py`
-   `GeminiLLMProvider.generate`)に today の情報が一切含まれず、「明日の予定は？」等の
-   相対日付の質問に答えられない。
+判定: **actionable（実装可能）**。人間の最新コメント（2026-06-27 07:17）で per-task 論点は撤回され、
+最終仕様は「データ一覧の項目クリックで開く詳細画面 = タイトル + 写真のみ表示 + 削除可能」に確定。
+SOT-1307 への依存は解消済み。
 
-## Worker Non-Response Disclosure (audit)
-- 非応答ワーカー: Codex CLI
-- 検出した失敗モード: usage-limit cooldown により `scripts/ai/run_codex.sh` が即時 exit 75
-  (CODEX_COOLDOWN_ACTIVE, until epoch 1782609660 / 約22時間先)。リトライ不要と判断。
-- 対応: Worker Non-Response Fallback Policy に基づき Claude Code がこのタスク確認を直接実施。
-  実装は通常どおり Gemini へ委譲する。
+### 詳細画面の現状（frontend/src/pages/DataDetailPage.tsx, route `/data/:id`）
+現状の表示要素:
+- タイトル h1（保持対象）
+- 編集ボタン（撤去対象）
+- 削除ボタン（保持対象, deleteMutation 既存）
+- ステータス変更ドロップダウン SOT-1301（撤去対象）
+- 種別/優先度/ステータスのバッジ（撤去対象）
+- 日付（date/event_date/due_date）（撤去対象）
+- 本文 content（撤去対象）
+- 持ち物 items（撤去対象）
+- メモ memo（撤去対象）
+- 添付（写真画像グリッド）（保持対象 = 「写真」）
+- タグ tags（撤去対象）
+- 編集フォーム全体（撤去対象）
+
+削除機能: `deleteInfo` API + `deleteMutation` + `handleDelete`（confirm つき）は既存。そのまま保持。
+
+### 撤去/保持の整理
+- 保持: backLink, タイトル h1, 添付（写真）グリッド, 削除ボタン, 削除エラー表示, loading/notFound 分岐
+- 撤去: 編集ボタン, ステータス変更ドロップダウン, バッジ, 日付, content, items, memo, tags, 編集フォーム,
+  および不要になる import（updateInfo, INFO_TYPES, STATUS_TYPES, PRIORITY_TYPES, NurseryInfoCreate）と
+  state/mutation（isEditing, form, saveError, statusError, updateMutation, statusMutation, startEdit 等）
+
+### e2e への影響（frontend/e2e/scenarios.spec.ts）
+- S3: 詳細で content「今月の給食は和食中心です」可視を検証 → content 撤去で**失敗する**。content アサートを除去要。
+- S4: 詳細の編集→保存フロー → 編集撤去で**全体が無効**。S4 は削除する。
+- S5: 詳細で削除→一覧へ戻る → 削除は保持なので**そのまま有効**。
+- S8: 詳細 heading 可視 → 影響なし。
 
 ## Changed Files
-- none (read-only task check)
+- none (check only)
 
 ## Commands Run
-- grep `date.today|datetime.now|utcnow|ZoneInfo|Asia/Tokyo|timezone` over backend/app
-- read repository.py (list_today/list_tomorrow/list_weekly/list_next_week, SQLite & Firestore)
-- read rag/service.py, rag/providers.py (prompt 構築)
-
-## Findings
-### 掲示板（ダッシュボード）の「今日」算出箇所（すべて naive `date.today()` = UTC on Cloud Run）
-- SQLite 実装 `backend/app/repository.py`:
-  - `list_today` :160 / `list_tomorrow` :171 / `list_weekly` :181-182 / `list_next_week` :192-194
-- Firestore 実装 `backend/app/repository.py`:
-  - `list_today` :504 / `list_tomorrow` :521 / `list_weekly` :546-548 / `list_next_week` :573-575
-- サマリ系エンドポイント `backend/app/routers/info.py`:
-  - :249, :268 (`today = datetime.date.today()`), :253/:272 (`generated_at`)
-- その他 today 依存: `tagging.py:49`, `extraction.py:364`, `attachments.py:85`(today_iso)
-
-### 質問（Ask/RAG）パイプライン
-- ルータ: `backend/app/routers/info.py:62` `POST /ask` → `service.answer(query, top_k)`
-- サービス: `backend/app/rag/service.py:123` `answer()` → `llm_provider.generate(query, contexts)`
-- プロンプト構築: `backend/app/rag/providers.py:124-133` `GeminiLLMProvider.generate`
-  → **today の情報なし**。ここに「今日の日付」を注入する必要がある。
-
-### タイムゾーンのバグリスク
-- 中央集約された TZ ヘルパや config モジュールは存在しない（`config.py` なし）。
-- 各所が独立に `datetime.date.today()` を呼ぶため、JST を1か所で定義して全置換するのが安全。
-
-### 変更が必要な file:line（最小変更の見立て）
-1. JST の今日を返すヘルパを新設（例 `backend/app/clock.py` の `today_jst()` / `now_jst()`）。
-   タイムゾーンは `zoneinfo.ZoneInfo("Asia/Tokyo")`、env `APP_TIMEZONE` で上書き可。
-2. 掲示板系 `date.today()` をヘルパ呼び出しに置換
-   (repository.py SQLite/Firestore 8関数, info.py:249/268)。
-3. `rag/providers.py` の prompt に「本日は YYYY-MM-DD (曜日) です。」を1行注入し、
-   相対日付の質問に答えられるようにする。`service.answer`/`generate` のシグネチャは可能なら不変。
-4. 既存テスト `test_dashboard_views.py` / `test_rag.py` は期待値を同じヘルパで算出するよう調整。
+- TARGET_REPO=/workspaces/toddler-private-rag bash scripts/ai/run_codex.sh → exit 75 (cooldown, non-response)
+- read-only: DataDetailPage.tsx / e2e/scenarios.spec.ts の確認（Claude fallback）
 
 ## Acceptance Criteria
-- [ ] アプリが正しいタイムゾーン(JST/Asia/Tokyo)で今日の日付を取得している
-- [ ] 掲示板の today/tomorrow/weekly/next-week がその日付を使う（UTC 深夜ズレ解消）
-- [ ] 質問（Ask/RAG）が今日の日付を認識できる（プロンプトに today 注入）
+- [x] 詳細画面ファイルと表示要素を特定
+- [x] 撤去/保持要素（タイトル+写真のみ+削除）を整理
+- [x] 削除機能の現状を確認（deleteMutation 既存）
+- [x] Verdict: actionable（per-task 依存は人間確定で解消）
 
 ## Risks
-- TZ 置換は掲示板の挙動に直結。SQLite と Firestore 両実装を同一ヘルパで揃えること。
-- テストが `date.today()` 前提だと JST 化で UTC 深夜境界に弱くなる → テストもヘルパ化。
+- e2e S3/S4 の更新を実装と同一PRで行わないと回帰する。
+- i18n キー（records.edit/changeStatus/save 等）は DraftsPage など他画面でも使用中のため、
+  本ファイルでの使用を止めるだけにしてキー定義は削除しない。
 
 ## Next Action
 READY_FOR_REVIEW
