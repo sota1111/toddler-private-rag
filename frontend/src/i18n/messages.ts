@@ -12,7 +12,6 @@ export const messages: Record<Lang, Messages> = {
     'nav.search': '検索',
     'nav.list': '一覧',
     'nav.create': '登録',
-    'nav.createManual': '手動登録',
     'nav.createAuto': '自動登録',
     'nav.drafts': '仮登録',
     'nav.records': 'データ',
@@ -136,7 +135,6 @@ export const messages: Record<Lang, Messages> = {
 
     // create
     'create.title': '情報登録',
-    'create.manualTitle': '手動登録',
     'create.autoTitle': '自動登録（データ登録）',
     'create.autoDesc': '写真を選ぶと内容を自動で読み取り、確認画面へ進みます。',
     'create.confirmHeading': 'この写真でよろしいですか？',
@@ -290,7 +288,6 @@ export const messages: Record<Lang, Messages> = {
     'nav.search': 'Search',
     'nav.list': 'List',
     'nav.create': 'Add',
-    'nav.createManual': 'Manual',
     'nav.createAuto': 'Auto',
     'nav.drafts': 'Drafts',
     'nav.records': 'Data',
@@ -414,7 +411,6 @@ export const messages: Record<Lang, Messages> = {
 
     // create
     'create.title': 'Add information',
-    'create.manualTitle': 'Manual registration',
     'create.autoTitle': 'Auto registration (data import)',
     'create.autoDesc': 'Pick a photo to auto-read its contents, then continue to the confirmation screen.',
     'create.confirmHeading': 'Use this photo?',

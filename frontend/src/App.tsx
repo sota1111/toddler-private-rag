@@ -12,16 +12,12 @@ import ReminderBanner from './components/ReminderBanner';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
-import InfoCreatePage from './pages/InfoCreatePage';
 import AutoRegisterPage from './pages/AutoRegisterPage';
-import DraftConfirmPage from './pages/DraftConfirmPage';
-import RegisterConfirmPage from './pages/RegisterConfirmPage';
 import InfoHubPage from './pages/InfoHubPage';
 import DraftsPage from './pages/DraftsPage';
 import DataListPage from './pages/DataListPage';
 import DataDetailPage from './pages/DataDetailPage';
 import SchedulePage from './pages/SchedulePage';
-import { CreateFlowProvider } from './contexts/CreateFlowContext';
 
 const queryClient = new QueryClient();
 
@@ -188,15 +184,11 @@ const App: React.FC = () => {
                   path="/create/*"
                   element={
                     <ProtectedRoute>
-                      <CreateFlowProvider>
-                        <Routes>
-                          <Route index element={<InfoCreatePage />} />
-                          <Route path="auto" element={<AutoRegisterPage />} />
-                          <Route path="confirm-draft" element={<DraftConfirmPage />} />
-                          <Route path="confirm-register" element={<RegisterConfirmPage />} />
-                          <Route path="*" element={<Navigate to="/create" replace />} />
-                        </Routes>
-                      </CreateFlowProvider>
+                      <Routes>
+                        <Route index element={<Navigate to="/create/auto" replace />} />
+                        <Route path="auto" element={<AutoRegisterPage />} />
+                        <Route path="*" element={<Navigate to="/create/auto" replace />} />
+                      </Routes>
                     </ProtectedRoute>
                   }
                 />
