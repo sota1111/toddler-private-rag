@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getInfoById, deleteInfo, getAttachmentFileUrl, getAttachmentTranscription } from '../api';
+import { getInfoById, deleteInfo, updateInfo, getAttachmentFileUrl, getAttachmentTranscription } from '../api';
 import type { Attachment } from '../types';
+import { STATUS_TYPES } from './infoFormOptions';
 import { useI18n } from '../i18n/useI18n';
 
 // SOT-1325: 写真を大きく表示し、その下に文字起こし(OCR原文)を設定言語で表示する。
@@ -68,13 +69,41 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  // 種別/ステータスのラベルは保存値（日本語）のまま、表示は設定言語に合わせて翻訳する。
+  const optLabel = (group: string, value: string) => {
+    const key = `options.${group}.${value}`;
+    const label = t(key);
+    return label === key ? value : label;
+  };
+
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   const { data: item, isLoading, isError } = useQuery({
     queryKey: ['info-detail', id],
     queryFn: () => getInfoById(id),
     enabled: Boolean(id),
   });
+
+  // SOT-1337: 一覧から開いた項目のステータスだけを、編集モードに入らず即時変更する。
+  const statusMutation = useMutation({
+    mutationFn: (status: string) => updateInfo(id, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['info-detail', id] });
+      queryClient.invalidateQueries({ queryKey: ['info'] });
+      queryClient.invalidateQueries({ queryKey: ['tomorrow'] });
+      queryClient.invalidateQueries({ queryKey: ['weekly'] });
+      queryClient.invalidateQueries({ queryKey: ['pending'] });
+    },
+    onError: () => setStatusError(t('records.statusError')),
+  });
+
+  const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const next = e.target.value;
+    if (!item || next === item.status || statusMutation.isPending) return;
+    setStatusError(null);
+    statusMutation.mutate(next);
+  };
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteInfo(id),
@@ -166,9 +195,29 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
             </div>
           )}
 
+          {/* SOT-1337: 読み取り専用表示をやめ、一覧から開いた項目のステータスを即時変更できるようにする。
+              写真ありレコードは hasPhoto ゲートで対象外（SOT-1331: 写真＋文字起こしのみ）。 */}
           {!hasPhoto && item.status && (
-            <div className="mb-3 text-sm text-muted-foreground">
-              {t('records.status')}: <span className="font-medium text-foreground">{item.status}</span>
+            <div className="mb-4">
+              <div className="flex items-center gap-2">
+                <label htmlFor="status-change" className="text-sm font-medium text-foreground">
+                  {t('records.changeStatus')}
+                </label>
+                <select
+                  id="status-change"
+                  value={item.status}
+                  onChange={handleStatusChange}
+                  disabled={statusMutation.isPending}
+                  className="border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2 border disabled:opacity-60"
+                >
+                  {STATUS_TYPES.map((v) => <option key={v} value={v}>{optLabel('status', v)}</option>)}
+                </select>
+              </div>
+              {statusError && (
+                <div className="mt-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                  {statusError}
+                </div>
+              )}
             </div>
           )}
 
