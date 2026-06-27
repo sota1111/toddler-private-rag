@@ -34,7 +34,9 @@ export const messages: Record<Lang, Messages> = {
     'tasks.subtitle': '予定のあるタスクを一覧で確認できます。',
     'tasks.listTitle': 'タスク一覧',
     'tasks.showAll': 'すべて',
+    'tasks.showPending': '未対応',
     'tasks.showDone': '対応済み',
+    'tasks.showConfirmed': '確認済み',
 
     // date picker (SOT-1307)
     'datePicker.year': '年',
@@ -315,7 +317,9 @@ export const messages: Record<Lang, Messages> = {
     'tasks.subtitle': 'Browse all dated tasks in a list.',
     'tasks.listTitle': 'Task list',
     'tasks.showAll': 'All',
+    'tasks.showPending': 'Pending',
     'tasks.showDone': 'Done',
+    'tasks.showConfirmed': 'Confirmed',
 
     // date picker (SOT-1307)
     'datePicker.year': 'Year',

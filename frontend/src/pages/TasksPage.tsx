@@ -15,8 +15,17 @@ const TasksPage: React.FC = () => {
     queryFn: () => getInfoList({ include_attachments: false }),
   });
 
-  // SchedulePage の一覧と同じく「すべて」/「対応済みのみ」で切り替える。
-  const [statusFilter, setStatusFilter] = useState<'all' | 'done'>('all');
+  // SOT-1314: ステータスで表示内容を絞り込めるようにする。
+  // 'all' は全件、それ以外は実在ステータス値（未対応/対応済み/確認済み）で絞る。
+  // （Issue 本文の「未確認」はアプリに存在しないステータスのため、実在3種+すべてを採用。）
+  type StatusFilter = 'all' | '未対応' | '対応済み' | '確認済み';
+  const STATUS_FILTERS: { key: StatusFilter; labelKey: string }[] = [
+    { key: 'all', labelKey: 'tasks.showAll' },
+    { key: '未対応', labelKey: 'tasks.showPending' },
+    { key: '対応済み', labelKey: 'tasks.showDone' },
+    { key: '確認済み', labelKey: 'tasks.showConfirmed' },
+  ];
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   // 日付つきの予定のみを対象にする。
   const events = useMemo<NurseryInfo[]>(
@@ -24,11 +33,11 @@ const TasksPage: React.FC = () => {
     [data],
   );
 
-  // 日付昇順。ステータスフィルタが 'done' のときは「対応済み」のみ。
+  // 日付昇順。ステータスフィルタが 'all' 以外のときは該当ステータスのみ。
   const listItems = useMemo<NurseryInfo[]>(() => {
     let filtered = events;
-    if (statusFilter === 'done') {
-      filtered = filtered.filter((ev) => ev.status === '対応済み');
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter((ev) => ev.status === statusFilter);
     }
     return [...filtered].sort((a, b) =>
       (a.event_date as string).localeCompare(b.event_date as string),
@@ -45,9 +54,9 @@ const TasksPage: React.FC = () => {
           <span aria-hidden className="text-lg">📅</span>
           <span>{t('tasks.listTitle')}</span>
         </div>
-        {/* 「すべて / 対応済み」表示切替 */}
-        <div className="flex gap-2 px-4 pt-3" role="group" aria-label={t('tasks.listTitle')}>
-          {(['all', 'done'] as const).map((key) => {
+        {/* ステータス絞り込み（すべて / 未対応 / 対応済み / 確認済み） */}
+        <div className="flex flex-wrap gap-2 px-4 pt-3" role="group" aria-label={t('tasks.listTitle')}>
+          {STATUS_FILTERS.map(({ key, labelKey }) => {
             const active = statusFilter === key;
             return (
               <button
@@ -61,7 +70,7 @@ const TasksPage: React.FC = () => {
                     : 'bg-surface text-foreground border-border hover:bg-surface-muted'
                 }`}
               >
-                {key === 'all' ? t('tasks.showAll') : t('tasks.showDone')}
+                {t(labelKey)}
               </button>
             );
           })}

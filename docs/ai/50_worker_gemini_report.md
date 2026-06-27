@@ -1,35 +1,38 @@
-# Worker Report — SOT-1312 データ画面の削除
-
-## Fallback Disclosure (audit sink)
-Both workers were non-responsive, so Claude Code performed implementation directly per the Worker Non-Response Fallback Policy:
-- Gemini CLI: non-responsive — `run_gemini.sh` exited `75` (IneligibleTierError: free-tier no longer supported for Gemini Code Assist for individuals; CLI crash exit 1 → WORKER_NONRESPONSE).
-- Codex CLI: non-responsive — `run_codex.sh` exited `75` (usage-limit cooldown active) during the initial task check.
-All Quality Gates apply identically. This disclosure is NOT posted to Linear (Linear receives only the work result).
+# Worker Report — SOT-1314 (Claude fallback)
 
 ## Summary
-Removed the "データ" menu entry and the data **list** screen (`DataListPage`, route `/data`) from the frontend, including its feature code and exclusive i18n keys. The data **detail** screen (`DataDetailPage`, route `/data/:id`) is intentionally kept because it is a shared destination linked from the Dashboard / Ask / Schedule / Tasks pages; only its back-navigation was re-pointed away from the now-removed list.
+SOT-1314「タスク一覧機能追加」。Gemini CLI は非応答（`scripts/ai/run_gemini.sh` exit 75 =
+IneligibleTierError / UNSUPPORTED_CLIENT, free-tier 廃止）のため、Worker Non-Response Fallback
+Policy に基づき Claude Code が実装を直接実施。
+
+- 非応答ワーカー: Gemini CLI
+- 検出した失敗モード: IneligibleTierError（exit 1 → run script が exit 75 で WORKER_NONRESPONSE 化）
+- 対応: Claude Code が直接実装
+
+TasksPage の表示切替を 2 値（すべて/対応済み）→ 4 値ステータス絞り込み
+（すべて/未対応/対応済み/確認済み）に拡張。Issue 本文の「未確認」はアプリに存在しない値のため、
+実在ステータス3種+すべて を採用（Linear で開示済み）。
 
 ## Changed Files
-- `frontend/src/App.tsx` — removed `DataListPage` import, `DataIcon` component, the `/data` NavLink menu entry, and the `/data` route. Kept `DataDetailPage` import and `/data/:id` route.
-- `frontend/src/pages/DataListPage.tsx` — deleted (whole file).
-- `frontend/src/pages/DataDetailPage.tsx` — removed unused `Link` import; back-link `<Link to="/data">` → `<button onClick={() => navigate(-1)}>`; post-delete `navigate('/data')` → `navigate(-1)` (returns to referring page).
-- `frontend/src/i18n/messages.ts` — removed `nav.records`, `records.title`, `records.empty` (ja+en); changed `records.back` label to a generic 戻る/Back. All other `records.*` keys (used by DataDetailPage) kept.
-- `frontend/e2e/scenarios.spec.ts` — S1 unauth check now hits `/data/1`; S2 asserts the `/data` menu is absent and traverses via `/tasks`; S3 verifies the detail page directly; S5 reaches detail via the Tasks menu, deletes, and asserts return to the referring list with the item gone. S8/S9 (Schedule/Tasks → `/data/2`) unchanged and still valid.
-- `frontend/e2e/smoke.spec.ts` — session-restore direct-access test now targets `/data/1` (valid protected route) instead of the removed `/data`.
+- `frontend/src/pages/TasksPage.tsx` — statusFilter を `'all'|'未対応'|'対応済み'|'確認済み'` に拡張。
+  STATUS_FILTERS マップ（状態キー→i18nラベルキー）でボタン描画。絞り込みは `'all'` で全件、
+  それ以外は `item.status === statusFilter`。日付つき・event_date昇順は維持。
+- `frontend/src/i18n/messages.ts` — `tasks.showPending`(未対応/Pending), `tasks.showConfirmed`
+  (確認済み/Confirmed) を ja/en に追加（showAll/showDone は流用）。
+- `frontend/e2e/scenarios.spec.ts` — S9 に絞り込みアサート追加（確認済みで運動会(未対応)が消え、
+  未対応で再表示）。
 
 ## Commands Run
-- See Codex report `60_worker_codex_report.md` for the read-only task-check (inbound `/data` reference scan).
-- Quality gate (lint / build / e2e) results recorded below.
+- 実装のみ（検証は Codex 役の Claude fallback で別途実施）。
 
 ## Acceptance Criteria
-- [x] データ画面がメニューから削除される（NavLink + DataIcon 撤去）
-- [x] データ画面の機能が削除される（DataListPage / `/data` route / 一覧 i18n キー撤去）
-- [x] 他画面の `/data/:id` 依存（Dashboard/Ask/Schedule/Tasks）を壊さない（詳細ページ残置）
-- [x] 詳細ページの戻り先を `/data` 一覧から `navigate(-1)` に変更
+- [x] すべて/未対応/対応済み/確認済み でタスク一覧を絞り込める
+- [x] 既定は「すべて」で全件表示（S5/S9 維持）
+- [x] i18n ja/en 両対応・ラベルは i18n から取得（直書きなし）
 
 ## Risks
-- Backend `/info/` API left untouched (shared by other screens) — issue intends frontend menu/page removal only.
-- DataDetailPage back button now relies on history (`navigate(-1)`); reached only via in-app navigation from the surviving menus.
+- ラベル相違（Issue「未確認」 vs 実在「確認済み」）は Linear コメントで開示済み。
+- TasksPage は unit test 無し。ゲートは lint / build / e2e。
 
 ## Next Action
 READY_FOR_REVIEW
