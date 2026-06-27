@@ -2,7 +2,6 @@ import asyncio
 import datetime
 import logging
 import os
-import re
 import tempfile
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
@@ -23,58 +22,8 @@ router = APIRouter(
 
 # 写真のみ登録 (SOT-829) のバリデーション。既存の attachments.py と同一基準。
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-# フロント (InfoCreatePage) の選択肢と一致させる
-INFO_TYPES = ["資料", "掲示", "行事", "持ち物", "提出物", "お知らせ", "給食", "休園変更"]
-
-
-def _normalize_date(raw: str) -> Optional[str]:
-    """検出した日付文字列をベストエフォートで ISO (YYYY-MM-DD) に正規化する。
-
-    対応: YYYY-MM-DD / YYYY/M/D / M月D日 (年は当年と仮定)。
-    確実に解釈できない場合は None を返す。
-    """
-    if not raw:
-        return None
-    s = raw.strip()
-
-    # YYYY-MM-DD / YYYY/M/D
-    m = re.match(r"^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$", s)
-    if m:
-        year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
-    else:
-        # M月D日 (年は当年と仮定)
-        m = re.match(r"^(\d{1,2})月(\d{1,2})日$", s)
-        if not m:
-            return None
-        year = datetime.date.today().year
-        month, day = int(m.group(1)), int(m.group(2))
-
-    try:
-        return datetime.date(year, month, day).isoformat()
-    except ValueError:
-        return None
-
-
-def _guess_info_type(text: str, has_items: bool) -> str:
-    """検出結果からヒューリスティックに種別を推定する（必ず INFO_TYPES のいずれか）。"""
-    if has_items:
-        return "持ち物"
-    if any(kw in text for kw in ["行事", "イベント", "運動会", "発表会", "遠足"]):
-        return "行事"
-    if "給食" in text or "献立" in text:
-        return "給食"
-    if "休園" in text or "休み" in text:
-        return "休園変更"
-    return "お知らせ"
-
-
-def _draft_title(text: str) -> str:
-    """安全テキストの先頭の非空行をタイトルにする（最大40文字）。"""
-    for line in text.splitlines():
-        line = line.strip()
-        if line:
-            return line[:40]
-    return "写真から登録"
+# フロント (InfoCreatePage) の選択肢と一致させる（共有定義は extraction 側）
+INFO_TYPES = extraction.INFO_TYPES
 
 
 def _source_label(source) -> str:
@@ -238,50 +187,21 @@ async def extract_info_draft(
     detected_dates = structured.detected_dates
     detected_items = structured.detected_items
 
-    date_iso: Optional[str] = None
-    for d in detected_dates:
-        date_iso = _normalize_date(d)
-        if date_iso:
-            break
+    # OCR後の整理(enrich)は「OCR安全テキスト → draftフィールド」化を共有ヘルパーに集約 (SOT-1293)。
+    # この純関数はサーバ側 background task (attachments.process_ocr) からも再利用される。
+    # 内部の LLM 呼び出しはブロッキングなので別スレッドへ逃がす。
+    fields = await asyncio.to_thread(
+        extraction.build_draft_fields, safe_text, detected_dates, detected_items
+    )
 
-    items = "\n".join(detected_items) if detected_items else None
-    info_type = _guess_info_type(safe_text, bool(detected_items))
-    heuristic_title = _draft_title(safe_text)
-    content_text = safe_text
-
-    # OCR後の整理(enrich)は「タイトル＋5カテゴリ抽出」を AI 1呼び出しに集約する (SOT-1292)。
-    # 旧実装はタイトル整形・カテゴリ抽出・本文整理の3呼び出しを並列実行していたが、human の指示により
-    # (1)専用タイトル呼び出しと(3)本文整理を廃止し、(2)カテゴリ抽出JSONにタイトルを含める1呼び出しへ統合。
-    # content(本文)は抽出済みカテゴリから組み立てた構造化テキストにし、これを RAG の対象にする。
-    # AI が1回分になるためレイテンシも短縮される（直列3呼び出しで24〜44秒→タイムアウトの問題を解消）。
-    def _enrich() -> dict:
-        # safe_text 空 or LLM 不可なら extract_titled_categories 内でヒューリスティックのみに落ちる。
-        try:
-            return extraction.extract_titled_categories(safe_text)
-        except Exception as e:  # graceful degradation
-            logger.warning("Enrich (titled categories) failed in /info/extract: %s", e)
-            return {"title": ""}
-
-    enriched = await asyncio.to_thread(_enrich)
-
-    # タイトル: JSON 由来。空ならヒューリスティックにフォールバック。
-    title = (enriched.get("title") or "").strip()[:40] or heuristic_title
-
-    category_dict = {k: enriched.get(k, []) for k in ("submissions", "belongings", "deadlines", "events", "notes")}
-    categories = schemas.ExtractedCategories(title=title, **category_dict)
-
-    # content(=RAG対象) は整形済みカテゴリから組み立てた構造化テキスト。
-    # カテゴリが全て空なら本文が空にならないよう OCR 本文(safe_text)にフォールバックする。
-    structured = extraction.build_structured_content(category_dict)
-    if structured:
-        content_text = structured
+    categories = schemas.ExtractedCategories(**fields["categories"])
 
     return schemas.InfoExtractDraft(
-        title=title,
-        info_type=info_type,
-        content=content_text,
-        items=items,
-        date=date_iso,
+        title=fields["title"],
+        info_type=fields["info_type"],
+        content=fields["content"],
+        items=(fields["items"] or None),
+        date=(fields["date"] or None),
         raw_text=safe_text,
         detected_dates=detected_dates,
         detected_items=detected_items,
