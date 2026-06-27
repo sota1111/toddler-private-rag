@@ -109,7 +109,14 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             </div>
             <div className="flex items-center gap-2 md:gap-3">
               <RoleToggle />
-              <LanguageToggle />
+              <Link
+                to="/settings"
+                aria-label={t('nav.settings')}
+                title={t('nav.settings')}
+                className="flex-shrink-0 inline-flex items-center justify-center text-white/80 hover:text-white p-2 rounded-full hover:bg-surface/15"
+              >
+                <SettingsIcon />
+              </Link>
               {isAuthenticated && (
                 <div className="flex items-center gap-2 md:gap-3">
                   <span className="hidden md:inline text-white/80 text-sm">{email}</span>
@@ -146,7 +153,6 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 </NavLink>
                 <NavLink to="/schedule" icon={<ScheduleIcon />}>{t('nav.schedule')}</NavLink>
                 <NavLink to="/tasks" icon={<TasksIcon />}>{t('nav.tasks')}</NavLink>
-                <NavLink to="/settings" icon={<SettingsIcon />}>{t('nav.settings')}</NavLink>
               </div>
             </div>
           </div>
