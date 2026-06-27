@@ -30,6 +30,7 @@ async def process_ocr(
     content_type: str,
     cleanup_local: bool = False,
     info_id: Optional[Union[int, str]] = None,
+    language: str = "ja",
 ):
     repo = get_attachment_repo_standalone()
     safe_text = ""
@@ -63,10 +64,11 @@ async def process_ocr(
             info_id,
             safe_text if ocr_ok else "",
             structured if ocr_ok else None,
+            language=language,
         )
 
 
-def _promote_processing_draft(info_id, safe_text, structured):
+def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
     """processing のレコードを enrich してサーバ側で draft へ昇格する (SOT-1293)。
 
     対象が `registration_state == 'processing'`（自動登録の番兵）のときだけ作用する。
@@ -93,7 +95,7 @@ def _promote_processing_draft(info_id, safe_text, structured):
         extra_ids = []
         try:
             tasks = extraction.build_task_drafts(
-                safe_text or "", detected_dates, detected_items
+                safe_text or "", detected_dates, detected_items, language=language
             )
             if not tasks:
                 raise ValueError("no task drafts")
@@ -171,6 +173,7 @@ async def upload_attachment(
     info_id: Union[int, str],
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    language: str = "ja",
     repo: AttachmentRepository = Depends(get_attachment_repository),
     current_user: str = Depends(get_current_user)
 ):
@@ -228,6 +231,7 @@ async def upload_attachment(
         content_type,
         cleanup_local,
         info_id,
+        language,
     )
 
     return db_attachment

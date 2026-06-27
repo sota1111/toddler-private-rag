@@ -162,4 +162,27 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page).toHaveURL(/\/data\/2$/)
     await expect(page.getByRole('heading', { name: '運動会のお知らせ' })).toBeVisible()
   })
+
+  test('S10: 設定メニューで言語・標準時間・子どもの名前を設定でき、再読込後も保持される (SOT-1315)', async ({ page }) => {
+    await installApiMocks(page, { authed: true })
+    await login(page)
+
+    await page.locator('nav a[href="/settings"]').first().click()
+    await expect(page).toHaveURL(/\/settings/)
+    await expect(page.getByRole('heading', { name: '設定' })).toBeVisible()
+
+    // 言語・標準時間・子どもの名前のコントロールが表示される
+    await expect(page.getByLabel('言語')).toBeVisible()
+    await expect(page.getByLabel('標準時間（タイムゾーン）')).toBeVisible()
+    await expect(page.getByLabel('子どもの名前')).toBeVisible()
+
+    // 標準時間と子どもの名前を設定する
+    await page.getByLabel('標準時間（タイムゾーン）').selectOption('America/New_York')
+    await page.getByLabel('子どもの名前').fill('たろう')
+
+    // 再読込しても設定が保持される（localStorage 永続化）
+    await page.reload()
+    await expect(page.getByLabel('標準時間（タイムゾーン）')).toHaveValue('America/New_York')
+    await expect(page.getByLabel('子どもの名前')).toHaveValue('たろう')
+  })
 })

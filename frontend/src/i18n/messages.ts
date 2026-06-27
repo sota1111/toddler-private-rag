@@ -16,7 +16,16 @@ export const messages: Record<Lang, Messages> = {
     'nav.drafts': '仮登録',
     'nav.schedule': '予定',
     'nav.tasks': 'タスク一覧',
+    'nav.settings': '設定',
     'nav.logout': 'ログアウト',
+
+    // settings (SOT-1315)
+    'settings.title': '設定',
+    'settings.subtitle': '言語・標準時間・子どもの名前を設定できます。',
+    'settings.language': '言語',
+    'settings.timezone': '標準時間（タイムゾーン）',
+    'settings.childName': '子どもの名前',
+    'settings.childNamePlaceholder': '例: たろう',
 
     // schedule (SOT-1306)
     'schedule.title': '予定カレンダー',
@@ -299,7 +308,16 @@ export const messages: Record<Lang, Messages> = {
     'nav.drafts': 'Drafts',
     'nav.schedule': 'Schedule',
     'nav.tasks': 'Tasks',
+    'nav.settings': 'Settings',
     'nav.logout': 'Log out',
+
+    // settings (SOT-1315)
+    'settings.title': 'Settings',
+    'settings.subtitle': 'Configure language, standard time, and your child\'s name.',
+    'settings.language': 'Language',
+    'settings.timezone': 'Standard time (timezone)',
+    'settings.childName': "Child's name",
+    'settings.childNamePlaceholder': 'e.g. Taro',
 
     // schedule (SOT-1306)
     'schedule.title': 'Schedule',

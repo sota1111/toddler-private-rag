@@ -121,3 +121,60 @@ def test_build_task_drafts_empty_text_is_safe():
     drafts = extraction.build_task_drafts("")
     assert len(drafts) == 1
     assert "event_date" in drafts[0]
+
+
+# --- 設定言語でのタスク登録 (SOT-1315) ---
+
+
+def _patch_fake_genai(monkeypatch, captured):
+    """``_llm_tasks`` が使う genai クライアントをプロンプト捕捉用に差し替える。"""
+
+    class _FakeModels:
+        def generate_content(self, model, contents, config=None):
+            captured["prompt"] = contents
+
+            class _R:
+                text = "[]"
+
+            return _R()
+
+    class _FakeClient:
+        models = _FakeModels()
+
+    monkeypatch.setattr(extraction.ai_client, "get_genai_client", lambda: _FakeClient())
+    monkeypatch.setattr(extraction.ai_client, "get_model_name", lambda: "fake-model")
+    monkeypatch.setattr(extraction.ai_client, "default_generate_config", lambda: None)
+    monkeypatch.setattr(extraction.ai_client, "with_retry", lambda fn: fn())
+
+
+def test_llm_tasks_includes_language_instruction(monkeypatch):
+    captured = {}
+    _patch_fake_genai(monkeypatch, captured)
+
+    extraction._llm_tasks("運動会のお知らせ", "en")
+    assert "English" in captured["prompt"]
+
+    extraction._llm_tasks("運動会のお知らせ", "ja")
+    assert "日本語" in captured["prompt"]
+
+
+def test_llm_tasks_defaults_to_japanese(monkeypatch):
+    captured = {}
+    _patch_fake_genai(monkeypatch, captured)
+
+    extraction._llm_tasks("運動会のお知らせ")  # language 省略
+    assert "日本語" in captured["prompt"]
+
+
+def test_build_task_drafts_forwards_language(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(extraction.ai_client, "gemini_available", lambda: True)
+
+    def _fake_llm_tasks(text, language="ja"):
+        seen["language"] = language
+        return []  # 空 → 単一 draft フォールバック（言語伝播のみ検証）
+
+    monkeypatch.setattr(extraction, "_llm_tasks", _fake_llm_tasks)
+
+    extraction.build_task_drafts("運動会のお知らせ", language="en")
+    assert seen["language"] == "en"
