@@ -69,10 +69,13 @@ async def process_ocr(
 
 
 def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
-    """processing のレコードを enrich してサーバ側で draft へ昇格する (SOT-1293)。
+    """processing のレコードを enrich してサーバ側で本登録(registered)へ昇格する (SOT-1293 / SOT-1324)。
 
     対象が `registration_state == 'processing'`（自動登録の番兵）のときだけ作用する。
     通常の手動添付(registered)には一切作用しない。
+
+    SOT-1324: 写真(メイン)レコードは本登録(finalize)ステップを介さず直接 `registered` へ昇格する。
+    （抽出タスクは従来どおり `draft` レコードのまま＝仮登録レビュー導線を維持する。）
     """
     info_repo = get_info_repo_standalone()
     try:
@@ -95,6 +98,7 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
         #   - 抽出したタスクはすべて新規 draft レコードにする（写真添付なし / event_date あり）。
         #     → タスク一覧(TasksPage)にのみ出る。
         # これにより同じレコードがタスク一覧と登録一覧の両方に出る問題を解消する (旧 SOT-1307 の写真紐付け)。
+        # SOT-1324: 写真(メイン)レコードは本登録(finalize)を介さず直接 `registered` で昇格する。
         extra_ids = []
         try:
             # 写真+タイトルの登録レコード: 全体タイトル/種別/本文を作り、event_date は持たせない。
@@ -110,7 +114,7 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
                     items=(overall["items"] or None),
                     date=(overall["date"] or None),
                     event_date=None,  # 登録レコードはタスクではないので予定日を持たせない
-                    registration_state="draft",
+                    registration_state="registered",  # SOT-1324: 本登録を介さず直接登録
                 ),
             )
 
@@ -140,14 +144,14 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
                     logger.warning(
                         f"Failed to create task draft for info {info_id}: {e}"
                     )
-        except Exception as e:  # graceful degradation: 必ず元レコードを draft へ昇格させる
+        except Exception as e:  # graceful degradation: 必ず元レコードを登録(registered)へ昇格させる
             logger.warning(
                 f"Enrich failed for info {info_id}, promoting with fallback title: {e}"
             )
             info_repo.update(
                 info_id,
                 schemas.NurseryInfoUpdate(
-                    title=fallback_title, registration_state="draft"
+                    title=fallback_title, registration_state="registered"  # SOT-1324
                 ),
             )
 

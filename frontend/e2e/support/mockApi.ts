@@ -226,10 +226,11 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
       }
       if (rec) {
         rec.attachments = [...(rec.attachments ?? []), att]
-        // SOT-1293: サーバ側で OCR→enrich→draft 昇格が行われるのを再現する。
-        // processing のレコードは写真添付をトリガーに enrich 済み draft へ昇格する。
+        // SOT-1293/SOT-1324: サーバ側で OCR→enrich→本登録(registered)昇格が行われるのを再現する。
+        // processing のレコードは写真添付をトリガーに enrich 済みの registered へ直接昇格する
+        // （本登録ステップを介さない）。
         if (rec.registration_state === 'processing') {
-          rec.registration_state = 'draft'
+          rec.registration_state = 'registered'
           rec.title = rec.title || 'お知らせ_自動登録テスト'
           rec.info_type = 'お知らせ'
           rec.content = '7月の予定をお知らせします。プールが始まります。'

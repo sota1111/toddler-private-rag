@@ -1,8 +1,11 @@
-"""SOT-1293: 仮登録(draft)の enrich→永続化→昇格をサーバ側 background task で行う検証。
+"""SOT-1293/SOT-1324: 写真登録の enrich→永続化→昇格をサーバ側 background task で行う検証。
 
-写真アップロードをトリガーに、processing のレコードがサーバ側で draft へ昇格すること
+写真アップロードをトリガーに、processing のレコードがサーバ側で昇格すること
 （ブラウザの PUT/extract に依存しない）、写真紐付けが維持されること、registered には
-副作用が無いこと、OCR 失敗時もフォールバックタイトルで draft 昇格することを確認する。
+副作用が無いこと、OCR 失敗時もフォールバックタイトルで昇格することを確認する。
+
+SOT-1324: 写真(メイン)レコードは本登録(finalize)を介さず直接 registered へ昇格し、
+写真一覧(GET /info/)に即時に出る（仮登録一覧 drafts には出ない）。
 """
 
 import pytest
@@ -71,8 +74,9 @@ def _upload(info_id: int):
     )
 
 
-def test_processing_record_promoted_to_draft_server_side(monkeypatch):
-    """processing レコードは写真アップロードをトリガーにサーバ側で draft へ昇格する。"""
+def test_processing_record_promoted_to_registered_server_side(monkeypatch):
+    """SOT-1324: processing レコードは写真アップロードをトリガーにサーバ側で
+    本登録(registered)へ直接昇格する（本登録ステップを介さない）。"""
     monkeypatch.setattr(
         ocr, "extract_text", lambda *a, **k: "プール開きのお知らせ\n水着を持参してください"
     )
@@ -84,8 +88,8 @@ def test_processing_record_promoted_to_draft_server_side(monkeypatch):
 
     db = TestingSessionLocal()
     info = db.query(models.NurseryInfo).filter(models.NurseryInfo.id == info_id).first()
-    # ブラウザの PUT 無しで draft へ昇格している
-    assert info.registration_state == "draft"
+    # ブラウザの PUT 無しで registered へ直接昇格している（draft を介さない）
+    assert info.registration_state == "registered"
     assert info.title  # タイトルが付与されている（OCR本文の先頭行 or enrich由来）
     assert info.content  # 本文(RAG対象)が空でない
     # 写真紐付けが維持されている
@@ -94,9 +98,12 @@ def test_processing_record_promoted_to_draft_server_side(monkeypatch):
     assert att.info_id == info_id
     db.close()
 
-    # 仮登録一覧(drafts)に出る
+    # 写真一覧(GET /info/ = registered のみ)に出る
+    registered = client.get("/api/info/").json()
+    assert any(r["id"] == info_id for r in registered)
+    # 仮登録一覧(drafts)には出ない
     drafts = client.get("/api/info/drafts").json()
-    assert any(d["id"] == info_id for d in drafts)
+    assert all(d["id"] != info_id for d in drafts)
 
 
 def test_registered_record_not_modified(monkeypatch):
@@ -115,7 +122,7 @@ def test_registered_record_not_modified(monkeypatch):
 
 
 def test_processing_record_promoted_even_on_ocr_failure(monkeypatch):
-    """OCR 失敗時もフォールバックタイトルで draft 昇格し、写真付きで仮登録に出す。"""
+    """OCR 失敗時もフォールバックタイトルで registered 昇格し、写真付きで写真一覧に出す。"""
 
     def boom(*a, **k):
         raise Exception("OCR Error")
@@ -129,7 +136,7 @@ def test_processing_record_promoted_even_on_ocr_failure(monkeypatch):
 
     db = TestingSessionLocal()
     info = db.query(models.NurseryInfo).filter(models.NurseryInfo.id == info_id).first()
-    assert info.registration_state == "draft"
+    assert info.registration_state == "registered"
     assert info.title.startswith("写真から登録")
     att = db.query(models.Attachment).filter(models.Attachment.id == att_id).first()
     assert att.ocr_status == "failed"
