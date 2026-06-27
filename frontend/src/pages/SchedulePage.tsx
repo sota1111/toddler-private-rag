@@ -56,21 +56,24 @@ const SchedulePage: React.FC = () => {
     return map;
   }, [events]);
 
-  // カレンダーグリッド（日曜始まり、前後月の埋めセルを含む）。
+  // カレンダーグリッド（日曜始まり、当月先頭週の前月埋めセルは含むが、
+  // 当月末日を含む週の次にある「翌月だけの週（翌月の1週目）」は表示しない）。
   const weeks = useMemo<Date[][]>(() => {
     const first = new Date(viewYear, viewMonth, 1);
+    const lastDay = new Date(viewYear, viewMonth + 1, 0); // 当月末日
     const start = new Date(first);
     start.setDate(first.getDate() - first.getDay()); // 直前の日曜まで戻す
-    const cells: Date[] = [];
-    const cursor = new Date(start);
-    // 6週（42セル）固定で月をカバーする。
-    for (let i = 0; i < 42; i += 1) {
-      cells.push(new Date(cursor));
-      cursor.setDate(cursor.getDate() + 1);
-    }
     const rows: Date[][] = [];
-    for (let i = 0; i < cells.length; i += 7) {
-      rows.push(cells.slice(i, i + 7));
+    const cursor = new Date(start);
+    // 当月末日を含む週まで生成し、それ以降（翌月だけの週）は出さない。
+    while (true) {
+      const week: Date[] = [];
+      for (let i = 0; i < 7; i += 1) {
+        week.push(new Date(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      rows.push(week);
+      if (week[6] >= lastDay) break; // この週の土曜が当月末日以降になったら終了
     }
     return rows;
   }, [viewYear, viewMonth]);
