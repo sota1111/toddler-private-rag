@@ -213,7 +213,7 @@ const DraftsPage: React.FC = () => {
                       {d.title || t('drafts.untitled')}
                     </h2>
                     <p className="text-xs text-muted-foreground">
-                      <span className="font-semibold text-foreground">{t('drafts.type')}:</span> {d.info_type}
+                      <span className="font-semibold text-foreground">{t('drafts.type')}:</span> {optLabel('infoType', d.info_type)}
                       {d.date ? (
                         <>
                           {' ・ '}

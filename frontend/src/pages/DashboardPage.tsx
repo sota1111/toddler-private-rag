@@ -57,13 +57,19 @@ const DashboardSection: React.FC<{
 
 const ReminderRow: React.FC<{ item: ReminderItem }> = ({ item }) => {
   const { t } = useI18n();
+  // 種別ラベル（保存値は日本語のまま、表示は設定言語に合わせて翻訳）
+  const optLabel = (group: string, value: string) => {
+    const key = `options.${group}.${value}`;
+    const label = t(key);
+    return label === key ? value : label;
+  };
   const style = URGENCY_STYLES[item.urgency] ?? URGENCY_STYLES.upcoming;
   return (
     <li className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 ${style.row}`}>
       <div className="min-w-0">
         <p className="font-medium text-foreground truncate">{item.message}</p>
         <p className="text-xs text-muted-foreground">
-          {item.info_type} ・ {item.target_date}
+          {optLabel('infoType', item.info_type)} ・ {item.target_date}
         </p>
       </div>
       <span className={`flex-shrink-0 text-xs px-2 py-1 rounded-full ${style.chip}`}>
@@ -112,6 +118,12 @@ const ProactiveReminders: React.FC = () => {
 
 const DashboardPage: React.FC = () => {
   const { t } = useI18n();
+  // 種別ラベル（保存値は日本語のまま、表示は設定言語に合わせて翻訳）
+  const optLabel = (group: string, value: string) => {
+    const key = `options.${group}.${value}`;
+    const label = t(key);
+    return label === key ? value : label;
+  };
   const todayQuery = useQuery({ queryKey: ['today'], queryFn: getToday });
   const tomorrowQuery = useQuery({ queryKey: ['tomorrow'], queryFn: getTomorrow });
   const weeklyQuery = useQuery({ queryKey: ['weekly'], queryFn: getWeekly });
@@ -135,7 +147,7 @@ const DashboardPage: React.FC = () => {
                 {item.due_date && <p className="text-xs text-red-600 font-semibold">{t('dashboard.dueLabel')}{item.due_date}</p>}
               </div>
               <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">
-                {item.info_type}
+                {optLabel('infoType', item.info_type)}
               </span>
             </div>
           )}
