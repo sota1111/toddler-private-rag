@@ -10,6 +10,12 @@ import { useI18n } from '../i18n/useI18n';
 
 const TasksPage: React.FC = () => {
   const { t } = useI18n();
+  // 種別ラベル（保存値は日本語のまま、表示は設定言語に合わせて翻訳）
+  const optLabel = (group: string, value: string) => {
+    const key = `options.${group}.${value}`;
+    const label = t(key);
+    return label === key ? value : label;
+  };
   const { data, isLoading } = useQuery({
     queryKey: ['info', 'all'],
     queryFn: () => getInfoList({ include_attachments: false }),
@@ -95,7 +101,7 @@ const TasksPage: React.FC = () => {
                         <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full">
                           {item.event_date}
                         </span>
-                        <span className="text-xs text-muted-foreground">{item.info_type}</span>
+                        <span className="text-xs text-muted-foreground">{optLabel('infoType', item.info_type)}</span>
                       </div>
                     </div>
                   </Link>
