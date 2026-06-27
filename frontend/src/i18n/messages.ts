@@ -93,6 +93,7 @@ export const messages: Record<Lang, Messages> = {
     'reminder.urgency.today': '本日',
     'reminder.urgency.soon': 'まもなく',
     'reminder.urgency.upcoming': '予定',
+    'reminder.kind.submission': '提出書類',
 
     // ask
     'ask.title': '質問する',
@@ -395,6 +396,7 @@ export const messages: Record<Lang, Messages> = {
     'reminder.urgency.today': 'Today',
     'reminder.urgency.soon': 'Soon',
     'reminder.urgency.upcoming': 'Upcoming',
+    'reminder.kind.submission': 'Submission',
 
     // ask
     'ask.title': 'Ask a question',

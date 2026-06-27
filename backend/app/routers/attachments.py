@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse, Response
 import os
 import logging
 from typing import Optional, Union
-from .. import schemas, storage, ocr, extraction, clock
+from .. import schemas, storage, ocr, extraction, clock, submission_agent
 from ..privacy import redact_pii
 from ..repository import (
     AttachmentRepository,
@@ -155,6 +155,43 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
                     logger.warning(
                         f"Failed to create task draft for info {info_id}: {e}"
                     )
+
+            # SOT-1316: 提出書類先回りエージェント。提出が必要な書類を抽出し、公式情報を
+            # grounding で調べて手順/会社発行要否/所要期間を整理し、提出期限から逆算した
+            # 準備タスクを別 draft レコードとして作る（tags=提出書類 で掲示板が分類できる）。
+            # best-effort: 失敗してもタスク draft 生成・写真昇格は止めない。
+            try:
+                sub_drafts = submission_agent.build_submission_task_drafts(
+                    safe_text or "", detected_dates, language=language
+                )
+                for sub in sub_drafts:
+                    try:
+                        created = info_repo.create(
+                            schemas.NurseryInfoCreate(
+                                title=sub["title"],
+                                info_type=sub["info_type"],
+                                content=sub["content"],
+                                items=(sub["items"] or None),
+                                date=(sub["date"] or None),
+                                event_date=(sub.get("event_date") or None),
+                                due_date=(sub.get("due_date") or None),
+                                tags=(sub.get("tags") or None),
+                                status="未対応",
+                                priority="普通",
+                                registration_state="draft",
+                            )
+                        )
+                        cid = getattr(created, "id", None)
+                        if cid is not None:
+                            extra_ids.append(cid)
+                    except Exception as e:  # 1件の失敗で全体を止めない
+                        logger.warning(
+                            f"Failed to create submission draft for info {info_id}: {e}"
+                        )
+            except Exception as e:  # 提出書類エージェント全体の失敗は無視
+                logger.warning(
+                    f"Submission agent failed for info {info_id}: {e}"
+                )
         except Exception as e:  # graceful degradation: 必ず元レコードを登録(registered)へ昇格させる
             logger.warning(
                 f"Enrich failed for info {info_id}, promoting with fallback title: {e}"
