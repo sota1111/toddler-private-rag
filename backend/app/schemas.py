@@ -158,7 +158,8 @@ class DocumentExtraction(BaseModel):
 # --- 5カテゴリ構造化抽出 (SOT-1085 / SOT-1092) ---
 
 class ExtractedCategories(BaseModel):
-    """お知らせから抽出した保護者の行動5カテゴリ。"""
+    """お知らせから抽出したタイトル＋保護者の行動5カテゴリ。"""
+    title: str = ""               # お知らせ全体の簡潔なタイトル (SOT-1292)
     submissions: List[str] = []   # 提出物
     belongings: List[str] = []    # 持ち物
     deadlines: List[str] = []     # 締切

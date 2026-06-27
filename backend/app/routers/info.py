@@ -7,9 +7,8 @@ import tempfile
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from typing import List, Optional, Union
-from .. import schemas, storage, ocr, tagging, extraction, reminders, ai_client
+from .. import schemas, storage, ocr, tagging, extraction, reminders
 from ..privacy import redact_pii
-from ..rag.providers import get_llm_provider
 from ..repository import InfoRepository, get_info_repository
 from ..routers.auth import get_current_user
 from ..rag.service import get_rag_service
@@ -250,58 +249,32 @@ async def extract_info_draft(
     heuristic_title = _draft_title(safe_text)
     content_text = safe_text
 
-    # OCR後の整理(enrich)は「タイトル整形・5カテゴリ抽出・本文整理」の3つのAI呼び出しから成る。
-    # これらは互いに独立(いずれも safe_text のみに依存)なので、直列ではなく並列に実行して
-    # レイテンシを「3呼び出し分」から「実質1呼び出し分」へ短縮する。直列実行のままだと本番で
-    # 24〜44秒かかり、クライアント/プロキシのタイムアウトを超えて「写真から登録（要手入力）」の
-    # フォールバック表示になっていた (SOT-1292)。各タスクは自分の例外を内部で握りつぶし、
-    # 1つの失敗が他へ波及しないようにする(graceful degradation)。
-
-    # タイトル整形: LLM が利用可能なら洗練、失敗/未利用ならヒューリスティック。
-    # 判定は OCR・カテゴリ抽出・本文整理と同じ ai_client.gemini_available() に統一する (SOT-1280)。
-    def _refine_title() -> str:
-        if not (safe_text.strip() and ai_client.gemini_available()):
-            return heuristic_title
+    # OCR後の整理(enrich)は「タイトル＋5カテゴリ抽出」を AI 1呼び出しに集約する (SOT-1292)。
+    # 旧実装はタイトル整形・カテゴリ抽出・本文整理の3呼び出しを並列実行していたが、human の指示により
+    # (1)専用タイトル呼び出しと(3)本文整理を廃止し、(2)カテゴリ抽出JSONにタイトルを含める1呼び出しへ統合。
+    # content(本文)は抽出済みカテゴリから組み立てた構造化テキストにし、これを RAG の対象にする。
+    # AI が1回分になるためレイテンシも短縮される（直列3呼び出しで24〜44秒→タイムアウトの問題を解消）。
+    def _enrich() -> dict:
+        # safe_text 空 or LLM 不可なら extract_titled_categories 内でヒューリスティックのみに落ちる。
         try:
-            provider = get_llm_provider()
-            refined = provider.generate(
-                "次の保育園のお知らせ本文に簡潔なタイトルを1行で付けてください。",
-                [safe_text],
-            )
-            if refined and refined.strip():
-                return refined.strip().splitlines()[0][:40]
+            return extraction.extract_titled_categories(safe_text)
         except Exception as e:  # graceful degradation
-            logger.warning("LLM title refinement failed in /info/extract: %s", e)
-        return heuristic_title
+            logger.warning("Enrich (titled categories) failed in /info/extract: %s", e)
+            return {"title": ""}
 
-    # 5カテゴリ構造化抽出 (提出物/持ち物/締切/行事予定/注意事項)。失敗時も空で返す。
-    def _extract_categories() -> schemas.ExtractedCategories:
-        try:
-            return schemas.ExtractedCategories(**extraction.extract_categories(safe_text))
-        except Exception as e:  # graceful degradation
-            logger.warning("Category extraction failed in /info/extract: %s", e)
-            return schemas.ExtractedCategories()
+    enriched = await asyncio.to_thread(_enrich)
 
-    # 本文整理 (SOT-1214): 整理本文(カテゴリ見出しは含まない)。失敗時は空で返す。
-    def _organize_body() -> str:
-        try:
-            return extraction.organize_body(safe_text)
-        except Exception as e:  # graceful degradation
-            logger.warning("Content organize failed in /info/extract: %s", e)
-            return ""
+    # タイトル: JSON 由来。空ならヒューリスティックにフォールバック。
+    title = (enriched.get("title") or "").strip()[:40] or heuristic_title
 
-    title, categories, organized_body = await asyncio.gather(
-        asyncio.to_thread(_refine_title),
-        asyncio.to_thread(_extract_categories),
-        asyncio.to_thread(_organize_body),
-    )
+    category_dict = {k: enriched.get(k, []) for k in ("submissions", "belongings", "deadlines", "events", "notes")}
+    categories = schemas.ExtractedCategories(title=title, **category_dict)
 
-    # 整理本文 + 空でないカテゴリ見出しセクション (organize_content と同じ出力形)。
-    section = extraction.format_category_section(categories.model_dump())
-    if organized_body and section:
-        content_text = f"{organized_body}\n\n{section}"
-    elif organized_body or section:
-        content_text = organized_body or section
+    # content(=RAG対象) は整形済みカテゴリから組み立てた構造化テキスト。
+    # カテゴリが全て空なら本文が空にならないよう OCR 本文(safe_text)にフォールバックする。
+    structured = extraction.build_structured_content(category_dict)
+    if structured:
+        content_text = structured
 
     return schemas.InfoExtractDraft(
         title=title,
