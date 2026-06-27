@@ -24,6 +24,7 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
   const [form, setForm] = useState<NurseryInfoCreate | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   const { data: item, isLoading, isError } = useQuery({
     queryKey: ['info-detail', id],
@@ -78,6 +79,26 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
     },
     onError: () => setSaveError(t('records.saveError')),
   });
+
+  // SOT-1301: 編集モードに入らず、一覧から開いた項目のステータスだけを即時変更する。
+  const statusMutation = useMutation({
+    mutationFn: (status: string) => updateInfo(id, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['info-detail', id] });
+      queryClient.invalidateQueries({ queryKey: ['info'] });
+      queryClient.invalidateQueries({ queryKey: ['tomorrow'] });
+      queryClient.invalidateQueries({ queryKey: ['weekly'] });
+      queryClient.invalidateQueries({ queryKey: ['pending'] });
+    },
+    onError: () => setStatusError(t('records.statusError')),
+  });
+
+  const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const next = e.target.value;
+    if (!item || next === item.status || statusMutation.isPending) return;
+    setStatusError(null);
+    statusMutation.mutate(next);
+  };
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteInfo(id),
@@ -160,6 +181,28 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
                 </button>
               </div>
             </div>
+
+            {/* SOT-1301: 編集/削除ボタンの下にステータス変更ドロップダウンを置き、即時に状態を更新する */}
+            <div className="flex items-center gap-2 mb-4">
+              <label htmlFor="status-change" className="text-sm font-medium text-foreground">
+                {t('records.changeStatus')}
+              </label>
+              <select
+                id="status-change"
+                value={item.status}
+                onChange={handleStatusChange}
+                disabled={statusMutation.isPending}
+                className="border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2 border disabled:opacity-60"
+              >
+                {STATUS_TYPES.map((v) => <option key={v} value={v}>{optLabel('status', v)}</option>)}
+              </select>
+            </div>
+
+            {statusError && (
+              <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {statusError}
+              </div>
+            )}
 
             {deleteError && (
               <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">

@@ -118,6 +118,8 @@ export const messages: Record<Lang, Messages> = {
     'records.confirmDelete': '「{title}」を削除しますか？',
     'records.deleteError': '削除に失敗しました。時間をおいて再度お試しください。',
     'records.saveError': '保存に失敗しました。時間をおいて再度お試しください。',
+    'records.changeStatus': 'ステータス変更',
+    'records.statusError': 'ステータスの変更に失敗しました。時間をおいて再度お試しください。',
     'records.notFound': 'データが見つかりませんでした。',
     'records.attachmentsHeading': '元の画像データ',
 
@@ -382,6 +384,8 @@ export const messages: Record<Lang, Messages> = {
     'records.confirmDelete': 'Delete “{title}”?',
     'records.deleteError': 'Failed to delete. Please try again later.',
     'records.saveError': 'Failed to save. Please try again later.',
+    'records.changeStatus': 'Change status',
+    'records.statusError': 'Failed to change status. Please try again later.',
     'records.notFound': 'Data not found.',
     'records.attachmentsHeading': 'Original image data',
 
