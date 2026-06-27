@@ -55,7 +55,7 @@ const ITEMS: RegisterMenuItem[] = [
     ),
   },
   {
-    // 登録一覧 (本登録データのタイトル一覧) — 箇条書きリスト
+    // 写真一覧 (本登録データのタイトル一覧) — 箇条書きリスト
     to: '/registered',
     labelKey: 'nav.registered',
     isActive: (p) => p === '/registered',
