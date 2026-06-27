@@ -14,7 +14,6 @@ export const messages: Record<Lang, Messages> = {
     'nav.create': '登録',
     'nav.createAuto': '自動登録',
     'nav.drafts': '仮登録',
-    'nav.records': 'データ',
     'nav.schedule': '予定',
     'nav.tasks': 'タスク一覧',
     'nav.logout': 'ログアウト',
@@ -124,10 +123,8 @@ export const messages: Record<Lang, Messages> = {
     'list.attachmentsHeading': '添付ファイル',
     'list.confirmDelete': '「{title}」を削除しますか？',
 
-    // records (SOT-1217: 本登録データ一覧・詳細)
-    'records.title': 'データ一覧',
-    'records.empty': '登録済みのデータがありません。',
-    'records.back': '一覧に戻る',
+    // records (SOT-1217: 本登録データ詳細。SOT-1312 で一覧ページとメニューを削除し詳細のみ残置)
+    'records.back': '戻る',
     'records.edit': '編集',
     'records.save': '保存',
     'records.cancel': 'キャンセル',
@@ -298,7 +295,6 @@ export const messages: Record<Lang, Messages> = {
     'nav.create': 'Add',
     'nav.createAuto': 'Auto',
     'nav.drafts': 'Drafts',
-    'nav.records': 'Data',
     'nav.schedule': 'Schedule',
     'nav.tasks': 'Tasks',
     'nav.logout': 'Log out',
@@ -408,10 +404,8 @@ export const messages: Record<Lang, Messages> = {
     'list.attachmentsHeading': 'Attachments',
     'list.confirmDelete': 'Delete “{title}”?',
 
-    // records (SOT-1217)
-    'records.title': 'Data',
-    'records.empty': 'No registered data yet.',
-    'records.back': 'Back to list',
+    // records (SOT-1217; SOT-1312 removed list page/menu, detail only)
+    'records.back': 'Back',
     'records.edit': 'Edit',
     'records.save': 'Save',
     'records.cancel': 'Cancel',

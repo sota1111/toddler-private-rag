@@ -5,22 +5,26 @@ import { installApiMocks, login } from './support/mockApi'
 // 1テスト = 1ユーザーストーリー。すべての `/api/**` はモックして決定的にする。
 
 test.describe('toddler-private-rag シナリオ', () => {
-  test('S1: 未認証で /data にアクセスすると /login へリダイレクトされる', async ({ page }) => {
+  test('S1: 未認証で保護ページ(/data/:id 詳細)にアクセスすると /login へリダイレクトされる (SOT-1312)', async ({ page }) => {
     await installApiMocks(page, { authed: false })
-    await page.goto('/data')
+    // SOT-1312: データ一覧 /data は廃止。詳細 /data/:id は引き続き保護ページ。
+    await page.goto('/data/1')
     await expect(page).toHaveURL(/\/login/)
     await expect(page.locator('input[type="email"]')).toBeVisible()
   })
 
-  test('S2: ログイン後、主要メニューを辿って各画面へ遷移できる', async ({ page }) => {
+  test('S2: ログイン後、主要メニューを辿って各画面へ遷移できる（データメニューは廃止） (SOT-1312)', async ({ page }) => {
     await installApiMocks(page, { authed: true })
     await login(page)
+
+    // SOT-1312: 「データ」メニューはナビゲーションから削除されている
+    await expect(page.locator('nav a[href="/data"]')).toHaveCount(0)
 
     await page.locator('nav a[href="/info"]').first().click()
     await expect(page).toHaveURL(/\/info/)
 
-    await page.locator('nav a[href="/data"]').first().click()
-    await expect(page).toHaveURL(/\/data$/)
+    await page.locator('nav a[href="/tasks"]').first().click()
+    await expect(page).toHaveURL(/\/tasks/)
 
     await page.locator('nav a[href="/create/auto"]').first().click()
     await expect(page).toHaveURL(/\/create\/auto/)
@@ -30,38 +34,33 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page).toHaveURL(/\/$/)
   })
 
-  test('S3: データ一覧から行を選ぶと詳細ページへ遷移しタイトルが表示される', async ({ page }) => {
+  test('S3: 詳細ページ(/data/:id)はタイトルが表示される (SOT-1312)', async ({ page }) => {
     await installApiMocks(page, { authed: true })
     await login(page)
 
-    await page.locator('nav a[href="/data"]').first().click()
-    await expect(page).toHaveURL(/\/data$/)
-    // 一覧に本登録済みデータが表示される
-    await expect(page.getByRole('button', { name: '4月の給食メニュー' })).toBeVisible()
-
-    // SOT-1309: 詳細はタイトルと写真のみ表示する
-    await page.getByRole('button', { name: '4月の給食メニュー' }).click()
+    // SOT-1312: データ一覧は廃止。詳細ページは他画面のリンク先として残存し、直接遷移でも表示できる。
+    await page.goto('/data/1')
     await expect(page).toHaveURL(/\/data\/1$/)
     await expect(page.getByRole('heading', { name: '4月の給食メニュー' })).toBeVisible()
   })
 
-  test('S5: 詳細ページで削除すると一覧へ戻り対象が消える', async ({ page }) => {
+  test('S5: 詳細ページで削除すると元の画面へ戻り対象が消える (SOT-1312)', async ({ page }) => {
     await installApiMocks(page, { authed: true })
     await login(page)
     // confirm ダイアログを自動承認する
     page.on('dialog', dialog => dialog.accept())
 
-    // 認証は in-memory のため、保護ページはクライアント遷移で開く
-    await page.locator('nav a[href="/data"]').first().click()
-    await page.getByRole('button', { name: '4月の給食メニュー' }).click()
-    await expect(page).toHaveURL(/\/data\/1$/)
-    await expect(page.getByRole('heading', { name: '4月の給食メニュー' })).toBeVisible()
+    // SOT-1312: 一覧は廃止。タスク一覧メニュー経由で詳細へ遷移する。
+    await page.locator('nav a[href="/tasks"]').first().click()
+    await expect(page).toHaveURL(/\/tasks/)
+    await page.getByRole('link', { name: /運動会のお知らせ/ }).click()
+    await expect(page).toHaveURL(/\/data\/2$/)
+    await expect(page.getByRole('heading', { name: '運動会のお知らせ' })).toBeVisible()
 
     await page.getByRole('button', { name: '削除' }).click()
-    await expect(page).toHaveURL(/\/data$/)
-    // 削除した行は消え、残りの行は表示される
-    await expect(page.getByRole('button', { name: '4月の給食メニュー' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: '運動会のお知らせ' })).toBeVisible()
+    // 削除後は遷移元（タスク一覧）へ戻り、対象が消える
+    await expect(page).toHaveURL(/\/tasks/)
+    await expect(page.getByRole('link', { name: /運動会のお知らせ/ })).toHaveCount(0)
   })
 
   test('S6: 写真を選んで自動登録すると仮登録(drafts)に反映される', async ({ page }) => {

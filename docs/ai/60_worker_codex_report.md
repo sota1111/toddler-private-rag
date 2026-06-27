@@ -1,62 +1,48 @@
 # Worker Report
 
 ## Summary
-SOT-1311 タスク確認。Codex CLI は usage-limit cooldown により非応答（exit 75）。
-Worker Non-Response Fallback Policy に従い、Claude Code が read-only タスク確認を実施した。
+Actionable: YES. Task type: IMPLEMENT (multi-file removal + e2e rework, single PR, no decomposition).
 
-判定: **actionable（実装可能）**。要件は2点:
-1. 手動登録機能を削除する。
-2. 登録データ確認画面（写真タイトル一覧→クリックでタイトル+写真表示→削除）を用意する。
+**Fallback disclosure (audit):** Codex CLI was non-responsive for this initial task check — `scripts/ai/run_codex.sh` exited `75` (usage-limit cooldown active until epoch 1782609660). Per the Worker Non-Response Fallback Policy, Claude Code performed this read-only task check directly.
 
-要件2の「登録データ確認画面」は **既に存在する**（DataListPage→DataDetailPage, SOT-1217/1309）。
-よって本Issueの実体は **要件1（手動登録の撤去）** が中心。
+"データ画面" = the registered-data **list** page `DataListPage` at route `/data`, surfaced by the bottom-nav menu entry labeled "データ" (`nav.records`). This is what must be removed from the menu and as a feature.
 
-### 手動登録フロー（撤去対象, frontend）
-手動登録は以下の3ページ＋専用コンテキストで構成され、自動登録（/create/auto）とは独立:
-- `frontend/src/pages/InfoCreatePage.tsx` — 手動入力フォーム, route `/create` index, `create.manualTitle`
-- `frontend/src/pages/DraftConfirmPage.tsx` — 手動フローの一時登録確認, route `/create/confirm-draft`
-- `frontend/src/pages/RegisterConfirmPage.tsx` — 手動フローの本登録確認, route `/create/confirm-register`
-- `frontend/src/contexts/CreateFlowContext.tsx` / `createFlowContextValue.ts` / `useCreateFlow.ts`
-  — 上記3ページのみが使用（`useCreateFlow` 利用箇所: App.tsx + 上記3ページのみ。AutoRegisterPage は不使用）
-- `frontend/src/App.tsx` — imports(InfoCreatePage/DraftConfirmPage/RegisterConfirmPage),
-  CreateFlowProvider ラッパ, `/create` 配下のルート定義（index/confirm-draft/confirm-register）
-- `frontend/src/components/RegisterMenu.tsx:43-53` — 「手動登録」項目（to `/create`, `nav.createManual`）
-- `frontend/src/i18n/messages.ts` — `nav.createManual`(L15/L293), `create.manualTitle`(L139/L417)
+**CRITICAL constraint:** the *detail* page `DataDetailPage` at `/data/:id` is a SHARED view navigated to from 4 other features and MUST be kept:
+- `frontend/src/pages/AskPage.tsx:161` → `/data/${s.info_id}` (RAG source link, SOT-1276)
+- `frontend/src/pages/DashboardPage.tsx:44` → `/data/${item.id}` (board item link, SOT-1281)
+- `frontend/src/pages/SchedulePage.tsx:246` → `/data/${item.id}` (calendar list link)
+- `frontend/src/pages/TasksPage.tsx:79` → `/data/${item.id}` (tasks list link, SOT-1313)
 
-### 自動登録・仮登録は保持
-- `/create/auto` = AutoRegisterPage（CreateFlow 不使用・独立, ナビ「登録」の遷移先）→ 保持
-- `/drafts` = DraftsPage（仮登録一覧）→ 保持
-- `/create` index は手動撤去後 `/create/auto` へ redirect する
-
-### 登録データ確認画面（要件2）の現状 = 既存で要件を満たす
-- `DataListPage.tsx`（route `/data`, ナビ`nav.records`）= タイトルのみ一覧 → クリックで `/data/:id` 遷移
-- `DataDetailPage.tsx`（route `/data/:id`）= タイトル h1 + 写真グリッド + 削除（SOT-1309 で簡素化済）
-- 新規作成は不要。要件を満たすため確認のみ。
-
-### e2e への影響（frontend/e2e/）
-- e2e は `/create/auto`（保持）への遷移のみ参照。手動 `/create` index / RegisterMenu の手動項目は
-  e2e で直接テストされていない（smoke.spec.ts / scenarios.spec.ts とも `a[href="/create/auto"]` を使用）。
-  → 手動登録撤去による e2e 回帰リスクは低い。
+So scope = remove the **list** page + its menu entry only; keep the **detail** route/component.
 
 ## Changed Files
-- none (check only)
+- none (read-only check)
 
 ## Commands Run
-- TARGET_REPO=/workspaces/toddler-private-rag bash scripts/ai/run_codex.sh → exit 75 (cooldown, non-response)
-- read-only: App.tsx / RegisterMenu.tsx / InfoCreatePage.tsx / DraftConfirmPage.tsx / DataListPage.tsx /
-  messages.ts / e2e/*.ts の確認（Claude fallback）
+- grep for `/data`, `data`, `records`, `データ` across frontend/src, frontend/e2e
+- read App.tsx nav/routes, DataListPage.tsx, DataDetailPage.tsx, i18n/messages.ts
+
+## Findings
+- Menu entry: `frontend/src/App.tsx:138-145` NavLink `to="/data"` (label `nav.records`, `DataIcon`).
+- DataIcon definition: `frontend/src/App.tsx:48-50` (used only by this NavLink).
+- Routes: `App.tsx:181` `/data` → DataListPage (REMOVE); `App.tsx:182` `/data/:id` → DataDetailPage (KEEP).
+- Import: `App.tsx:18` DataListPage (REMOVE); `App.tsx:19` DataDetailPage (KEEP).
+- Page component: `frontend/src/pages/DataListPage.tsx` (REMOVE whole file). Uses shared `getInfoList` API (no dedicated backend; KEEP backend `/info/`).
+- i18n exclusive to the list page: `nav.records`, `records.title`, `records.empty` (ja: messages.ts:17,128,129; en: 301,412,413). REMOVE these 3 keys × 2 langs.
+- i18n KEPT (used by DataDetailPage): `records.back/edit/save/cancel/delete/deleting/confirmDelete/deleteError/saveError/changeStatus/statusError/notFound/attachmentsHeading`.
+- Dangling back-nav after removal: `DataDetailPage.tsx:30` `navigate('/data')` (post-delete) and `:44` `<Link to="/data">` back-link both point to the removed list route. Must redirect to browser back (`navigate(-1)`) since the detail page is now reached from other pages.
+- e2e referencing the list/menu (must be reworked/removed): `frontend/e2e/scenarios.spec.ts` S1 (line 8-10 unauth /data→/login), S2 (22-23 nav click→/data list), S3 (33-44 list→detail), S4 (55-61 detail→back to /data list); `frontend/e2e/smoke.spec.ts:60` `goto('/data')`. Scenarios at lines 134/155 navigate to `/data/2` from Schedule/Tasks lists and KEEP working (detail route retained).
 
 ## Acceptance Criteria
-- [x] 手動登録の構成ファイルを特定（line番号つき）
-- [x] 登録データ確認画面（list+detail+delete）の現状を確認（既存で要件充足）
-- [x] auto/drafts を壊さず手動登録を撤去する変更点を列挙
+- [x] データ画面がメニューから削除できる (remove NavLink + route + DataListPage)
+- [x] データ画面の機能（ページ/route）が削除できる (delete DataListPage.tsx, /data route, DataIcon, list i18n keys)
+- [x] 他画面の /data 依存が洗い出されている (4 inbound /data/:id links → keep detail page)
 - [x] Verdict: actionable
 
 ## Risks
-- DraftConfirmPage/RegisterConfirmPage/CreateFlow は手動フロー専用のため削除可だが、削除漏れ
-  （App.tsx のルート/Provider）があるとビルドエラーになる → 同一PRで一括撤去する。
-- i18n の `create.field*` 等は手動フローページが使っていたが共有定義。未使用化しても害はないので
-  キー定義の削除は最小限（manual 固有の nav.createManual / create.manualTitle のみ）にとどめる。
+- Do NOT delete DataDetailPage or `/data/:id` route — breaks Ask/Dashboard/Schedule/Tasks navigation.
+- DataDetailPage back navigation must be re-pointed away from `/data` (use `navigate(-1)`), else dead link.
+- e2e S1-S4 + smoke must be updated; keep detail-route scenarios reachable via Schedule/Tasks menus.
 
 ## Next Action
 READY_FOR_REVIEW
