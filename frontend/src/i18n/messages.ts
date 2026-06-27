@@ -16,6 +16,7 @@ export const messages: Record<Lang, Messages> = {
     'nav.drafts': '仮登録',
     'nav.records': 'データ',
     'nav.schedule': '予定',
+    'nav.tasks': 'タスク一覧',
     'nav.logout': 'ログアウト',
 
     // schedule (SOT-1306)
@@ -28,6 +29,13 @@ export const messages: Record<Lang, Messages> = {
     'schedule.filteredBy': '選択中の日付: ',
     'schedule.showAll': 'すべて',
     'schedule.showDone': '対応済み',
+
+    // tasks (SOT-1313)
+    'tasks.title': 'タスク一覧',
+    'tasks.subtitle': '予定のあるタスクを一覧で確認できます。',
+    'tasks.listTitle': 'タスク一覧',
+    'tasks.showAll': 'すべて',
+    'tasks.showDone': '対応済み',
 
     // date picker (SOT-1307)
     'datePicker.year': '年',
@@ -292,6 +300,7 @@ export const messages: Record<Lang, Messages> = {
     'nav.drafts': 'Drafts',
     'nav.records': 'Data',
     'nav.schedule': 'Schedule',
+    'nav.tasks': 'Tasks',
     'nav.logout': 'Log out',
 
     // schedule (SOT-1306)
@@ -304,6 +313,13 @@ export const messages: Record<Lang, Messages> = {
     'schedule.filteredBy': 'Selected date: ',
     'schedule.showAll': 'All',
     'schedule.showDone': 'Done',
+
+    // tasks (SOT-1313)
+    'tasks.title': 'Task list',
+    'tasks.subtitle': 'Browse all dated tasks in a list.',
+    'tasks.listTitle': 'Task list',
+    'tasks.showAll': 'All',
+    'tasks.showDone': 'Done',
 
     // date picker (SOT-1307)
     'datePicker.year': 'Year',
