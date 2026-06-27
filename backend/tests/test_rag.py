@@ -214,6 +214,85 @@ def test_ask_endpoint_sources_include_text_snippet():
     assert any(s["snippet"] for s in sources)
 
 
+# --- SOT-1304: 相対日付クエリで登録済み行事をコンテキストに補う ---
+
+def test_upcoming_event_contexts_includes_dated_event_with_date_label():
+    import datetime
+
+    from app import clock
+    from app.routers.info import _upcoming_event_contexts
+
+    today = clock.today()
+
+    class FakeInfo:
+        def __init__(self, id, title, info_type, content, event_date):
+            self.id = id
+            self.title = title
+            self.info_type = info_type
+            self.content = content
+            self.event_date = event_date
+            self.date = None
+            self.due_date = None
+            self.items = None
+
+    class FakeRepo:
+        def list(self):
+            return [
+                # 35日先のホライズン内 → 含まれる
+                FakeInfo(1, "七夕会", "行事", "短冊に願い事を書きます", today + datetime.timedelta(days=10)),
+                # ホライズン外（遠い未来） → 含まれない
+                FakeInfo(2, "運動会", "行事", "秋の運動会", today + datetime.timedelta(days=120)),
+                # 日付なし → 含まれない
+                FakeInfo(3, "園だより", "お知らせ", "今月のお便り", None),
+            ]
+
+    contexts = _upcoming_event_contexts(FakeRepo())
+    joined = "\n".join(contexts)
+    assert "七夕会" in joined
+    # 絶対日付を明示してLLMが相対日付を解釈できるようにする
+    assert (today + datetime.timedelta(days=10)).isoformat() in joined
+    assert "運動会" not in joined
+    assert "園だより" not in joined
+
+
+def test_answer_includes_extra_contexts():
+    class FakeInfo:
+        def __init__(self, id, title, content):
+            self.id = id
+            self.title = title
+            self.content = content
+            self.attachments = []
+
+    service = RagService(embedding_provider=FakeEmbeddingProvider(), llm_provider=FakeLLMProvider())
+    service.build_index([FakeInfo(1, "給食", "今週の献立はカレーです")])
+    # FakeLLMProvider はコンテキストをそのまま回答に反映する。
+    result = service.answer("再来週の予定は？", top_k=2, extra_contexts=["【行事】七夕会 / 日付: 2026-07-07（火曜日）"])
+    assert "七夕会" in result.answer
+
+
+def test_ask_endpoint_answers_relative_date_event_question():
+    # SOT-1304: ベクトル検索に漏れても、直近の行事はコンテキストに含め回答できる。
+    import datetime
+
+    from app import clock
+
+    event_date = (clock.today() + datetime.timedelta(days=10)).isoformat()
+    resp = client.post(
+        "/api/info/",
+        json={
+            "title": "七夕会",
+            "info_type": "行事",
+            "content": "短冊に願い事を書きましょう",
+            "event_date": event_date,
+        },
+    )
+    assert resp.status_code == 200
+
+    resp = client.post("/api/info/ask", json={"query": "再来週の予定を教えて", "top_k": 1})
+    assert resp.status_code == 200
+    assert "七夕会" in resp.json()["answer"]
+
+
 def test_vector_search_endpoint():
     id1 = _seed("給食の献立", "連絡", "今週の給食はカレーライスとサラダです アレルギー対応あり")
     _seed("運動会", "行事", "運動会は晴天の場合に開催します")

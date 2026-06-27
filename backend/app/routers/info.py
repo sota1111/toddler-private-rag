@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import logging
 import os
 import tempfile
@@ -45,6 +46,66 @@ def _snippet(text: Optional[str], limit: int = 160) -> Optional[str]:
     return normalized[:limit].rstrip() + "…"
 
 
+# SOT-1304: 相対日付クエリ（今週/来週/再来週の予定）対策。直近の登録済み行事を日付つきで
+# 必ず RAG コンテキストに含め、今日(JST)を認識する LLM が相対日付を解釈できるようにする。
+_EVENT_CONTEXT_HORIZON_DAYS = 35
+_EVENT_CONTEXT_MAX = 12
+_EVENT_CONTENT_LIMIT = 300
+_WEEKDAYS_JA = ("月", "火", "水", "木", "金", "土", "日")
+
+
+def _info_event_date(info) -> Optional[datetime.date]:
+    """行事日 > 予定日 > 期限日 の優先で、その情報が指す日付を返す。"""
+    for attr in ("event_date", "date", "due_date"):
+        val = getattr(info, attr, None)
+        if isinstance(val, datetime.date):
+            return val
+    return None
+
+
+def _upcoming_event_contexts(repo) -> List[str]:
+    """直近（昨日〜35日先）の日付つき情報を、日付・曜日つきテキストとして返す。
+
+    ベクトル検索は「再来週の予定」のような相対日付クエリでは語が一致せず登録済み行事を
+    取りこぼす。回答が「情報が無い」と誤らないよう、これらを LLM コンテキストに補う (SOT-1304)。
+    SQLite / Firestore どちらのモデルも属性アクセスで同じ形なのでそのまま扱える。
+    """
+    try:
+        infos = repo.list()
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("upcoming event context: failed to list infos")
+        return []
+
+    today = clock.today()
+    start = today - datetime.timedelta(days=1)
+    end = today + datetime.timedelta(days=_EVENT_CONTEXT_HORIZON_DAYS)
+
+    dated = []
+    for info in infos:
+        d = _info_event_date(info)
+        if d is None or d < start or d > end:
+            continue
+        dated.append((d, info))
+    dated.sort(key=lambda pair: pair[0])
+
+    contexts: List[str] = []
+    for d, info in dated[:_EVENT_CONTEXT_MAX]:
+        title = (getattr(info, "title", "") or "").strip()
+        info_type = (getattr(info, "info_type", "") or "").strip()
+        content = (getattr(info, "content", "") or "").strip()
+        items = (getattr(info, "items", "") or "").strip()
+        if len(content) > _EVENT_CONTENT_LIMIT:
+            content = content[:_EVENT_CONTENT_LIMIT].rstrip() + "…"
+        weekday = _WEEKDAYS_JA[d.weekday()]
+        parts = [f"【{info_type or '予定'}】{title}", f"日付: {d.isoformat()}（{weekday}曜日）"]
+        if content:
+            parts.append(content)
+        if items:
+            parts.append(f"持ち物: {items}")
+        contexts.append(" / ".join(parts))
+    return contexts
+
+
 def _to_rag_source(source) -> schemas.RagSource:
     return schemas.RagSource(
         info_id=source.info_id,
@@ -66,7 +127,12 @@ def ask_info(
 ):
     """ベクトル検索で関連情報を取得し、LLMで回答を生成する (RAG)。"""
     service = get_rag_service(repo)
-    result = service.answer(payload.query, top_k=payload.top_k)
+    # SOT-1304: 直近の登録済み行事を日付つきで必ずコンテキストに含め、
+    # 「今週/来週/再来週の予定」など相対日付の質問に正しく答えられるようにする。
+    extra_contexts = _upcoming_event_contexts(repo)
+    result = service.answer(
+        payload.query, top_k=payload.top_k, extra_contexts=extra_contexts
+    )
     return schemas.RagAnswer(
         answer=result.answer,
         sources=[_to_rag_source(s) for s in result.sources],
