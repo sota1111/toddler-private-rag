@@ -123,12 +123,21 @@ class GeminiLLMProvider(LLMProvider):
 
     def generate(self, question: str, contexts: List[str]) -> str:
         from ..ai_client import default_generate_config, get_genai_client, with_retry
+        from .. import clock
 
         client = get_genai_client()
         context_block = "\n\n".join(f"- {c}" for c in contexts)
+        # SOT-1297: 今日の日付(JST)を注入し、相対的な日付の質問に答えられるようにする。
+        _weekdays_ja = ("月", "火", "水", "木", "金", "土", "日")
+        today = clock.today()
+        today_line = (
+            f"今日の日付は {today.isoformat()}（{_weekdays_ja[today.weekday()]}曜日）です。"
+            "「今日」「明日」「今週」「来週」などの相対的な日付はこれを基準に解釈してください。"
+        )
         prompt = (
             "あなたは保育園情報アシスタントです。以下のコンテキストのみに基づいて、"
             "日本語で簡潔に質問へ回答してください。コンテキストに無いことは推測しないでください。\n\n"
+            f"{today_line}\n\n"
             f"# コンテキスト\n{context_block}\n\n# 質問\n{question}\n\n# 回答"
         )
         cfg = default_generate_config(max_output_tokens=4096)

@@ -1,12 +1,11 @@
 import asyncio
-import datetime
 import logging
 import os
 import tempfile
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File
 from typing import List, Optional, Union
-from .. import schemas, storage, ocr, tagging, extraction, reminders
+from .. import schemas, storage, ocr, tagging, extraction, reminders, clock
 from ..privacy import redact_pii
 from ..repository import InfoRepository, get_info_repository
 from ..routers.auth import get_current_user
@@ -246,11 +245,11 @@ def get_reminders(
     current_user: str = Depends(get_current_user),
 ):
     """登録済み情報から締切/行事/持ち物を自律走査し、緊急度付きリマインドを返す。"""
-    today = datetime.date.today()
+    today = clock.today()
     infos = repo.list()
     items = reminders.build_reminders(infos, today=today, horizon_days=horizon_days)
     return schemas.ReminderFeed(
-        generated_at=datetime.datetime.now().isoformat(),
+        generated_at=clock.now_jst().isoformat(),
         horizon_days=horizon_days,
         counts=reminders.summarize_counts(items),
         items=[schemas.ReminderItem(**r) for r in items],
@@ -265,11 +264,11 @@ def get_reminders_digest(
     current_user: str = Depends(get_current_user),
 ):
     """通知配信向けのリマインドダイジェスト（Cloud Scheduler等での定期push素材）を返す。"""
-    today = datetime.date.today()
+    today = clock.today()
     infos = repo.list()
     items = reminders.build_reminders(infos, today=today, horizon_days=horizon_days)
     return schemas.ReminderDigest(
-        generated_at=datetime.datetime.now().isoformat(),
+        generated_at=clock.now_jst().isoformat(),
         horizon_days=horizon_days,
         total=len(items),
         digest=reminders.build_digest(items, today=today),
