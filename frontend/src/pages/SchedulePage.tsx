@@ -115,9 +115,6 @@ const SchedulePage: React.FC = () => {
 
   return (
     <div className="w-full lg:max-w-4xl lg:mx-auto">
-      <h1 className="text-2xl font-bold mb-1 text-foreground">{t('schedule.title')}</h1>
-      <p className="text-sm text-muted-foreground mb-6">{t('schedule.subtitle')}</p>
-
       {/* カレンダー */}
       <div className="bg-surface rounded-2xl shadow-card overflow-hidden mb-6">
         <div className="flex items-center justify-between px-4 py-3 bg-brand/10 text-foreground font-bold">
