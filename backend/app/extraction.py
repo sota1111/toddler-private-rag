@@ -132,17 +132,19 @@ def _extract_json_array(text: str) -> list:
     return json.loads(text[start : end + 1])
 
 
-def _llm_categories(raw_text: str) -> dict:
+def _llm_categories(raw_text: str, language: str = "ja") -> dict:
     """Gemini / Vertex AI でタイトル＋5カテゴリを抽出する。失敗時は例外を投げる（呼び出し側でフォールバック）。
 
     返り値は5カテゴリ(list) に加えて ``title``(str) を含む dict。
+    ``language`` は生成する ``title`` の出力言語（既定 ja, SOT-1336）。カテゴリ値の言語は変更しない。
     """
     client = ai_client.get_genai_client()
     model = ai_client.get_model_name()
+    language_name = _LANGUAGE_NAMES.get(language, _LANGUAGE_NAMES["ja"])
     prompt = (
         "あなたは保育園のお知らせからタイトルと保護者の行動項目を抽出するアシスタントです。"
         "以下の本文からタイトルと次の5カテゴリを抽出し、JSONのみを出力してください。\n"
-        "- title: お知らせ全体の簡潔なタイトル（日本語1行、20文字程度まで）\n"
+        f"- title: お知らせ全体の簡潔なタイトル（{language_name}で1行、20文字程度まで）\n"
         "各カテゴリの値は短い日本語の文字列の配列とし、該当が無ければ空配列にしてください。\n"
         "- submissions: 提出物（提出・申込・返却・記入が必要なもの）\n"
         "- belongings: 持ち物（当日持参・用意するもの）\n"
@@ -205,12 +207,13 @@ def extract_categories(raw_text: str) -> Dict[str, List[str]]:
     return merged
 
 
-def extract_titled_categories(raw_text: str) -> dict:
+def extract_titled_categories(raw_text: str, language: str = "ja") -> dict:
     """タイトル＋5カテゴリを1回のLLM呼び出しでまとめて抽出する (SOT-1292)。
 
     enrich を AI 1呼び出しに集約するための関数。返り値は ``title``(str) と5カテゴリ(list) を持つ dict。
     LLM が利用可能なら ``_llm_categories`` を1回だけ呼び、空カテゴリはヒューリスティックで補完する。
     LLM が使えない/失敗した場合は ``title=""`` ＋ ヒューリスティック5カテゴリを返す（例外は投げない）。
+    ``language`` は生成する ``title`` の出力言語（既定 ja, SOT-1336）。
     """
     base = _heuristic_categories(raw_text)
     result: dict = {"title": "", **{k: base.get(k, []) for k in ALL_CONTENT_KEYS}}
@@ -219,7 +222,7 @@ def extract_titled_categories(raw_text: str) -> dict:
         return result
 
     try:
-        ai = _llm_categories(raw_text)
+        ai = _llm_categories(raw_text, language)
     except Exception as e:  # graceful degradation
         logger.warning("LLM titled-category extraction failed, using heuristic: %s", e)
         return result
@@ -407,6 +410,7 @@ def build_draft_fields(
     safe_text: str,
     detected_dates: Optional[List[str]] = None,
     detected_items: Optional[List[str]] = None,
+    language: str = "ja",
 ) -> dict:
     """OCR安全テキストから仮登録(draft)用のフィールド一式を生成する (SOT-1293)。
 
@@ -436,7 +440,7 @@ def build_draft_fields(
     # OCR後の整理(enrich)は「タイトル＋5カテゴリ抽出」を AI 1呼び出しに集約する (SOT-1292)。
     # extract_titled_categories は LLM 不可/失敗時もヒューリスティックに落ちて例外を投げない。
     try:
-        enriched = extract_titled_categories(safe_text)
+        enriched = extract_titled_categories(safe_text, language)
     except Exception as e:  # graceful degradation
         logger.warning("Enrich (titled categories) failed in build_draft_fields: %s", e)
         enriched = {"title": ""}

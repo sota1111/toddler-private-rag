@@ -178,3 +178,73 @@ def test_build_task_drafts_forwards_language(monkeypatch):
 
     extraction.build_task_drafts("運動会のお知らせ", language="en")
     assert seen["language"] == "en"
+
+
+# --- 設定言語でのタイトル生成 (SOT-1336) ---
+
+
+def _patch_fake_genai_obj(monkeypatch, captured):
+    """``_llm_categories`` 用: JSONオブジェクトを返す genai クライアントに差し替える。"""
+
+    class _FakeModels:
+        def generate_content(self, model, contents, config=None):
+            captured["prompt"] = contents
+
+            class _R:
+                text = "{}"
+
+            return _R()
+
+    class _FakeClient:
+        models = _FakeModels()
+
+    monkeypatch.setattr(extraction.ai_client, "get_genai_client", lambda: _FakeClient())
+    monkeypatch.setattr(extraction.ai_client, "get_model_name", lambda: "fake-model")
+    monkeypatch.setattr(extraction.ai_client, "default_generate_config", lambda: None)
+    monkeypatch.setattr(extraction.ai_client, "with_retry", lambda fn: fn())
+
+
+def test_llm_categories_title_language_instruction(monkeypatch):
+    captured = {}
+    _patch_fake_genai_obj(monkeypatch, captured)
+
+    extraction._llm_categories("運動会のお知らせ", "en")
+    assert "English" in captured["prompt"]
+
+    extraction._llm_categories("運動会のお知らせ", "ja")
+    assert "日本語" in captured["prompt"]
+
+
+def test_llm_categories_title_defaults_to_japanese(monkeypatch):
+    captured = {}
+    _patch_fake_genai_obj(monkeypatch, captured)
+
+    extraction._llm_categories("運動会のお知らせ")  # language 省略
+    assert "日本語" in captured["prompt"]
+
+
+def test_extract_titled_categories_forwards_language(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(extraction.ai_client, "gemini_available", lambda: True)
+
+    def _fake_llm_categories(text, language="ja"):
+        seen["language"] = language
+        return {"title": "x"}
+
+    monkeypatch.setattr(extraction, "_llm_categories", _fake_llm_categories)
+
+    extraction.extract_titled_categories("運動会のお知らせ", "en")
+    assert seen["language"] == "en"
+
+
+def test_build_draft_fields_forwards_language(monkeypatch):
+    seen = {}
+
+    def _fake_extract(text, language="ja"):
+        seen["language"] = language
+        return {"title": "x"}
+
+    monkeypatch.setattr(extraction, "extract_titled_categories", _fake_extract)
+
+    extraction.build_draft_fields("運動会のお知らせ", None, None, language="en")
+    assert seen["language"] == "en"
