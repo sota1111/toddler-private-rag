@@ -2,8 +2,9 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useI18n } from '../i18n/useI18n';
 
-// SOT-1174 メニュー改善: 手動登録 / 自動登録 / 仮登録 を「アイコン＋テキスト」の同一メニューに統合する。
+// SOT-1174 メニュー改善: 自動登録 / 仮登録 を「アイコン＋テキスト」の同一メニューに統合する。
 // 各登録ページ上部に共通表示し、ここから相互に切り替えられる。初期画面(ナビの「登録」)は自動登録。
+// SOT-1311: 手動登録機能の削除に伴い「手動登録」項目を撤去（自動登録 / 仮登録 の2項目）。
 
 type RegisterMenuItem = {
   to: string;
@@ -40,18 +41,6 @@ const ITEMS: RegisterMenuItem[] = [
     ),
   },
   {
-    // 手動登録 (フォーム入力) — ペン
-    to: '/create',
-    labelKey: 'nav.createManual',
-    isActive: (p) => p === '/create',
-    icon: (
-      <svg {...iconProps}>
-        <path d="M12 20h9" />
-        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
-      </svg>
-    ),
-  },
-  {
     // 仮登録 (一時保存一覧) — クリップボード
     to: '/drafts',
     labelKey: 'nav.drafts',
@@ -73,7 +62,7 @@ const RegisterMenu: React.FC = () => {
   return (
     <nav
       aria-label={t('nav.create')}
-      className="mb-6 grid grid-cols-3 gap-2 sm:inline-flex sm:gap-3"
+      className="mb-6 grid grid-cols-2 gap-2 sm:inline-flex sm:gap-3"
     >
       {ITEMS.map((item) => {
         const active = item.isActive(pathname);
