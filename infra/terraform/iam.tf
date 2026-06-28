@@ -92,3 +92,17 @@ resource "google_project_iam_member" "frontend" {
   role     = each.value
   member   = "serviceAccount:${google_service_account.frontend.email}"
 }
+
+# The deploy SA must be able to actAs the runtime SAs to deploy services that
+# run as them (otherwise: PERMISSION_DENIED iam.serviceaccounts.actAs).
+resource "google_service_account_iam_member" "deploy_act_as_runtime" {
+  service_account_id = google_service_account.runtime.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+resource "google_service_account_iam_member" "deploy_act_as_frontend" {
+  service_account_id = google_service_account.frontend.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.deploy.email}"
+}
