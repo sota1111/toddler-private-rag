@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getInfoList } from '../api';
 import type { NurseryInfo } from '../types';
 import { useI18n } from '../i18n/useI18n';
+import { getStatusDateChipClass } from './infoFormOptions';
 
 // SOT-1306: 日付つきの予定（event_date あり）を月カレンダーで可視化し、
 // カレンダーの下に予定一覧を表示する。該当日はカレンダー上で強調表示する。
@@ -270,7 +271,7 @@ const SchedulePage: React.FC = () => {
                     <div className="flex justify-between items-center gap-3">
                       <span className="font-medium text-foreground truncate">{item.title}</span>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-xs bg-brand-soft text-brand-strong font-semibold px-2 py-1 rounded-full">
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${getStatusDateChipClass(item.status)}`}>
                           {item.event_date}
                         </span>
                         <span className="text-xs text-muted-foreground">{optLabel('infoType', item.info_type)}</span>
