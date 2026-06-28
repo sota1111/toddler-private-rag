@@ -65,3 +65,20 @@ async def internal_process_ocr(
         payload.language,
     )
     return {"status": "accepted", "att_id": payload.att_id}
+
+
+@router.post("/internal/purge-orphans")
+async def internal_purge_orphans(
+    x_worker_token: Optional[str] = Header(None),
+):
+    """SOT-1366: Cloud Scheduler から日次で呼ばれる孤児オブジェクト保全ジョブ。
+    DB に対応レコードが無い GCS オブジェクトのみを削除する（表示中写真は保持）。
+    /internal/process-ocr と同じ worker-token で保護する。"""
+    expected = os.getenv("WORKER_INVOKE_TOKEN")
+    if expected and x_worker_token != expected:
+        raise HTTPException(status_code=403, detail="invalid worker token")
+
+    from ..retention import reconcile_orphan_attachments
+
+    deleted = reconcile_orphan_attachments()
+    return {"deleted": deleted}

@@ -134,7 +134,28 @@ variable "deploy_service_account_id" {
 }
 
 variable "cloud_run_service_account_email" {
-  description = "Optional runtime service account email for Cloud Run / the function. Empty = use the project default compute SA (current state). Set this only when adopting a dedicated least-privilege SA (see iam.tf)."
+  description = "Runtime service account email for the backend Cloud Run service and the upload function (least privilege, see iam.tf). Empty = project default compute SA. Set to google_service_account.runtime.email after the SA exists."
   type        = string
   default     = ""
+}
+
+variable "frontend_service_account_email" {
+  description = "Runtime service account email for the frontend (nginx) Cloud Run service. Empty = project default compute SA. Set to google_service_account.frontend.email after the SA exists."
+  type        = string
+  default     = ""
+}
+
+# --- SOT-1366 item B: orphan-attachment cleanup scheduler. ---
+
+variable "orphan_purge_schedule" {
+  description = "Cron schedule (Asia/Tokyo) for the daily orphan-attachment cleanup job."
+  type        = string
+  default     = "0 3 * * *"
+}
+
+variable "worker_invoke_token" {
+  description = "Value of the worker invoke token (rag-worker-invoke-token) sent by Cloud Scheduler as the X-Worker-Token header. Sensitive; supply via terraform.tfvars (gitignored). Managed out-of-band like the other secret values."
+  type        = string
+  default     = ""
+  sensitive   = true
 }
