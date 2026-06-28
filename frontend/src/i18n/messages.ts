@@ -81,6 +81,7 @@ export const messages: Record<Lang, Messages> = {
     // common
     'common.loading': '読み込み中...',
     'common.noData': 'データなし',
+    'common.noDeadline': '期限なし',
 
     // login
     'login.title': 'ログイン',
@@ -411,6 +412,7 @@ export const messages: Record<Lang, Messages> = {
     // common
     'common.loading': 'Loading...',
     'common.noData': 'No data',
+    'common.noDeadline': 'No deadline',
 
     // login
     'login.title': 'Log in',
