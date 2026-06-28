@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getInfoList } from '../api';
 import type { NurseryInfo } from '../types';
 import { useI18n } from '../i18n/useI18n';
+import { getStatusDateChipClass } from './infoFormOptions';
 
 // SOT-1313: カレンダー画面（SchedulePage）の「カレンダーの下の予定一覧」と同じ内容を、
 // 独立した「タスク一覧」メニューとして表示する。各項目クリックで既存の詳細 /data/:id へ遷移する。
@@ -98,7 +99,7 @@ const TasksPage: React.FC = () => {
                     <div className="flex justify-between items-center gap-3">
                       <span className="font-medium text-foreground truncate">{item.title}</span>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full">
+                        <span className={`text-xs px-2 py-1 rounded-full ${getStatusDateChipClass(item.status)}`}>
                           {item.event_date}
                         </span>
                         <span className="text-xs text-muted-foreground">{optLabel('infoType', item.info_type)}</span>

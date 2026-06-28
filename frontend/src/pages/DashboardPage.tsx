@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getToday, getTomorrow, getWeekly, getNextWeek, getReminders } from '../api';
 import type { NurseryInfo, ReminderItem, ReminderUrgency } from '../types';
 import { useI18n } from '../i18n/useI18n';
+import { getStatusDateChipClass } from './infoFormOptions';
 
 // SOT-1080 / 提案5-A: 緊急度ごとの配色（受動表示ではなく能動的に目を引く）。
 const URGENCY_STYLES: Record<ReminderUrgency, { row: string; chip: string }> = {
@@ -185,7 +186,7 @@ const DashboardPage: React.FC = () => {
           renderItem={(item) => (
             <div className="flex justify-between items-center">
               <span className="font-medium text-foreground">{item.title}</span>
-              <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full">
+              <span className={`text-xs px-2 py-1 rounded-full ${getStatusDateChipClass(item.status)}`}>
                 {item.event_date}
               </span>
             </div>
@@ -201,7 +202,7 @@ const DashboardPage: React.FC = () => {
           renderItem={(item) => (
             <div className="flex justify-between items-center">
               <span className="font-medium text-foreground">{item.title}</span>
-              <span className="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">
+              <span className={`text-xs px-2 py-1 rounded-full ${getStatusDateChipClass(item.status)}`}>
                 {item.event_date}
               </span>
             </div>
