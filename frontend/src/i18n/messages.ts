@@ -47,6 +47,17 @@ export const messages: Record<Lang, Messages> = {
     'tasks.showUnconfirmed': '未確認',
     'tasks.showPending': '未対応',
     'tasks.showDone': '対応済',
+    // tasks: manual add (SOT-1358)
+    'tasks.addButton': 'タスクを追加',
+    'tasks.formTitle': 'タスクを追加',
+    'tasks.fieldTitle': 'タイトル',
+    'tasks.fieldDate': '日付',
+    'tasks.fieldType': '種別',
+    'tasks.fieldStatus': 'ステータス',
+    'tasks.fieldContent': '内容',
+    'tasks.submit': '追加する',
+    'tasks.cancel': 'キャンセル',
+    'tasks.submitError': 'タスクの追加に失敗しました。もう一度お試しください。',
 
     // date picker (SOT-1307)
     'datePicker.year': '年',
@@ -359,6 +370,17 @@ export const messages: Record<Lang, Messages> = {
     'tasks.showUnconfirmed': 'Unconfirmed',
     'tasks.showPending': 'Pending',
     'tasks.showDone': 'Done',
+    // tasks: manual add (SOT-1358)
+    'tasks.addButton': 'Add task',
+    'tasks.formTitle': 'Add task',
+    'tasks.fieldTitle': 'Title',
+    'tasks.fieldDate': 'Date',
+    'tasks.fieldType': 'Type',
+    'tasks.fieldStatus': 'Status',
+    'tasks.fieldContent': 'Details',
+    'tasks.submit': 'Add',
+    'tasks.cancel': 'Cancel',
+    'tasks.submitError': 'Failed to add the task. Please try again.',
 
     // date picker (SOT-1307)
     'datePicker.year': 'Year',
