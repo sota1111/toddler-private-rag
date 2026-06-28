@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getInfoById, deleteInfo, updateInfo, getAttachmentFileUrl, getAttachmentTranscription } from '../api';
+import { getInfoById, deleteInfo, updateInfo, getAttachmentFileUrl, getAttachmentTranscription, investigateDeadline } from '../api';
 import type { Attachment } from '../types';
 import { STATUS_TYPES } from './infoFormOptions';
 import { useI18n } from '../i18n/useI18n';
@@ -117,6 +117,35 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
     onError: () => setDeleteError(t('records.deleteError')),
   });
 
+  // SOT-1369: 締め切り調査。一覧から選んだ項目に対し、提出書類先回りエージェントを手動起動する。
+  const [investigateMessage, setInvestigateMessage] = useState<string | null>(null);
+  const [investigateError, setInvestigateError] = useState<string | null>(null);
+  const investigateMutation = useMutation({
+    mutationFn: () => investigateDeadline(id),
+    onSuccess: (res) => {
+      setInvestigateError(null);
+      setInvestigateMessage(
+        res.created > 0
+          ? t('records.investigateDone', { count: String(res.created) })
+          : t('records.investigateNone'),
+      );
+      queryClient.invalidateQueries({ queryKey: ['drafts'] });
+      queryClient.invalidateQueries({ queryKey: ['info'] });
+      queryClient.invalidateQueries({ queryKey: ['pending'] });
+    },
+    onError: () => {
+      setInvestigateMessage(null);
+      setInvestigateError(t('records.investigateError'));
+    },
+  });
+
+  const handleInvestigate = () => {
+    if (investigateMutation.isPending) return;
+    setInvestigateMessage(null);
+    setInvestigateError(null);
+    investigateMutation.mutate();
+  };
+
   const handleDelete = () => {
     if (deleteMutation.isPending || !item) return;
     if (window.confirm(t('records.confirmDelete', { title: item.title }))) {
@@ -184,6 +213,28 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
               {deleteError}
             </div>
           )}
+
+          {/* SOT-1369: 締め切り調査を手動トリガするボタン。写真あり/なし両方で表示する。 */}
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={handleInvestigate}
+              disabled={investigateMutation.isPending}
+              className="text-sm font-medium text-brand-strong border border-accent-border bg-accent-bg hover:opacity-90 px-3 py-1.5 rounded-md disabled:opacity-60 transition-colors"
+            >
+              {investigateMutation.isPending ? t('records.investigating') : t('records.investigate')}
+            </button>
+            {investigateMessage && (
+              <div className="mt-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">
+                {investigateMessage}
+              </div>
+            )}
+            {investigateError && (
+              <div className="mt-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {investigateError}
+              </div>
+            )}
+          </div>
 
           {/* SOT-1313: タスク等の詳細を確認できるよう、日付・ステータス・内容を値があるときのみ表示する。
               SOT-1331: 写真ありレコードはこれらを出さず、写真＋文字起こしのみにする。 */}

@@ -6,7 +6,7 @@ import tempfile
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File
 from typing import List, Optional, Union
-from .. import schemas, storage, ocr, tagging, extraction, reminders, clock
+from .. import schemas, storage, ocr, tagging, extraction, reminders, clock, submission_agent
 from ..privacy import redact_pii
 from ..repository import InfoRepository, get_info_repository
 from ..routers.auth import get_current_user
@@ -391,6 +391,64 @@ def finalize_info(id: Union[int, str], background_tasks: BackgroundTasks, repo: 
     # 本登録確定時にベクトルを永続化する (SOT-1294)。
     background_tasks.add_task(index_info_id, id)
     return db_info
+
+
+# SOT-1369: 締め切り調査。一覧から選んだ項目に対し、提出書類先回りエージェント(SOT-1316)を
+# 手動トリガで実行し、提出準備タスク(draft)を生成する。旧来は写真アップロードのOCR処理中に
+# 自動実行していたが（attachments.py から撤去）、本エンドポイント経由の手動起動に変更した。
+@router.post("/{id}/investigate-deadline")
+def investigate_deadline(
+    id: Union[int, str],
+    repo: InfoRepository = Depends(get_info_repository),
+    current_user: str = Depends(get_current_user),
+):
+    db_info = repo.get(id)
+    if db_info is None:
+        raise HTTPException(status_code=404, detail="Info not found")
+
+    # 調査対象テキストを集める: 本文 + 添付写真のOCR原文。
+    parts: List[str] = []
+    content = getattr(db_info, "content", None)
+    if content:
+        parts.append(content)
+    try:
+        for att in repo.list_attachments_for_info(id):
+            ocr_text = getattr(att, "ocr_text", None)
+            if ocr_text:
+                parts.append(ocr_text)
+    except Exception:
+        logger.warning("Failed to gather attachment OCR text for info %s", id)
+    safe_text = "\n".join(p for p in parts if p)
+
+    created_ids: List = []
+    try:
+        sub_drafts = submission_agent.build_submission_task_drafts(safe_text, None, language="ja")
+        for sub in sub_drafts:
+            try:
+                created = repo.create(
+                    schemas.NurseryInfoCreate(
+                        title=sub["title"],
+                        info_type=sub["info_type"],
+                        content=sub["content"],
+                        items=(sub["items"] or None),
+                        date=(sub["date"] or None),
+                        event_date=(sub.get("event_date") or None),
+                        due_date=(sub.get("due_date") or None),
+                        tags=(sub.get("tags") or None),
+                        status="未確認",
+                        priority="普通",
+                        registration_state="draft",
+                    )
+                )
+                cid = getattr(created, "id", None)
+                if cid is not None:
+                    created_ids.append(cid)
+            except Exception as e:  # 1件の失敗で全体を止めない
+                logger.warning("Failed to create submission draft for info %s: %s", id, e)
+    except Exception as e:  # 提出書類エージェント全体の失敗は無視
+        logger.warning("Submission agent failed for info %s: %s", id, e)
+
+    return {"created": len(created_ids), "ids": created_ids}
 
 
 @router.delete("")
