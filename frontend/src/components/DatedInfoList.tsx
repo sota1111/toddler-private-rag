@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { NurseryInfo } from '../types';
 import { useI18n } from '../i18n/useI18n';
-import { getStatusDateChipClass } from '../pages/infoFormOptions';
+import { getStatusDateChipClass, getStatusFilterPillClass } from '../pages/infoFormOptions';
 
 // SOT-1342: タスク一覧（TasksPage）と予定一覧（SchedulePage のカレンダー下リスト）の
 // 重複していた「ステータス絞り込み + 行リスト」を1箇所にまとめた共有コンポーネント。
@@ -71,11 +71,7 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({ items, isLoading, namespa
               type="button"
               onClick={() => setStatusFilter(key)}
               aria-pressed={active}
-              className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-brand/40 ${
-                active
-                  ? 'bg-brand text-white border-brand'
-                  : 'bg-surface text-foreground border-border hover:bg-surface-muted'
-              }`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-brand/40 ${getStatusFilterPillClass(key, active)}`}
             >
               {t(`${namespace}.${suffix}`)}
             </button>

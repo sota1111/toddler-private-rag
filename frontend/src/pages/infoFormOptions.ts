@@ -25,3 +25,32 @@ export const getStatusDateChipClass = (status?: string): string => {
       return "bg-surface-muted text-foreground";
   }
 };
+
+// SOT-1370: 一覧上部のステータス絞り込みピルの配色を、日付チップ(getStatusDateChipClass)の
+// ステータス色分け（未確認=orange / 未対応=yellow / 対応済=green）に合わせるためのヘルパ。
+// 選択中(active)は ring + 濃いめの背景/境界で強調する。'all'（すべて）はブランド色のまま。
+// Tailwind の動的クラス生成を避けるため、完全な静的クラス文字列を返す。
+export const getStatusFilterPillClass = (
+  status: "all" | "未確認" | "未対応" | "対応済",
+  active: boolean,
+): string => {
+  switch (status) {
+    case "未確認":
+      return active
+        ? "bg-orange-200 text-orange-900 border-orange-400 ring-2 ring-orange-300"
+        : "bg-orange-100 text-orange-800 border-orange-200 hover:bg-orange-200";
+    case "未対応":
+      return active
+        ? "bg-yellow-200 text-yellow-900 border-yellow-400 ring-2 ring-yellow-300"
+        : "bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200";
+    case "対応済":
+      return active
+        ? "bg-green-200 text-green-900 border-green-400 ring-2 ring-green-300"
+        : "bg-green-100 text-green-800 border-green-200 hover:bg-green-200";
+    case "all":
+    default:
+      return active
+        ? "bg-brand text-white border-brand"
+        : "bg-surface text-foreground border-border hover:bg-surface-muted";
+  }
+};
