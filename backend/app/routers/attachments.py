@@ -143,7 +143,7 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
                             items=(task["items"] or None),
                             date=(task["date"] or None),
                             event_date=(task.get("event_date") or None),
-                            status="未対応",
+                            status="未確認",
                             priority="普通",
                             registration_state="draft",
                         )
@@ -176,7 +176,7 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
                                 event_date=(sub.get("event_date") or None),
                                 due_date=(sub.get("due_date") or None),
                                 tags=(sub.get("tags") or None),
-                                status="未対応",
+                                status="未確認",
                                 priority="普通",
                                 registration_state="draft",
                             )

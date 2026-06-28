@@ -36,7 +36,6 @@ export const messages: Record<Lang, Messages> = {
     'schedule.filteredBy': '選択中の日付: ',
     'schedule.showAll': 'すべて',
     'schedule.showUnconfirmed': '未確認',
-    'schedule.showConfirmed': '確認済',
     'schedule.showPending': '未対応',
     'schedule.showDone': '対応済',
 
@@ -48,7 +47,6 @@ export const messages: Record<Lang, Messages> = {
     'tasks.showUnconfirmed': '未確認',
     'tasks.showPending': '未対応',
     'tasks.showDone': '対応済',
-    'tasks.showConfirmed': '確認済',
 
     // date picker (SOT-1307)
     'datePicker.year': '年',
@@ -350,7 +348,6 @@ export const messages: Record<Lang, Messages> = {
     'schedule.filteredBy': 'Selected date: ',
     'schedule.showAll': 'All',
     'schedule.showUnconfirmed': 'Unconfirmed',
-    'schedule.showConfirmed': 'Confirmed',
     'schedule.showPending': 'Pending',
     'schedule.showDone': 'Done',
 
@@ -362,7 +359,6 @@ export const messages: Record<Lang, Messages> = {
     'tasks.showUnconfirmed': 'Unconfirmed',
     'tasks.showPending': 'Pending',
     'tasks.showDone': 'Done',
-    'tasks.showConfirmed': 'Confirmed',
 
     // date picker (SOT-1307)
     'datePicker.year': 'Year',

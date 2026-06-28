@@ -52,7 +52,7 @@ const DraftsPage: React.FC = () => {
       event_date: d.event_date ?? '',
       due_date: d.due_date ?? '',
       items: d.items ?? '',
-      status: d.status ?? '未対応',
+      status: d.status ?? '未確認',
       priority: d.priority ?? '普通',
       tags: d.tags ?? '',
       memo: d.memo ?? '',
