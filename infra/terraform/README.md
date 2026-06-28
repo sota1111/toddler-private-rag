@@ -17,9 +17,10 @@ already exist and fail with "already exists".
 | `secrets.tf` | 4 Secret Manager secret **containers** (values managed manually, not by TF) |
 | `storage.tf` | GCS attachments bucket |
 | `firestore.tf` | Firestore native database `(default)` |
-| `cloud_run.tf` | Cloud Run `backend` + `frontend` services (+ public invoker) |
-| `cloud_function.tf` | gen2 upload Cloud Function (+ public invoker) |
-| `iam.tf` | Deploy service account + project role bindings (runtime SA optional) |
+| `cloud_run.tf` | Cloud Run `backend` + `frontend` services (+ public invoker, scaling caps) |
+| `cloud_function.tf` | gen2 upload Cloud Function (+ public invoker, scaling cap) |
+| `iam.tf` | Deploy SA + project roles; dedicated least-privilege **runtime** + **frontend** SAs |
+| `scheduler.tf` | Daily orphan-attachment cleanup Cloud Scheduler job (SOT-1366 item B) |
 | `wif.tf` | Workload Identity Federation pool/provider + SA binding |
 
 ### Not managed by Terraform (by design)
@@ -134,8 +135,53 @@ rollouts**. After adopting Terraform:
    mismatch between this config and the live resource (often a name/region/location
    value to fix in `terraform.tfvars`).
 
+## SOT-1366 hardening (P1/P2)
+
+This config now declares the architecture-review hardening items. They are
+**deployed via the CI workflow** (the single source of rollout); Terraform keeps
+the declarations in sync so `terraform import` + `plan` converge to no-op. Run
+`terraform import` for the new resources below to bring them under state.
+
+- **A — least-privilege runtime SAs (`iam.tf`).** `toddler-run-runtime`
+  (backend + upload function: secretAccessor / datastore.user / storage.objectAdmin
+  / aiplatform.user / logging / monitoring) and `toddler-run-frontend` (nginx:
+  logging / monitoring only). The workflow passes them via the GitHub secrets
+  `CLOUD_RUN_RUNTIME_SA` / `CLOUD_RUN_FRONTEND_SA`. **Set those secrets** so the
+  next deploy adopts the SAs (empty secret = keep the default compute SA).
+- **C — scaling caps.** `min_instance_count = 0`, `max_instance_count = 5` on
+  Cloud Run; `max_instance_count = 5` on the function. Mirrored in the workflow.
+- **B — orphan cleanup (`scheduler.tf`).** Daily Cloud Scheduler POST to the
+  backend `/internal/purge-orphans` (worker-token protected; the `/internal/*`
+  routes are not under `/api`, so nginx never proxies them). It deletes only
+  GCS objects with **no** attachment DB record, older than `ORPHAN_GRACE_DAYS`
+  (default 1). Displayed photos (referenced in the DB) are never deleted; no
+  age-based deletion is used. The `X-Worker-Token` value is sensitive — supply it
+  via `worker_invoke_token` in the gitignored `terraform.tfvars`, or set it
+  out-of-band (headers are under `ignore_changes`).
+- **D — backend ingress restriction: NOT done (deferred).** The frontend (nginx)
+  reverse-proxies `/api/*` to the backend over its public URL. Restricting the
+  backend to `ingress=internal` needs a Serverless VPC connector; switching to
+  authenticated invoker needs nginx to mint Google ID tokens. Both risk breaking
+  production. The backend already enforces app-level auth (Cookie HMAC +
+  `ALLOWED_USER_EMAILS`), which mitigates the public invoker.
+
+Import the new resources (after the existing import steps):
+```bash
+terraform import google_service_account.runtime \
+  projects/PROJECT_ID/serviceAccounts/toddler-run-runtime@PROJECT_ID.iam.gserviceaccount.com
+terraform import google_service_account.frontend \
+  projects/PROJECT_ID/serviceAccounts/toddler-run-frontend@PROJECT_ID.iam.gserviceaccount.com
+# runtime/frontend project roles: repeat per role in local.runtime_sa_roles / local.frontend_sa_roles
+terraform import 'google_project_iam_member.runtime["roles/secretmanager.secretAccessor"]' \
+  "PROJECT_ID roles/secretmanager.secretAccessor serviceAccount:toddler-run-runtime@PROJECT_ID.iam.gserviceaccount.com"
+# Cloud Scheduler job
+terraform import google_cloud_scheduler_job.purge_orphans \
+  projects/PROJECT_ID/locations/REGION/jobs/toddler-private-rag-purge-orphans
+# new API
+terraform import 'google_project_service.services["cloudscheduler.googleapis.com"]' \
+  PROJECT_ID/cloudscheduler.googleapis.com
+```
+
 ## Notes
 - This config was validated for structure only; `terraform validate` / `plan` against
   the real project must be run by a human with GCP credentials.
-- A dedicated least-privilege runtime service account is provided (commented) in
-  `iam.tf` as a hardening step — see the architecture review notes on SOT-1361.
