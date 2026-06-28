@@ -58,10 +58,47 @@ jobs:
             --project ${{ secrets.GCP_PROJECT_ID }} \
             --platform managed \
             --allow-unauthenticated \
-            --set-secrets "AUTH_SECRET=rag-auth-secret:latest,ALLOWED_USER_EMAILS=rag-allowed-emails:latest,FIREBASE_API_KEY=rag-firebase-api-key:latest" \
+            --set-secrets "AUTH_SECRET=rag-auth-secret:latest,ALLOWED_USER_EMAILS=rag-allowed-emails:latest,FIREBASE_API_KEY=rag-firebase-api-key:latest,WORKER_INVOKE_TOKEN=rag-worker-invoke-token:latest" \
             --set-env-vars "APP_ENV=production,CORS_ORIGINS=https://${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }}-${{ secrets.GCP_PROJECT_NUMBER }}.${{ secrets.GCP_REGION }}.run.app,GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=gen-lang-client-0243034020,GOOGLE_CLOUD_LOCATION=global,GEMINI_MODEL=gemini-3.5-flash,DATABASE_TYPE=firestore,STORAGE_BACKEND=gcs,GCS_BUCKET_NAME=gen-lang-client-0243034020-toddler-private-rag" \
             --memory 512Mi \
             --timeout 300
+
+      # ----- Upload service (SOT-1322: lightweight, fast-booting, upload-only) -----
+      - name: Build upload image
+        env:
+          IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }}
+        run: |
+          docker build -f backend/Dockerfile.upload -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" backend
+
+      - name: Push upload image
+        env:
+          IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }}
+        run: |
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
+      - name: Deploy upload service to Cloud Run
+        env:
+          IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }}
+        run: |
+          BACKEND_URL=$(gcloud run services describe ${{ secrets.CLOUD_RUN_SERVICE_BACKEND }} \
+            --region ${{ secrets.GCP_REGION }} \
+            --project ${{ secrets.GCP_PROJECT_ID }} \
+            --format 'value(status.url)')
+          if [ -z "$BACKEND_URL" ]; then
+            echo "ERROR: backend URL not resolved" >&2
+            exit 1
+          fi
+          gcloud run deploy ${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }} \
+            --image "$IMAGE:${{ github.sha }}" \
+            --region ${{ secrets.GCP_REGION }} \
+            --project ${{ secrets.GCP_PROJECT_ID }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-secrets "AUTH_SECRET=rag-auth-secret:latest,ALLOWED_USER_EMAILS=rag-allowed-emails:latest,WORKER_INVOKE_TOKEN=rag-worker-invoke-token:latest" \
+            --set-env-vars "APP_ENV=production,CORS_ORIGINS=https://${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }}-${{ secrets.GCP_PROJECT_NUMBER }}.${{ secrets.GCP_REGION }}.run.app,DATABASE_TYPE=firestore,STORAGE_BACKEND=gcs,GCS_BUCKET_NAME=gen-lang-client-0243034020-toddler-private-rag,GOOGLE_CLOUD_PROJECT=gen-lang-client-0243034020,AI_WORKER_URL=$BACKEND_URL" \
+            --memory 256Mi \
+            --timeout 60
 
       # ----- Frontend -----
       - name: Build frontend image
@@ -89,12 +126,20 @@ jobs:
             echo "ERROR: backend URL not resolved" >&2
             exit 1
           fi
+          UPLOAD_URL=$(gcloud run services describe ${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }} \
+            --region ${{ secrets.GCP_REGION }} \
+            --project ${{ secrets.GCP_PROJECT_ID }} \
+            --format 'value(status.url)')
+          if [ -z "$UPLOAD_URL" ]; then
+            echo "ERROR: upload service URL not resolved" >&2
+            exit 1
+          fi
           gcloud run deploy ${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }} \
             --image "$IMAGE:${{ github.sha }}" \
             --region ${{ secrets.GCP_REGION }} \
             --project ${{ secrets.GCP_PROJECT_ID }} \
             --platform managed \
             --allow-unauthenticated \
-            --set-env-vars "BACKEND_URL=$BACKEND_URL" \
+            --set-env-vars "BACKEND_URL=$BACKEND_URL,UPLOAD_URL=$UPLOAD_URL" \
             --memory 256Mi \
             --timeout 300
