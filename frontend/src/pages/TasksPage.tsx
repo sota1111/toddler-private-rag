@@ -84,18 +84,6 @@ const TasksPage: React.FC = () => {
 
   return (
     <div className="w-full lg:max-w-4xl lg:mx-auto">
-      <div className="flex items-start justify-end gap-3 mb-6">
-        {!formOpen && (
-          <button
-            type="button"
-            onClick={() => setFormOpen(true)}
-            className="shrink-0 rounded-xl bg-brand px-4 py-2 text-sm font-bold text-white shadow-card hover:bg-brand-strong"
-          >
-            ＋ {t('tasks.addButton')}
-          </button>
-        )}
-      </div>
-
       {formOpen && (
         <form
           onSubmit={handleSubmit}
@@ -185,9 +173,20 @@ const TasksPage: React.FC = () => {
       )}
 
       <div className="bg-surface rounded-2xl shadow-card border border-border overflow-hidden mb-6">
-        <div className="flex items-center gap-2 px-4 py-3 bg-accent-bg text-brand-strong font-bold border-b border-accent-border">
-          <span aria-hidden className="text-lg">📅</span>
-          <span>{t('tasks.listTitle')}</span>
+        <div className="flex items-center justify-between gap-2 px-4 py-3 bg-accent-bg text-brand-strong font-bold border-b border-accent-border">
+          <div className="flex items-center gap-2">
+            <span aria-hidden className="text-lg">📅</span>
+            <span>{t('tasks.listTitle')}</span>
+          </div>
+          {!formOpen && (
+            <button
+              type="button"
+              onClick={() => setFormOpen(true)}
+              className="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-bold text-white shadow-card hover:bg-brand-strong"
+            >
+              ＋ {t('tasks.addButton')}
+            </button>
+          )}
         </div>
         <DatedInfoList items={events} isLoading={isLoading} namespace="tasks" />
       </div>
