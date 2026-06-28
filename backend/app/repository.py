@@ -2,7 +2,7 @@ import abc
 import os
 import datetime
 import logging
-from typing import List, Optional, Union, Any
+from typing import List, Optional, Tuple, Union, Any
 from dataclasses import dataclass, field
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -67,6 +67,13 @@ class InfoRepository(abc.ABC):
 
     @abc.abstractmethod
     def delete(self, id: Union[int, str]) -> bool:
+        pass
+
+    @abc.abstractmethod
+    def delete_all(self) -> Tuple[int, List[str]]:
+        """全データ削除 (SOT-1356)。全 NurseryInfo（登録済み/draft/pending 区別なく全件）と
+        その全 Attachment を削除し、(削除した info 件数, ストレージ blob の object_key 一覧) を返す。
+        blob 実体の削除は呼び出し側（ルーター）が返り値の object_key で行う。"""
         pass
 
 
@@ -253,6 +260,21 @@ class SqliteInfoRepository(InfoRepository):
         self.db.delete(db_info)
         self.db.commit()
         return True
+
+    def delete_all(self) -> Tuple[int, List[str]]:
+        # blob 削除用に全 attachment の object_key を先に集める
+        object_keys: List[str] = []
+        for att in self.db.query(models.Attachment).all():
+            key = att.object_key or att.stored_filename
+            if key:
+                object_keys.append(key)
+        infos = self.db.query(models.NurseryInfo).all()
+        count = len(infos)
+        for info in infos:
+            # relationship cascade="all, delete-orphan" で attachment も削除される
+            self.db.delete(info)
+        self.db.commit()
+        return count, object_keys
 
 
 class SqliteAttachmentRepository(AttachmentRepository):
@@ -689,6 +711,22 @@ class FirestoreInfoRepository(InfoRepository):
             
         doc_ref.delete()
         return True
+
+    def delete_all(self) -> Tuple[int, List[str]]:
+        # blob 削除用に全 attachment の object_key を集めつつ、attachment ドキュメントを削除
+        object_keys: List[str] = []
+        for att in self.db.collection("attachments").stream():
+            data = att.to_dict() or {}
+            key = data.get("object_key") or data.get("stored_filename")
+            if key:
+                object_keys.append(key)
+            self.db.collection("attachments").document(att.id).delete()
+        # 全 nursery_info ドキュメントを削除
+        count = 0
+        for doc in self.db.collection("nursery_info").stream():
+            self.db.collection("nursery_info").document(doc.id).delete()
+            count += 1
+        return count, object_keys
 
 
 class FirestoreAttachmentRepository(AttachmentRepository):

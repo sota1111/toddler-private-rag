@@ -42,6 +42,12 @@ export const deleteInfo = async (id: number | string): Promise<void> => {
   await api.delete(`/info/${id}`);
 };
 
+// 全データ削除 (SOT-1356)。全タスク + 全写真 + ストレージ実体を削除する。破壊的・不可逆。
+export const deleteAllData = async (): Promise<{ deleted: number }> => {
+  const response = await api.delete('/info');
+  return response.data;
+};
+
 // 仮登録(draft) 一覧取得 (SOT-1113)
 export const getDrafts = async (): Promise<NurseryInfo[]> => {
   const response = await api.get('/info/drafts');

@@ -387,6 +387,23 @@ def finalize_info(id: Union[int, str], background_tasks: BackgroundTasks, repo: 
     return db_info
 
 
+@router.delete("")
+def delete_all_info(repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
+    """全データ削除 (SOT-1356)。全タスク(NurseryInfo)と全写真(Attachment + ストレージ実体)を削除する。
+    破壊的・不可逆操作。フロント側で確認を取った上で呼び出される想定。"""
+    deleted_count, object_keys = repo.delete_all()
+
+    # ストレージ実体(blob)を削除する。1件の失敗で全体を止めないよう best-effort で続行する。
+    backend = storage.get_storage()
+    for key in object_keys:
+        try:
+            backend.delete(key)
+        except Exception:
+            logger.warning("Failed to delete storage object during delete_all: %s", key)
+
+    return {"message": "Successfully deleted all data", "deleted": deleted_count}
+
+
 @router.delete("/{id}")
 def delete_info(id: Union[int, str], repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
     # List attachments to delete physical files

@@ -27,6 +27,15 @@ export const messages: Record<Lang, Messages> = {
     'settings.timezone': '標準時間（タイムゾーン）',
     'settings.childName': '子どもの名前',
     'settings.childNamePlaceholder': '例: たろう',
+    'settings.deleteAllTitle': '全データ削除',
+    'settings.deleteAllDescription': '全てのタスクと写真を削除します。この操作は取り消せません。',
+    'settings.deleteAllButton': '全データを削除する',
+    'settings.deleteAllConfirm': '本当に全てのタスクと写真を削除しますか？この操作は取り消せません。',
+    'settings.deleteAllConfirmButton': '削除する',
+    'settings.deleteAllCancel': 'キャンセル',
+    'settings.deleteAllInProgress': '削除中…',
+    'settings.deleteAllSuccess': '全データを削除しました（{count}件）。',
+    'settings.deleteAllError': '削除に失敗しました。時間をおいて再度お試しください。',
 
     // schedule (SOT-1306)
     'schedule.listTitle': '予定一覧',
@@ -350,6 +359,15 @@ export const messages: Record<Lang, Messages> = {
     'settings.timezone': 'Standard time (timezone)',
     'settings.childName': "Child's name",
     'settings.childNamePlaceholder': 'e.g. Taro',
+    'settings.deleteAllTitle': 'Delete all data',
+    'settings.deleteAllDescription': 'Delete all tasks and photos. This action cannot be undone.',
+    'settings.deleteAllButton': 'Delete all data',
+    'settings.deleteAllConfirm': 'Are you sure you want to delete all tasks and photos? This action cannot be undone.',
+    'settings.deleteAllConfirmButton': 'Delete',
+    'settings.deleteAllCancel': 'Cancel',
+    'settings.deleteAllInProgress': 'Deleting…',
+    'settings.deleteAllSuccess': 'All data has been deleted ({count} items).',
+    'settings.deleteAllError': 'Failed to delete. Please try again later.',
 
     // schedule (SOT-1306)
     'schedule.listTitle': 'Schedule list',
