@@ -543,6 +543,9 @@ def _llm_tasks(raw_text: str, language: str = "ja") -> List[dict]:
         "a parent must handle from a nursery-school notice. "
         "Split the body below into individual tasks and output ONLY a JSON array. "
         "Use one element per action, event, or deadline. If none apply, return an empty array [].\n"
+        "If several details concern the SAME event on the SAME date (for example an event together with "
+        "its belongings, dress code, or requests), output them as ONE element whose detail combines that "
+        "information — do NOT split a single event into multiple elements.\n"
         "Each element has this shape:\n"
         '{"title":"a short heading of about 20 characters",'
         '"date":"the scheduled/due date if known, as M月D日 or YYYY-MM-DD; empty string if unknown",'
@@ -627,6 +630,111 @@ def _single_task_fallback(
     return fields
 
 
+# SOT-1350: 同一日・同一イベントのタスクを1件に統合する後処理。
+# 共通接頭辞がこの文字数以上のとき「同じイベント」とみなす（過剰マージを防ぐ保守的な閾値）。
+_EVENT_MERGE_MIN_PREFIX = 3
+
+# 統合時に採用する代表 category の優先順位（events を最優先 → info_type 行事になる）。
+_MERGE_CATEGORY_PRIORITY = ["events", "submissions", "belongings", "deadlines", "notes", OTHER_KEY]
+
+
+def _normalized_event_key(title: Optional[str]) -> str:
+    """イベント名比較用に title から空白・記号類を除いた正規化キーを返す。"""
+    raw = (title or "").strip()
+    return "".join(ch for ch in raw if not ch.isspace() and ch not in "・,，、.。:：;；/／-ー()（）[]【】")
+
+
+def _common_prefix_len(a: str, b: str) -> int:
+    """2文字列の longest common prefix の長さ（文字数）。"""
+    n = 0
+    for ca, cb in zip(a, b):
+        if ca != cb:
+            break
+        n += 1
+    return n
+
+
+def _consolidate_tasks(tasks: List[dict]) -> List[dict]:
+    """同一 event_date かつ同一イベント名のタスクを1件へ統合する (SOT-1350)。
+
+    - 日付（normalize_date 結果）が空のタスクは決してマージしない（同一日と確認できないため）。
+    - 正規化イベント名の共通接頭辞が ``_EVENT_MERGE_MIN_PREFIX`` 文字以上、かつ
+      正規化日付キーが等しいタスク同士を同一イベントとみなす。
+    - 入力順を保ち、貪欲(greedy)にグルーピングする。LLM 呼び出しや I/O は行わない純関数。
+    """
+    groups: List[dict] = []  # {"date_key", "event_key", "tasks": [...]}
+    for task in tasks:
+        date_key = normalize_date(task.get("date")) or ""
+        event_key = _normalized_event_key(task.get("title"))
+        placed = False
+        if date_key:  # 日付不明はマージ対象外
+            for group in groups:
+                if group["date_key"] != date_key:
+                    continue
+                gk = group["event_key"]
+                if not (event_key and gk):
+                    continue
+                prefix = _common_prefix_len(event_key, gk)
+                if prefix >= _EVENT_MERGE_MIN_PREFIX:
+                    group["tasks"].append(task)
+                    # グループキーは短い方（より一般的なイベント名）に寄せる
+                    if len(event_key) < len(gk):
+                        group["event_key"] = event_key
+                    placed = True
+                    break
+        if not placed:
+            groups.append({"date_key": date_key, "event_key": event_key, "tasks": [task]})
+
+    merged: List[dict] = []
+    for group in groups:
+        members = group["tasks"]
+        if len(members) == 1:
+            merged.append(members[0])
+            continue
+        merged.append(_merge_task_group(members))
+    return merged
+
+
+def _merge_task_group(members: List[dict]) -> dict:
+    """同一イベントとみなされたタスク群を1件のタスク dict に統合する。"""
+
+    def _category(task: dict) -> str:
+        cat = task.get("category")
+        return cat if cat in ALL_CONTENT_KEYS else OTHER_KEY
+
+    # 代表タスク: category 優先順位（events 優先）で最初に出現したもの
+    representative = members[0]
+    best_rank = len(_MERGE_CATEGORY_PRIORITY)
+    for task in members:
+        cat = _category(task)
+        rank = _MERGE_CATEGORY_PRIORITY.index(cat) if cat in _MERGE_CATEGORY_PRIORITY else len(_MERGE_CATEGORY_PRIORITY)
+        if rank < best_rank:
+            best_rank = rank
+            representative = task
+
+    # detail: 出現順を保ち、重複・空を除いて改行連結
+    details: List[str] = []
+    for task in members:
+        d = (task.get("detail") or "").strip()
+        if d and d not in details:
+            details.append(d)
+
+    # date: 非空の日付を1つ採用
+    date = ""
+    for task in members:
+        d = (task.get("date") or "").strip()
+        if d:
+            date = d
+            break
+
+    return {
+        "title": (representative.get("title") or "").strip(),
+        "date": date,
+        "detail": "\n".join(details),
+        "category": _category(representative),
+    }
+
+
 def build_task_drafts(
     safe_text: str,
     detected_dates: Optional[List[str]] = None,
@@ -655,4 +763,6 @@ def build_task_drafts(
     if not tasks:
         return [_single_task_fallback(safe_text, detected_dates, detected_items)]
 
+    # SOT-1350: 同一日・同一イベントのタスクを draft 化前に1件へ統合する。
+    tasks = _consolidate_tasks(tasks)
     return [_task_to_draft(task, safe_text) for task in tasks]

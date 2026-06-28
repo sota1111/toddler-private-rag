@@ -1,41 +1,45 @@
 # Worker Report
 
 ## Summary
-Verified SOT-1347 PC calendar layout change on branch `feat/SOT-1347-pc-calendar-side-by-side`.
+Verified SOT-1350 backend implementation and tests. The full backend pytest suite passes, and the focused SOT-1350 tests pass.
 
-`frontend/src/pages/SchedulePage.tsx` now uses a mobile-first stacked layout and `lg:` two-column grid for PC/wide screens. The calendar card and schedule-list card keep mobile bottom spacing and remove it at `lg+`.
+The consolidation behavior is meaningful for the reported examples:
+- Same-date/same-event pairs for `七夕会`, `水あそび`, and `お誕生日会` merge to one task each.
+- Different dates do not merge.
+- Same-date unrelated titles do not merge.
+- Empty dates never merge.
+- `build_task_drafts()` applies consolidation after `_llm_tasks()` and before draft mapping.
+- The LLM prompt includes the same-event merge instruction.
 
-Quality gates are green: lint, build/typecheck, and Playwright e2e all passed.
-
-Display-text and behavior regression check: visible schedule text remains driven by the same translation keys, the schedule list still renders, each item still links to `/data/${item.id}`, heading/detail navigation is covered by S8 e2e, and the status filter state/handlers/options are unchanged.
+No code fixes were applied. Repo-wide ruff is configured but fails on pre-existing unrelated lint in test files outside the SOT-1350 change. The touched Python files pass ruff.
 
 ## Changed Files
-- `frontend/src/pages/SchedulePage.tsx` — responsive `lg:` grid classes for side-by-side PC layout; card margins changed to `mb-6 lg:mb-0`; comments updated to describe PC/mobile placement.
-- `docs/ai/60_worker_codex_report.md` — this verification report.
-- `docs/ai/50_worker_antigravity_report.md` — pre-existing/untracked Antigravity non-response artifact referenced by the task.
+- `docs/ai/60_worker_codex_report.md` - updated this verification report.
 
 ## Commands Run
-- `git branch --show-current` — `feat/SOT-1347-pc-calendar-side-by-side`
-- `git status --short` — showed `frontend/src/pages/SchedulePage.tsx`, `docs/ai/60_worker_codex_report.md`, and untracked `docs/ai/50_worker_antigravity_report.md`
-- `git --no-pager diff --stat main...HEAD` — exit 0; no output because the current changes are uncommitted in the working tree rather than present in the commit range
-- `git --no-pager diff --stat` — exit 0; only `docs/ai/60_worker_codex_report.md` and `frontend/src/pages/SchedulePage.tsx` modified in the working tree
-- `git --no-pager diff -- frontend/src/pages/SchedulePage.tsx` — confirmed only layout classes and JSX comments changed in SchedulePage
-- `sed -n '120,285p' frontend/src/pages/SchedulePage.tsx` — inspected calendar/list JSX, links, translation keys, and filter controls
-- `npm run lint` — exit 0
-- `npm run build` — exit 0; `tsc -b && vite build` succeeded
-- `npm run e2e` — exit 0; 17 passed
+- `cd /workspaces/toddler-private-rag/backend && python -m pytest -q`
+  - Result: PASS, `157 passed, 6 warnings in 260.13s`.
+- `cd /workspaces/toddler-private-rag/backend && python -m pytest -q tests/test_extraction.py -k "consolidate or SOT or build_task_drafts_consolidates"`
+  - Result: PASS, `5 passed, 19 deselected`.
+- `cd /workspaces/toddler-private-rag/backend && ruff check app/ tests/`
+  - Result: FAIL, 21 lint errors in unrelated existing files: `tests/test_attachments.py`, `tests/test_ocr_search.py`, `tests/test_privacy.py`, `tests/test_repository.py`, `tests/test_storage_backend.py`.
+- `cd /workspaces/toddler-private-rag/backend && ruff check app/extraction.py tests/test_extraction.py`
+  - Result: PASS, `All checks passed!`.
+- `cd /workspaces/toddler-private-rag && git --no-pager diff --stat main...HEAD`
+  - Result: no output because local `main` and `feat/SOT-1350-merge-same-event-tasks` currently point to the same commit.
+- `cd /workspaces/toddler-private-rag && git --no-pager diff --stat HEAD`
+  - Result: only `backend/app/extraction.py`, `backend/tests/test_extraction.py`, `docs/ai/50_worker_antigravity_report.md`, and `docs/ai/60_worker_codex_report.md` are modified.
 
 ## Acceptance Criteria
-- [x] lint pass
-- [x] build (typecheck) pass
-- [x] e2e pass
+- [x] pytest all pass (incl. new SOT-1350 tests)
+- [ ] ruff pass / N/A
 - [x] only intended files changed
-- [x] no display-text/behavior regression
+- [x] consolidation behaves per SOT-1350 examples; no regression in existing extraction tests
 
 ## Risks
-`git --no-pager diff --stat main...HEAD` is empty because the implementation appears to be uncommitted. The working-tree diff is scoped as expected, but reviewers should commit/stage the intended files before relying on `main...HEAD`.
+Repo-wide ruff is not green due to existing unrelated lint. I did not fix those files because doing so would expand the change scope beyond SOT-1350 and break the "only intended files changed" criterion.
 
-No runtime regressions were found. The only non-CSS edits in `SchedulePage.tsx` are JSX comment wording changes; they do not affect rendered text or behavior.
+`git --no-pager diff --stat main...HEAD` is not useful in this checkout because `main` and the feature branch resolve to the same commit; `git diff --stat HEAD` confirms the working tree changes are scoped to the intended implementation/test/docs files.
 
 ## Next Action
-READY_FOR_REVIEW
+NEEDS_DEBUG
