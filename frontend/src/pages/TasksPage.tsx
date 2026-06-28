@@ -38,11 +38,9 @@ const TasksPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // 日付つきの予定のみを対象にする。
-  const events = useMemo<NurseryInfo[]>(
-    () => (data ?? []).filter((item) => Boolean(item.event_date)),
-    [data],
-  );
+  // SOT-1365: 日付不明（event_date 無し）のタスクも「期限なし」として表示するため、
+  // 日付ありの絞り込みを外して全件を一覧へ渡す（カレンダーページは別途 event_date ありのみ表示）。
+  const events = useMemo<NurseryInfo[]>(() => data ?? [], [data]);
 
   const resetForm = () => {
     setTitle('');

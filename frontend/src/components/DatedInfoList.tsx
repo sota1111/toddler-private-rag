@@ -21,8 +21,9 @@ const STATUS_FILTERS: { key: DatedInfoStatusFilter; suffix: string }[] = [
 ];
 
 interface DatedInfoListProps {
-  // 日付つき（event_date あり）の項目。呼び出し側で前段フィルタ済み
-  // （SchedulePage は selectedDate 適用後を渡す）。ステータス絞り込みとソートは本コンポーネントが行う。
+  // 一覧項目。呼び出し側で前段フィルタ済み（SchedulePage は event_date ありかつ selectedDate 適用後を渡す）。
+  // SOT-1365: TasksPage は日付不明（event_date 無し）の項目も渡しうる（チップは「期限なし」表示・末尾ソート）。
+  // ステータス絞り込みとソートは本コンポーネントが行う。
   items: NurseryInfo[];
   isLoading: boolean;
   // i18n の名前空間。ピルのラベルキーと role group の aria-label に使う。
@@ -44,12 +45,18 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({ items, isLoading, namespa
   const [statusFilter, setStatusFilter] = useState<DatedInfoStatusFilter>('all');
 
   // ステータス絞り込み（'all' 以外は該当ステータスのみ）→ event_date 昇順ソート。
+  // SOT-1365: event_date が空（日付不明 = 期限なし）の項目は末尾に回す。
   const listItems = useMemo<NurseryInfo[]>(() => {
     const filtered =
       statusFilter === 'all' ? items : items.filter((ev) => ev.status === statusFilter);
-    return [...filtered].sort((a, b) =>
-      (a.event_date as string).localeCompare(b.event_date as string),
-    );
+    return [...filtered].sort((a, b) => {
+      const da = a.event_date ?? '';
+      const db = b.event_date ?? '';
+      if (!da && !db) return 0;
+      if (!da) return 1; // 日付なし（期限なし）は末尾
+      if (!db) return -1;
+      return da.localeCompare(db);
+    });
   }, [items, statusFilter]);
 
   return (
@@ -93,7 +100,7 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({ items, isLoading, namespa
                     <span className="font-medium text-foreground truncate">{item.title}</span>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className={`text-xs px-2 py-1 rounded-full ${getStatusDateChipClass(item.status)}`}>
-                        {item.event_date}
+                        {item.event_date ? item.event_date : t('common.noDeadline')}
                       </span>
                       <span className="text-xs text-muted-foreground">{optLabel('infoType', item.info_type)}</span>
                     </div>
