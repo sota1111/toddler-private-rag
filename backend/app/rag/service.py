@@ -74,13 +74,16 @@ class RagService:
 
         return [cached[k] for k in keys]
 
-    def build_index(self, infos: List[Any]) -> int:
+    def build_index(self, infos: List[Any], *, ocr_only: bool = False) -> int:
         """Chunk + (cached) embed all infos and populate the vector store. Returns chunk count.
 
         埋め込みは ``_embed_cached`` 経由で保存済みベクトルを再利用する。既存データも初回質問時に
         ここでミスを埋めて永続化されるため、別途バックフィルは不要 (SOT-1294)。
+
+        ``ocr_only`` が True の場合、写真の文字起こし（添付OCR）チャンクのみをインデックスする
+        (SOT-1357: RAG /ask の根拠を写真の文字起こしのみにする)。
         """
-        chunks = build_documents(infos, self.chunk_size, self.overlap)
+        chunks = build_documents(infos, self.chunk_size, self.overlap, ocr_only=ocr_only)
         if not chunks:
             return 0
         vectors = self._embed_cached([c.text for c in chunks])
@@ -136,13 +139,16 @@ class RagService:
         return Answer(answer=answer_text, sources=sources)
 
 
-def get_rag_service(repo, **kwargs) -> RagService:
-    """Build a RagService indexed over all infos in the given repository."""
+def get_rag_service(repo, *, ocr_only: bool = False, **kwargs) -> RagService:
+    """Build a RagService indexed over all infos in the given repository.
+
+    ``ocr_only`` で写真の文字起こし（添付OCR）のみをインデックス対象にできる (SOT-1357)。
+    """
     service = RagService(**kwargs)
     try:
         infos = repo.list()
     except Exception:  # pragma: no cover - defensive
         logger.exception("Failed to list infos for RAG index")
         infos = []
-    service.build_index(infos)
+    service.build_index(infos, ocr_only=ocr_only)
     return service

@@ -44,21 +44,34 @@ def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]
     return chunks
 
 
-def build_documents(infos: Iterable[Any], chunk_size: int = 500, overlap: int = 50) -> List[Chunk]:
+def build_documents(
+    infos: Iterable[Any],
+    chunk_size: int = 500,
+    overlap: int = 50,
+    *,
+    ocr_only: bool = False,
+) -> List[Chunk]:
     """Build chunks from a collection of NurseryInfo-like objects.
 
     Each info contributes chunks from ``title + content`` (source="content") and
     from every attachment's ``ocr_text`` (source="ocr"). Works for both the
     SQLAlchemy and Firestore model shapes since it relies only on attribute access.
+
+    When ``ocr_only`` is True, the ``title + content`` (source="content") chunks are
+    skipped entirely and only photo transcription (source="ocr") chunks are produced.
+    This backs the RAG ``/ask`` endpoint grounding answers on photo transcriptions only
+    (SOT-1357), while the default (False) keeps the full corpus for ``/search`` /
+    ``/hybrid-search``.
     """
     documents: List[Chunk] = []
     for info in infos:
         info_id = getattr(info, "id", None)
         title = getattr(info, "title", "") or ""
-        content = getattr(info, "content", "") or ""
-        combined = f"{title}\n{content}".strip()
-        for piece in chunk_text(combined, chunk_size, overlap):
-            documents.append(Chunk(info_id=info_id, title=title, text=piece, source="content"))
+        if not ocr_only:
+            content = getattr(info, "content", "") or ""
+            combined = f"{title}\n{content}".strip()
+            for piece in chunk_text(combined, chunk_size, overlap):
+                documents.append(Chunk(info_id=info_id, title=title, text=piece, source="content"))
 
         for attachment in getattr(info, "attachments", None) or []:
             ocr_text = getattr(attachment, "ocr_text", None)
