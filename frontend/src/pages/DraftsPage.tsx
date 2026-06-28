@@ -18,6 +18,8 @@ const DraftsPage: React.FC = () => {
     queryFn: getDrafts,
   });
   const [busyId, setBusyId] = useState<number | string | null>(null);
+  // SOT-1341: 「全て本登録する」処理中フラグ（個別 busyId とは別に管理）
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [editingId, setEditingId] = useState<number | string | null>(null);
   const [editForm, setEditForm] = useState<NurseryInfoCreate | null>(null);
 
@@ -97,6 +99,24 @@ const DraftsPage: React.FC = () => {
     }
   };
 
+  // SOT-1341: 取得済みの全 draft を順番に本登録する。部分失敗の扱いを明確にするため逐次実行。
+  const handleFinalizeAll = async () => {
+    if (!drafts || drafts.length === 0) return;
+    if (!window.confirm(t('drafts.confirmFinalizeAll'))) return;
+    setBulkBusy(true);
+    try {
+      for (const d of drafts) {
+        await finalizeInfo(d.id);
+      }
+    } catch (e) {
+      console.error('Failed to finalize all drafts', e);
+      window.alert(t('drafts.actionFail'));
+    } finally {
+      await refreshAll();
+      setBulkBusy(false);
+    }
+  };
+
   const handleDiscard = async (id: number | string) => {
     if (!window.confirm(t('drafts.confirmDiscard'))) return;
     setBusyId(id);
@@ -128,13 +148,26 @@ const DraftsPage: React.FC = () => {
         </div>
       )}
 
+      {!isLoading && !isError && drafts && drafts.length > 0 && (
+        <div className="flex justify-end mb-4">
+          <button
+            type="button"
+            onClick={handleFinalizeAll}
+            disabled={busyId !== null || bulkBusy}
+            className="px-5 py-2 text-sm font-medium text-white bg-brand rounded-md shadow-sm hover:bg-brand-strong disabled:opacity-50"
+          >
+            {bulkBusy ? t('drafts.working') : t('drafts.finalizeAll')}
+          </button>
+        </div>
+      )}
+
       <div className="space-y-4">
         {drafts?.map((d: NurseryInfo) => {
           const imageAtt = d.attachments?.find((a) => a.mime_type?.startsWith('image/'));
           const busy = busyId === d.id;
           // SOT-1323: いずれかの項目を処理中の間は、全カードのボタンを無効化して
           // 多重リクエスト/状態競合を防ぐ（処理中の項目だけ「処理中…」表示を維持）。
-          const anyBusy = busyId !== null;
+          const anyBusy = busyId !== null || bulkBusy;
           const isEditing = editingId === d.id && editForm !== null;
           return (
             <div key={d.id} className="bg-surface shadow-sm border border-border rounded-lg p-5">
