@@ -108,7 +108,7 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page).toHaveURL(/\/drafts/)
     await expect(page.getByRole('heading', { name: '遠足のしおり（仮）' })).toBeVisible()
 
-    await page.getByRole('button', { name: '本登録する' }).click()
+    await page.getByRole('button', { name: '本登録する', exact: true }).click()
 
     // 本登録後は仮登録一覧から消え、空表示になる
     await expect(page.getByRole('heading', { name: '遠足のしおり（仮）' })).toHaveCount(0)
@@ -218,5 +218,27 @@ test.describe('toddler-private-rag シナリオ', () => {
     // SOT-1325: 写真の下に文字起こし(OCR原文)が設定言語で表示される
     await expect(page.getByRole('heading', { name: '文字起こし' })).toBeVisible()
     await expect(page.getByText('今月の給食は和食中心です。', { exact: true })).toBeVisible()
+  })
+
+  test('S12: 仮登録画面で「全て本登録する」を押すと全 draft が本登録され一覧から消える (SOT-1341)', async ({ page }) => {
+    await installApiMocks(page, { authed: true })
+    await login(page)
+
+    // 確認ダイアログは自動承認する
+    page.on('dialog', (d) => d.accept())
+
+    await page.locator('nav a[href="/create/auto"]').first().click()
+    await expect(page).toHaveURL(/\/create\/auto/)
+    await page.locator('a[href="/drafts"]').first().click()
+    await expect(page).toHaveURL(/\/drafts/)
+    await expect(page.getByRole('heading', { name: '遠足のしおり（仮）' })).toBeVisible()
+
+    await page.getByRole('button', { name: '全て本登録する', exact: true }).click()
+
+    // 全件本登録後は仮登録一覧から消え、空表示になる
+    await expect(page.getByRole('heading', { name: '遠足のしおり（仮）' })).toHaveCount(0)
+    await expect(
+      page.getByText('仮登録はありません。自動登録から写真をアップすると、ここに表示されます。'),
+    ).toBeVisible()
   })
 })
