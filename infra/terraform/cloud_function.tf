@@ -27,6 +27,7 @@ resource "google_cloudfunctions2_function" "upload" {
   service_config {
     available_memory      = "256Mi"
     timeout_seconds       = 60
+    max_instance_count    = 5 # SOT-1366 item C: cap fan-out.
     service_account_email = local.runtime_sa
 
     environment_variables = {
