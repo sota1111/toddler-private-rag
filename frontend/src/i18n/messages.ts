@@ -49,7 +49,6 @@ export const messages: Record<Lang, Messages> = {
     'schedule.showDone': '対応済',
 
     // tasks (SOT-1313)
-    'tasks.title': 'やることリスト',
     'tasks.listTitle': 'やることリスト',
     'tasks.showAll': 'すべて',
     'tasks.showUnconfirmed': '未確認',
@@ -380,7 +379,6 @@ export const messages: Record<Lang, Messages> = {
     'schedule.showDone': 'Done',
 
     // tasks (SOT-1313)
-    'tasks.title': 'Task list',
     'tasks.listTitle': 'Task list',
     'tasks.showAll': 'All',
     'tasks.showUnconfirmed': 'Unconfirmed',
