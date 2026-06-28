@@ -63,23 +63,9 @@ jobs:
             --memory 512Mi \
             --timeout 300
 
-      # ----- Upload service (SOT-1322: lightweight, fast-booting, upload-only) -----
-      - name: Build upload image
-        env:
-          IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }}
-        run: |
-          docker build -f backend/Dockerfile.upload -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" backend
-
-      - name: Push upload image
-        env:
-          IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }}
-        run: |
-          docker push "$IMAGE:${{ github.sha }}"
-          docker push "$IMAGE:latest"
-
-      - name: Deploy upload service to Cloud Run
-        env:
-          IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }}
+      # ----- Upload Cloud Function (SOT-1359: gen2, slim, fast-booting, upload-only) -----
+      # Replaces the former lightweight upload Cloud Run service. Source: backend/upload_function.
+      - name: Deploy upload Cloud Function (gen2)
         run: |
           BACKEND_URL=$(gcloud run services describe ${{ secrets.CLOUD_RUN_SERVICE_BACKEND }} \
             --region ${{ secrets.GCP_REGION }} \
@@ -89,16 +75,19 @@ jobs:
             echo "ERROR: backend URL not resolved" >&2
             exit 1
           fi
-          gcloud run deploy ${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }} \
-            --image "$IMAGE:${{ github.sha }}" \
+          gcloud functions deploy ${{ secrets.CLOUD_FUNCTION_UPLOAD }} \
+            --gen2 \
             --region ${{ secrets.GCP_REGION }} \
             --project ${{ secrets.GCP_PROJECT_ID }} \
-            --platform managed \
+            --runtime python311 \
+            --source backend/upload_function \
+            --entry-point upload_attachment \
+            --trigger-http \
             --allow-unauthenticated \
-            --set-secrets "AUTH_SECRET=rag-auth-secret:latest,ALLOWED_USER_EMAILS=rag-allowed-emails:latest,WORKER_INVOKE_TOKEN=rag-worker-invoke-token:latest" \
+            --set-secrets "AUTH_SECRET=rag-auth-secret:latest,WORKER_INVOKE_TOKEN=rag-worker-invoke-token:latest" \
             --set-env-vars "APP_ENV=production,CORS_ORIGINS=https://${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }}-${{ secrets.GCP_PROJECT_NUMBER }}.${{ secrets.GCP_REGION }}.run.app,DATABASE_TYPE=firestore,STORAGE_BACKEND=gcs,GCS_BUCKET_NAME=gen-lang-client-0243034020-toddler-private-rag,GOOGLE_CLOUD_PROJECT=gen-lang-client-0243034020,AI_WORKER_URL=$BACKEND_URL" \
             --memory 256Mi \
-            --timeout 60
+            --timeout 60s
 
       # ----- Frontend -----
       - name: Build frontend image
@@ -126,12 +115,13 @@ jobs:
             echo "ERROR: backend URL not resolved" >&2
             exit 1
           fi
-          UPLOAD_URL=$(gcloud run services describe ${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }} \
+          UPLOAD_URL=$(gcloud functions describe ${{ secrets.CLOUD_FUNCTION_UPLOAD }} \
+            --gen2 \
             --region ${{ secrets.GCP_REGION }} \
             --project ${{ secrets.GCP_PROJECT_ID }} \
-            --format 'value(status.url)')
+            --format 'value(serviceConfig.uri)')
           if [ -z "$UPLOAD_URL" ]; then
-            echo "ERROR: upload service URL not resolved" >&2
+            echo "ERROR: upload function URL not resolved" >&2
             exit 1
           fi
           gcloud run deploy ${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }} \

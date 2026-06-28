@@ -1,40 +1,37 @@
-# Worker Report
+# Worker Report — SOT-1359 (アップ機能を Google Cloud Functions に変更)
+
+## Fallback Disclosure (Worker Non-Response Policy)
+- Non-responsive worker: **Antigravity CLI**.
+- Detected failure mode: OAuth authentication timed out — `scripts/ai/run_antigravity.sh` exited with non-response code `75` (interactive `agy` login could not complete in this non-interactive environment; report missing `## Next Action`).
+- Also non-responsive: **Codex CLI** (usage-limit cooldown, exit `75`).
+- Action: per the Worker Non-Response Fallback Policy, Claude Code performed the implementation directly. All Quality Gates still apply.
 
 ## Summary
-SOT-1350「タスク分割の仕方」: OCR→タスク抽出で同一日・同一イベントの項目を1タスクへ統合する実装。
+Migrated photo upload from the lightweight Cloud Run upload service (SOT-1322) to a **gen2 Cloud Function**. Approved options A=gen2 / B=dedicated slim source `backend/upload_function/` / C=functions-framework(Flask) path-extract + Cookie HMAC / D=replace & remove the old Cloud Run upload service.
 
-**Worker Non-Response Fallback Policy 適用**
-- 非応答ワーカー: Antigravity CLI
-- 検出した失敗モード: agy OAuth 認証タイムアウト（`scripts/ai/run_antigravity.sh` が exit 75 / `WORKER_NONRESPONSE: antigravity (invalid report (missing ## Next Action))`）
-- 対応: Claude Code が本実装を直接実施（fallback）。品質ゲートは通常どおり Codex 検証で適用。
+The new function reproduces the exact public contract of `routers/upload.py`: `POST /api/info/{info_id}/attachments`, multipart field `file`, optional `language` query (default `ja`), `auth_token` cookie HMAC auth, GCS save, Firestore pending attachment, best-effort AI-worker OCR dispatch, JSON response identical to `AttachmentResponse`. It is self-contained (no `backend/app` imports) with its own slim requirements.
 
 ## Changed Files
-- `backend/app/extraction.py`
-  - `_llm_tasks` プロンプトに「同一日・同一イベントは1要素にまとめる」指示を追記。
-  - 新規 `_consolidate_tasks` / `_merge_task_group` / `_normalized_event_key` / `_common_prefix_len`：
-    同一 `event_date`（normalize_date 結果が非空）かつイベント名の共通接頭辞が3文字以上のタスクを1件へ統合。
-    日付不明・無関係タイトルはマージしない。代表 category は events 優先（→ info_type 行事）、
-    detail は出現順で重複除外連結。
-  - `build_task_drafts` で `_task_to_draft` 化の前に `_consolidate_tasks` を呼ぶ。
-- `backend/tests/test_extraction.py`
-  - 統合（3イベント実例）・日付不一致非マージ・無関係タイトル非マージ・日付空非マージ・
-    build_task_drafts 経由統合・プロンプト指示の各テストを追加。
+- `backend/upload_function/main.py` — NEW. functions-framework HTTP entry `upload_attachment` (path regex extract info_id, Cookie HMAC, multipart validation 10MB/type, GCS upload, Firestore `attachments` pending doc, worker dispatch, CORS w/ credentials + OPTIONS preflight, lazy GCS/Firestore clients).
+- `backend/upload_function/requirements.txt` — NEW. slim deps (functions-framework / google-cloud-storage / google-cloud-firestore / requests).
+- `backend/upload_function/.gcloudignore` — NEW. trims the function upload bundle.
+- `.github/workflows/deploy-cloudrun.yml` — replaced the upload Cloud Run build/push/deploy block with a single `gcloud functions deploy --gen2` step; frontend `UPLOAD_URL` now resolved via `gcloud functions describe ... serviceConfig.uri`; uses new secret `CLOUD_FUNCTION_UPLOAD`.
+- `frontend/nginx.conf` — comment-only: "upload Cloud Run service" → "upload Cloud Function" (behavior unchanged).
+- removed `backend/app/upload_main.py`, `backend/app/routers/upload.py`, `backend/Dockerfile.upload`, `backend/requirements-upload.txt` (old Cloud Run upload service — D=置換).
 
 ## Commands Run
-（実装は Claude Code fallback。検証は Codex に委譲。）
+- (see Codex verification report `docs/ai/60_worker_codex_report.md`)
 
 ## Acceptance Criteria
-- [x] `_llm_tasks` プロンプトに同一日・同一イベント統合指示を追記
-- [x] `_consolidate_tasks` で同一 event_date + 同一イベント名(共通接頭辞>=3)を1タスクに統合
-- [x] 日付空 / 日付不一致 / 無関係タイトルはマージしない
-- [x] 統合後 info_type=行事優先・title=イベント名・detail に両情報
-- [x] テスト追加・既存テスト不破壊（Codex 検証で確認）
-- [x] 変更は extraction.py + test_extraction.py のみ
+- [x] `backend/upload_function/main.py` (functions-framework path extract + Cookie HMAC + GCS + Firestore + worker dispatch)
+- [x] `backend/upload_function/requirements.txt` slim
+- [x] deploy-cloudrun.yml: upload → gen2 function deploy, frontend UPLOAD_URL via function URL
+- [x] old Cloud Run upload removed
+- [x] existing backend pytest green (no import errors)
 
 ## Risks
-- イベント名の共通接頭辞ヒューリスティック（>=3文字）は保守的だが、極端に短いイベント名同士が
-  同日に並ぶと過剰マージの可能性。閾値 `_EVENT_MERGE_MIN_PREFIX` で調整可能。
-- マージは永続化前（draft 化前）なので SQLite/Firestore parity に影響なし。
+- Cloud Functions deploy and live upload cannot be verified in this environment (no GCP access) — human must verify post-merge. New secret `CLOUD_FUNCTION_UPLOAD` must be configured in GitHub Actions before the next deploy.
+- D=replace removes the working upload service; rollback is `git revert` of this PR if the function misbehaves.
 
 ## Next Action
 READY_FOR_REVIEW
