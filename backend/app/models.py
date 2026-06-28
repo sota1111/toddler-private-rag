@@ -14,6 +14,8 @@ class NurseryInfo(Base):
     event_date = Column(Date, nullable=True)
     due_date = Column(Date, nullable=True)
     items = Column(Text, nullable=True)
+    # SOT-1368: どの子供に紐づくか（option A: 1家族で複数の子供）。未設定(既存データ)は紐付けなし。
+    child_id = Column(String(50), nullable=True)
     status = Column(String(20), default="未確認")
     # 仮登録(draft) / 本登録(registered) の区分。既存(未設定)データは registered 扱い。
     registration_state = Column(String(20), nullable=False, server_default="registered", default="registered")
@@ -44,3 +46,11 @@ class Attachment(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     info = relationship("NurseryInfo", back_populates="attachments")
+
+class Child(Base):
+    """SOT-1368: 1家族内に登録する子供（option A）。NurseryInfo.child_id から参照される。"""
+    __tablename__ = "children"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
