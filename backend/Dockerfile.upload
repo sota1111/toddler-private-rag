@@ -1,0 +1,13 @@
+# SOT-1322: lightweight upload-only image for the upload Cloud Run service.
+# Intentionally does NOT install tesseract / poppler or the OCR/AI Python SDKs, so the image is
+# small and the container cold-starts quickly. OCR/enrich runs on the heavy backend (AI worker).
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements-upload.txt .
+RUN pip install --no-cache-dir -r requirements-upload.txt
+COPY . .
+# SQLite (DATABASE_TYPE=sqlite, default) writes to ./data/app.db relative to WORKDIR=/app.
+RUN mkdir -p /app/data
+ENV PORT=8080
+EXPOSE 8080
+CMD ["sh", "-c", "uvicorn app.upload_main:app --host 0.0.0.0 --port ${PORT}"]
