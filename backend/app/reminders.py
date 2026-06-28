@@ -25,7 +25,8 @@ URGENCY_ORDER = ["overdue", "today", "soon", "upcoming"]
 _URGENCY_INDEX = {u: i for i, u in enumerate(URGENCY_ORDER)}
 
 # 完了とみなし締切リマインドから除外する status
-DONE_STATUS = "対応済み"
+# SOT-1344: 表記を「対応済」に変更。旧表記「対応済み」で保存済みの既存データも後方互換で完了扱い。
+DONE_STATUSES = {"対応済", "対応済み"}
 
 # 優先度の並び（高いものを上位に）
 _PRIORITY_ORDER = {"高": 0, "普通": 1, "低": 2}
@@ -118,7 +119,7 @@ def build_reminders(infos: List[Any], *, today: datetime.date,
         # --- 締切 (deadline) / 提出書類 (submission) ---
         # 提出書類(先回りエージェント生成)は due_date を持ち、専用の submission カテゴリで通知する。
         due_date = getattr(info, "due_date", None)
-        if isinstance(due_date, datetime.date) and status != DONE_STATUS:
+        if isinstance(due_date, datetime.date) and status not in DONE_STATUSES:
             days = (due_date - today).days
             urgency = _classify(days, horizon_days)
             if urgency:

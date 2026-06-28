@@ -5,7 +5,8 @@ import type { HybridSearchResponse } from '../types';
 import { useI18n } from '../i18n/useI18n';
 
 const INFO_TYPES = ['すべて', '資料', '掲示', '行事', '持ち物', '提出物', 'お知らせ', '給食', '休園変更'];
-const STATUS_TYPES = ['すべて', '未対応', '対応済み', '確認済み'];
+// SOT-1344: ステータス集合・順序・表記を統一（すべて / 未確認 / 確認済 / 未対応 / 対応済）。
+const STATUS_TYPES = ['すべて', '未確認', '確認済', '未対応', '対応済'];
 const PRIORITY_TYPES = ['すべて', '高', '普通', '低'];
 
 interface SearchParams {

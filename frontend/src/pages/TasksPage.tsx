@@ -22,15 +22,15 @@ const TasksPage: React.FC = () => {
   });
 
   // SOT-1314: ステータスで表示内容を絞り込めるようにする。
-  // 'all' は全件、それ以外は実在ステータス値（未対応/対応済み/確認済み）で絞る。
-  // （Issue 本文の「未確認」はアプリに存在しないステータスのため、実在3種+すべてを採用。）
-  // SOT-1317: 並び順は すべて → 確認済み → 未対応 → 対応済み。
-  type StatusFilter = 'all' | '未対応' | '対応済み' | '確認済み';
+  // SOT-1344: ステータス集合・順序・表記を統一（すべて → 未確認 → 確認済 → 未対応 → 対応済）。
+  // 'all' は全件、それ以外は実在ステータス値で絞る。
+  type StatusFilter = 'all' | '未確認' | '確認済' | '未対応' | '対応済';
   const STATUS_FILTERS: { key: StatusFilter; labelKey: string }[] = [
     { key: 'all', labelKey: 'tasks.showAll' },
-    { key: '確認済み', labelKey: 'tasks.showConfirmed' },
+    { key: '未確認', labelKey: 'tasks.showUnconfirmed' },
+    { key: '確認済', labelKey: 'tasks.showConfirmed' },
     { key: '未対応', labelKey: 'tasks.showPending' },
-    { key: '対応済み', labelKey: 'tasks.showDone' },
+    { key: '対応済', labelKey: 'tasks.showDone' },
   ];
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
@@ -61,7 +61,7 @@ const TasksPage: React.FC = () => {
           <span aria-hidden className="text-lg">📅</span>
           <span>{t('tasks.listTitle')}</span>
         </div>
-        {/* ステータス絞り込み（すべて / 確認済み / 未対応 / 対応済み） */}
+        {/* ステータス絞り込み（すべて / 未確認 / 確認済 / 未対応 / 対応済） */}
         <div className="flex flex-wrap gap-2 px-4 pt-3" role="group" aria-label={t('tasks.listTitle')}>
           {STATUS_FILTERS.map(({ key, labelKey }) => {
             const active = statusFilter === key;

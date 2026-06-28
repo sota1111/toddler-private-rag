@@ -4,7 +4,8 @@ import { getInfoList, getAttachmentFileUrl, deleteInfo } from '../api';
 import { useI18n } from '../i18n/useI18n';
 
 const INFO_TYPES = ["すべて", "資料", "掲示", "行事", "持ち物", "提出物", "お知らせ", "給食", "休園変更"];
-const STATUS_TYPES = ["すべて", "未対応", "対応済み", "確認済み"];
+// SOT-1344: ステータス集合・順序・表記を統一（すべて / 未確認 / 確認済 / 未対応 / 対応済）。
+const STATUS_TYPES = ["すべて", "未確認", "確認済", "未対応", "対応済"];
 
 const InfoListPage: React.FC = () => {
   const { t } = useI18n();
@@ -71,8 +72,12 @@ const InfoListPage: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case '未確認': return 'bg-orange-100 text-orange-800';
       case '未対応': return 'bg-yellow-100 text-yellow-800';
+      // SOT-1344: 新表記。旧表記（対応済み/確認済み）も既存データ表示用に同色で扱う。
+      case '対応済':
       case '対応済み': return 'bg-green-100 text-green-800';
+      case '確認済':
       case '確認済み': return 'bg-brand-soft text-brand-strong';
       default: return 'bg-surface-muted text-foreground';
     }

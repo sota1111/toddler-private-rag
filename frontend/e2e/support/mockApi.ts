@@ -47,7 +47,7 @@ export function defaultRecords(): MockRecord[] {
       title: '4月の給食メニュー',
       info_type: '給食',
       content: '今月の給食は和食中心です。アレルギーのある方は事前にご連絡ください。',
-      status: '確認済み',
+      status: '確認済',
       priority: '普通',
       items: 'おはし',
       memo: '毎月更新',
