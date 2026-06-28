@@ -153,8 +153,8 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(eventLink).toBeVisible()
     await expect(page.getByText('2026-10-15')).toBeVisible()
 
-    // SOT-1344: ステータス絞り込み。確認済では未対応の予定が消え、未対応で再表示される。
-    await page.getByRole('button', { name: '確認済', exact: true }).click()
+    // SOT-1355: ステータス絞り込み。対応済では未対応の予定が消え、未対応で再表示される。
+    await page.getByRole('button', { name: '対応済', exact: true }).click()
     await expect(page.getByRole('link', { name: /運動会のお知らせ/ })).toHaveCount(0)
     await page.getByRole('button', { name: '未対応', exact: true }).click()
     await expect(page.getByRole('link', { name: /運動会のお知らせ/ })).toBeVisible()

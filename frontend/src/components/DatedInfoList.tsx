@@ -9,14 +9,13 @@ import { getStatusDateChipClass } from '../pages/infoFormOptions';
 // タスク一覧を正（canonical）とし、行マークアップは TasksPage のものを採用する。
 // 質問の一覧（Ask 出典リスト）は性質が異なるため対象外（このコンポーネントは使わない）。
 
-export type DatedInfoStatusFilter = 'all' | '未確認' | '確認済' | '未対応' | '対応済';
+export type DatedInfoStatusFilter = 'all' | '未確認' | '未対応' | '対応済';
 
-// ステータス集合・順序・表記（すべて → 未確認 → 確認済 → 未対応 → 対応済）。
+// SOT-1355: ステータスを3つに統一（すべて → 未確認 → 未対応 → 対応済）。`確認済` は削除。
 // ラベルキーは namespace（'tasks' | 'schedule'）と組み合わせて解決する。
 const STATUS_FILTERS: { key: DatedInfoStatusFilter; suffix: string }[] = [
   { key: 'all', suffix: 'showAll' },
   { key: '未確認', suffix: 'showUnconfirmed' },
-  { key: '確認済', suffix: 'showConfirmed' },
   { key: '未対応', suffix: 'showPending' },
   { key: '対応済', suffix: 'showDone' },
 ];
@@ -55,7 +54,7 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({ items, isLoading, namespa
 
   return (
     <>
-      {/* ステータス絞り込み（すべて / 未確認 / 確認済 / 未対応 / 対応済） */}
+      {/* ステータス絞り込み（すべて / 未確認 / 未対応 / 対応済）。未選択時は全ピル共通デザイン。 */}
       <div className="flex flex-wrap gap-1 px-4 pt-3" role="group" aria-label={t(`${namespace}.listTitle`)}>
         {STATUS_FILTERS.map(({ key, suffix }) => {
           const active = statusFilter === key;

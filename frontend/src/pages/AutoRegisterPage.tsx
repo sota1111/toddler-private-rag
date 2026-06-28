@@ -134,7 +134,7 @@ const AutoRegisterPage: React.FC = () => {
         event_date: '',
         due_date: '',
         items: '',
-        status: '未対応',
+        status: '未確認',
         priority: '普通',
         tags: '',
         memo: '',

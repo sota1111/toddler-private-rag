@@ -17,7 +17,7 @@ def seed_data(db: Session):
             "info_type": "資料",
             "content": "新年度が始まりました。今月の目標は「新しい環境に慣れる」です。",
             "date": today,
-            "status": "確認済",
+            "status": "対応済",
             "priority": "普通",
             "tags": "園だより,4月"
         },
@@ -54,7 +54,7 @@ def seed_data(db: Session):
             "info_type": "給食",
             "content": "今週は春の食材をふんだんに使ったメニューです。筍ごはん、鰆の西京焼きなど。",
             "date": today,
-            "status": "確認済",
+            "status": "対応済",
             "priority": "低",
             "tags": "給食,献立"
         },
@@ -63,7 +63,7 @@ def seed_data(db: Session):
             "info_type": "行事",
             "content": "明日、不審者対応訓練を実施します。保護者の方は14時以降にお迎えをお願いします。",
             "event_date": tomorrow,
-            "status": "確認済",
+            "status": "対応済",
             "priority": "高",
             "tags": "行事,訓練"
         },
@@ -81,7 +81,7 @@ def seed_data(db: Session):
             "info_type": "掲示",
             "content": "玄関に青い帽子の忘れ物がありました。心当たりのある方は職員まで。",
             "date": today,
-            "status": "確認済",
+            "status": "対応済",
             "priority": "低",
             "tags": "掲示,忘れ物"
         },
@@ -99,7 +99,7 @@ def seed_data(db: Session):
             "info_type": "資料",
             "content": "来年度の入園説明会で使用する資料のデジタル版です。",
             "date": today - timedelta(days=5),
-            "status": "確認済",
+            "status": "対応済",
             "priority": "普通",
             "tags": "資料,入園"
         }

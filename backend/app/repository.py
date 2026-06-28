@@ -382,7 +382,7 @@ def _info_doc_to_obj(doc_id: str, data: dict, attachments: List[FirestoreAttachm
         event_date=_to_date(data.get("event_date")),
         due_date=_to_date(data.get("due_date")),
         items=data.get("items"),
-        status=data.get("status", "未対応"),
+        status=data.get("status", "未確認"),
         priority=data.get("priority", "普通"),
         tags=_tags_array_to_str(data.get("tags")),
         memo=data.get("memo"),

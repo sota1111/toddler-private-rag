@@ -39,7 +39,7 @@ class NurseryInfoBase(BaseModel):
     event_date: Optional[datetime.date] = None
     due_date: Optional[datetime.date] = None
     items: Optional[str] = None
-    status: Optional[str] = "未対応"
+    status: Optional[str] = "未確認"
     # 仮登録(draft) / 本登録(registered)。省略時は本登録。
     registration_state: Optional[str] = "registered"
     priority: Optional[str] = "普通"
