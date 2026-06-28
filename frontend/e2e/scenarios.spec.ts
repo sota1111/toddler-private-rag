@@ -145,8 +145,8 @@ test.describe('toddler-private-rag シナリオ', () => {
     await page.locator('nav a[href="/tasks"]').first().click()
     await expect(page).toHaveURL(/\/tasks/)
 
-    // タスク一覧見出しが表示される
-    await expect(page.getByRole('heading', { name: 'やることリスト' })).toBeVisible()
+    // やることリストのリスト見出しが表示される（ページ見出し h1 は SOT-1363 で削除）
+    await expect(page.getByText('やることリスト')).toBeVisible()
 
     // 日付つき予定（運動会のお知らせ / 2026-10-15）が一覧に表示される
     const eventLink = page.getByRole('link', { name: /運動会のお知らせ/ })
