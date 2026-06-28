@@ -1,0 +1,50 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+#
+# Values with a default in variables.tf can be omitted; they are listed here so
+# you can confirm/override them. Values WITHOUT a default are required.
+
+# --- Public literals (defaults exist; override only if they differ) ---
+project_id          = "gen-lang-client-0243034020"
+region              = "asia-northeast1"
+gcs_bucket_name     = "gen-lang-client-0243034020-toddler-private-rag"
+gcs_bucket_location = "ASIA-NORTHEAST1"
+firestore_location  = "asia-northeast1"
+gemini_model        = "gemini-3.5-flash"
+gemini_location     = "global"
+
+# Resource names — these are GitHub Actions secrets today. CONFIRM the real
+# values against GCP (gcloud run services list / gcloud functions list /
+# gcloud artifacts repositories list) before importing; the defaults are guesses.
+artifact_registry_repository = "toddler-private-rag"
+backend_service_name         = "toddler-private-rag-backend"
+frontend_service_name        = "toddler-private-rag-frontend"
+upload_function_name         = "toddler-private-rag-upload"
+
+# --- Required (no default) — supply real values ---
+
+# gcloud projects describe gen-lang-client-0243034020 --format='value(projectNumber)'
+project_number = "000000000000"
+
+# owner/name of this repo, used to scope WIF.
+github_repository = "sota1111/toddler-private-rag"
+
+# Short IDs of the existing Workload Identity pool/provider (GitHub secret
+# GCP_WORKLOAD_IDENTITY_PROVIDER encodes these in its path:
+# projects/<num>/locations/global/workloadIdentityPools/<POOL>/providers/<PROVIDER>)
+wif_pool_id     = "github-pool"
+wif_provider_id = "github-provider"
+
+# Account id (before @) of the deploy SA (GitHub secret GCP_SERVICE_ACCOUNT).
+deploy_service_account_id = "github-deployer"
+
+# --- Optional ---
+# Leave empty to keep current behavior (services run as the default compute SA).
+# Set to a dedicated runtime SA email only after enabling the runtime SA block in iam.tf.
+cloud_run_service_account_email = ""
+
+# Container images / function source are managed by CI and ignored by Terraform;
+# normally leave these unset.
+# backend_image          = ""
+# frontend_image         = ""
+# function_source_bucket = ""
+# function_source_object = "toddler-private-rag-upload/source.zip"
