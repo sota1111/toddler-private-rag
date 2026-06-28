@@ -107,6 +107,22 @@ class AttachmentRepository(abc.ABC):
         pass
 
 
+class ChildRepository(abc.ABC):
+    """SOT-1368: 子供(option A) の登録・一覧・削除。"""
+
+    @abc.abstractmethod
+    def list(self) -> List[Any]:
+        pass
+
+    @abc.abstractmethod
+    def create(self, data: schemas.ChildCreate) -> Any:
+        pass
+
+    @abc.abstractmethod
+    def delete(self, child_id: Union[int, str]) -> bool:
+        pass
+
+
 # --- SQLite Implementation ---
 
 def _sqlite_registered_only():
@@ -333,6 +349,29 @@ class SqliteAttachmentRepository(AttachmentRepository):
         return True
 
 
+class SqliteChildRepository(ChildRepository):
+    def __init__(self, db: Session):
+        self.db = db
+
+    def list(self) -> List[models.Child]:
+        return self.db.query(models.Child).order_by(models.Child.created_at.asc()).all()
+
+    def create(self, data: schemas.ChildCreate) -> models.Child:
+        db_child = models.Child(name=data.name)
+        self.db.add(db_child)
+        self.db.commit()
+        self.db.refresh(db_child)
+        return db_child
+
+    def delete(self, child_id: Union[int, str]) -> bool:
+        db_child = self.db.query(models.Child).filter(models.Child.id == int(child_id)).first()
+        if not db_child:
+            return False
+        self.db.delete(db_child)
+        self.db.commit()
+        return True
+
+
 # --- Firestore Implementation ---
 
 @dataclass
@@ -367,6 +406,7 @@ class FirestoreNurseryInfo:
     created_at: datetime.datetime
     updated_at: datetime.datetime
     registration_state: str = "registered"
+    child_id: Optional[str] = None
     attachments: List[FirestoreAttachment] = field(default_factory=list)
 
 # Firestore helper functions
@@ -409,6 +449,7 @@ def _info_doc_to_obj(doc_id: str, data: dict, attachments: List[FirestoreAttachm
         tags=_tags_array_to_str(data.get("tags")),
         memo=data.get("memo"),
         registration_state=data.get("registration_state") or "registered",
+        child_id=data.get("child_id"),
         created_at=data.get("created_at") or datetime.datetime.now(),
         updated_at=data.get("updated_at") or datetime.datetime.now(),
         attachments=attachments or []
@@ -794,6 +835,52 @@ class FirestoreAttachmentRepository(AttachmentRepository):
         return True
 
 
+@dataclass
+class FirestoreChild:
+    id: str
+    name: str
+    created_at: datetime.datetime
+
+
+class FirestoreChildRepository(ChildRepository):
+    def __init__(self):
+        self.project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+        self.database_id = os.getenv("FIRESTORE_DATABASE", "(default)")
+        self._db = None
+
+    @property
+    def db(self):
+        if self._db is None:
+            from google.cloud import firestore
+            self._db = firestore.Client(project=self.project_id, database=self.database_id)
+        return self._db
+
+    def list(self) -> List[FirestoreChild]:
+        children = [
+            FirestoreChild(
+                id=doc.id,
+                name=doc.to_dict().get("name", ""),
+                created_at=doc.to_dict().get("created_at") or datetime.datetime.now(),
+            )
+            for doc in self.db.collection("children").stream()
+        ]
+        children.sort(key=lambda c: c.created_at)
+        return children
+
+    def create(self, data: schemas.ChildCreate) -> FirestoreChild:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        doc_data = {"name": data.name, "created_at": now}
+        _, doc_ref = self.db.collection("children").add(doc_data)
+        return FirestoreChild(id=doc_ref.id, name=data.name, created_at=now)
+
+    def delete(self, child_id: Union[int, str]) -> bool:
+        doc_ref = self.db.collection("children").document(str(child_id))
+        if not doc_ref.get().exists:
+            return False
+        doc_ref.delete()
+        return True
+
+
 # --- Factory functions ---
 
 def get_database_type() -> str:
@@ -808,6 +895,11 @@ def get_attachment_repository(db: Session = Depends(database.get_db)) -> Attachm
     if get_database_type() == "firestore":
         return FirestoreAttachmentRepository()
     return SqliteAttachmentRepository(db)
+
+def get_child_repository(db: Session = Depends(database.get_db)) -> ChildRepository:
+    if get_database_type() == "firestore":
+        return FirestoreChildRepository()
+    return SqliteChildRepository(db)
 
 def get_attachment_repo_standalone() -> Any:
     """Helper for background tasks where Depends() cannot be used."""

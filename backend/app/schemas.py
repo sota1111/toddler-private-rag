@@ -31,6 +31,23 @@ class AttachmentTranscriptionResponse(BaseModel):
     ocr_status: str = "pending"
     language: str = "ja"
 
+# --- 子供 (SOT-1368: option A, 1家族で複数の子供) ---
+
+class ChildBase(BaseModel):
+    name: str
+
+
+class ChildCreate(ChildBase):
+    pass
+
+
+class ChildResponse(ChildBase):
+    id: Union[int, str]
+    created_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class NurseryInfoBase(BaseModel):
     title: str
     info_type: str
@@ -39,6 +56,8 @@ class NurseryInfoBase(BaseModel):
     event_date: Optional[datetime.date] = None
     due_date: Optional[datetime.date] = None
     items: Optional[str] = None
+    # SOT-1368: 紐づく子供のID(option A)。未指定は紐付けなし(後方互換)。
+    child_id: Optional[str] = None
     status: Optional[str] = "未確認"
     # 仮登録(draft) / 本登録(registered)。省略時は本登録。
     registration_state: Optional[str] = "registered"
@@ -61,6 +80,7 @@ class NurseryInfoUpdate(BaseModel):
     event_date: Optional[datetime.date] = None
     due_date: Optional[datetime.date] = None
     items: Optional[str] = None
+    child_id: Optional[str] = None
     status: Optional[str] = None
     registration_state: Optional[str] = None
     priority: Optional[str] = None
