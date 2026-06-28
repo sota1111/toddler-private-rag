@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createInfo, uploadAttachment, getInfoById } from '../api';
-import type { NurseryInfo, NurseryInfoCreate } from '../types';
+import { createInfo, uploadAttachment, getInfoById, getChildren } from '../api';
+import type { Child, NurseryInfo, NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import { compressImageFile } from '../utils/imageCompression';
 import RegisterMenu from '../components/RegisterMenu';
@@ -36,6 +36,17 @@ const AutoRegisterPage: React.FC = () => {
   // SOT-1288: アップ前に「この写真で良いか」を確認する。確定するまでサーバ保存しない。
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // SOT-1368: 紐づけるお子さま。確認フェーズで選択し、初期 createInfo に付与する。
+  const [children, setChildren] = useState<Child[]>([]);
+  const [childId, setChildId] = useState('');
+
+  useEffect(() => {
+    getChildren()
+      .then(setChildren)
+      .catch(() => {
+        /* お子さま一覧の取得失敗は致命的でない。紐付けなしで続行する。 */
+      });
+  }, []);
 
   // プレビュー用の objectURL を破棄する（不要になった時点で必ず呼ぶ）
   const clearPreview = () => {
@@ -138,6 +149,8 @@ const AutoRegisterPage: React.FC = () => {
         priority: '普通',
         tags: '',
         memo: '',
+        // SOT-1368: 選択したお子さまに紐付ける（未選択は紐付けなし）。
+        child_id: childId || null,
         // SOT-1272/SOT-1293: enrich が完了するまでは仮登録一覧に出さない。
         // まず非表示の処理中状態(processing)で保存する。サーバ側の OCR background task が
         // enrich→draft 昇格まで行うため、ここで write を続ける必要はない。
@@ -212,6 +225,21 @@ const AutoRegisterPage: React.FC = () => {
                 className="max-h-72 w-auto rounded-md border border-border shadow-sm"
               />
             </div>
+            {children.length > 0 && (
+              <label className="block text-sm max-w-xs mx-auto w-full">
+                <span className="mb-1 block font-medium text-foreground text-center">{t('child.fieldLabel')}</span>
+                <select
+                  value={childId}
+                  onChange={(e) => setChildId(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-foreground"
+                >
+                  <option value="">{t('child.none')}</option>
+                  {children.map((c) => (
+                    <option key={c.id} value={String(c.id)}>{c.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             <div className="flex flex-col sm:flex-row gap-3 justify-center pt-1">
               <button
                 type="button"

@@ -3,7 +3,8 @@ import { useI18n } from '../i18n/useI18n';
 import { useSettings } from '../settings/useSettings';
 import { TIMEZONE_OPTIONS } from '../settings/settingsContextValue';
 import type { Lang } from '../i18n/i18nContextValue';
-import { deleteAllData } from '../api';
+import type { Child } from '../types';
+import { deleteAllData, getChildren, createChild, deleteChild } from '../api';
 
 // SOT-1315: 設定メニュー。言語・標準時間(タイムゾーン)・子どもの名前を設定できる。
 // 言語は既存 i18n、タイムゾーン/子どもの名前は SettingsContext に永続化される。
@@ -15,6 +16,46 @@ const SettingsPage: React.FC = () => {
   const [confirming, setConfirming] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const [result, setResult] = React.useState<{ ok: boolean; message: string } | null>(null);
+
+  // SOT-1368: お子さまの登録・管理。
+  const [children, setChildren] = React.useState<Child[]>([]);
+  const [newChildName, setNewChildName] = React.useState('');
+  const [childBusy, setChildBusy] = React.useState(false);
+  const [childError, setChildError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    getChildren()
+      .then(setChildren)
+      .catch(() => {
+        /* 一覧取得失敗は致命的でない。空のまま表示する。 */
+      });
+  }, []);
+
+  const handleAddChild = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = newChildName.trim();
+    if (!name || childBusy) return;
+    setChildBusy(true);
+    setChildError(null);
+    try {
+      const created = await createChild(name);
+      setChildren((prev) => [...prev, created]);
+      setNewChildName('');
+    } catch {
+      setChildError(t('settings.childrenAddError'));
+    } finally {
+      setChildBusy(false);
+    }
+  };
+
+  const handleDeleteChild = async (id: number | string) => {
+    try {
+      await deleteChild(id);
+      setChildren((prev) => prev.filter((c) => c.id !== id));
+    } catch {
+      setChildError(t('settings.childrenAddError'));
+    }
+  };
 
   const handleDeleteAll = async () => {
     setDeleting(true);
@@ -85,6 +126,53 @@ const SettingsPage: React.FC = () => {
             className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40"
           />
         </div>
+      </div>
+
+      {/* お子さまの登録・管理 (SOT-1368) */}
+      <div className="mt-6 bg-surface rounded-2xl shadow-card p-4 sm:p-6">
+        <h2 className="text-base font-bold text-foreground mb-1">{t('settings.childrenTitle')}</h2>
+        <p className="text-sm text-muted-foreground mb-4">{t('settings.childrenDescription')}</p>
+
+        {children.length === 0 ? (
+          <p className="text-sm text-muted-foreground mb-4">{t('settings.childrenEmpty')}</p>
+        ) : (
+          <ul className="mb-4 space-y-2">
+            {children.map((c) => (
+              <li
+                key={c.id}
+                className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2"
+              >
+                <span className="text-sm text-foreground">{c.name}</span>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteChild(c.id)}
+                  className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                >
+                  {t('settings.childrenDelete')}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <form onSubmit={handleAddChild} className="flex gap-2">
+          <input
+            type="text"
+            aria-label={t('settings.childrenTitle')}
+            value={newChildName}
+            onChange={(e) => setNewChildName(e.target.value)}
+            placeholder={t('settings.childrenPlaceholder')}
+            className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40"
+          />
+          <button
+            type="submit"
+            disabled={childBusy || newChildName.trim().length === 0}
+            className="shrink-0 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-strong disabled:opacity-50"
+          >
+            {t('settings.childrenAdd')}
+          </button>
+        </form>
+        {childError && <p className="mt-2 text-sm text-red-600">{childError}</p>}
       </div>
 
       {/* 全データ削除（危険操作） SOT-1356 */}

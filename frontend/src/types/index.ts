@@ -14,6 +14,13 @@ export interface AttachmentTranscription {
   language: string
 }
 
+// SOT-1368: 1家族で複数の子供 (option A)
+export interface Child {
+  id: number | string
+  name: string
+  created_at: string
+}
+
 export interface NurseryInfo {
   id: number | string
   title: string
@@ -23,6 +30,7 @@ export interface NurseryInfo {
   event_date?: string
   due_date?: string
   items?: string
+  child_id?: string | null
   status: string
   priority: string
   tags?: string
@@ -41,6 +49,7 @@ export interface NurseryInfoCreate {
   event_date?: string
   due_date?: string
   items?: string
+  child_id?: string | null
   status?: string
   priority?: string
   tags?: string

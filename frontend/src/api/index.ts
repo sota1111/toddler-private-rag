@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type {
+  Child,
   NurseryInfo,
   NurseryInfoCreate,
   Attachment,
@@ -30,6 +31,21 @@ export const getInfoById = async (id: number | string): Promise<NurseryInfo> => 
 export const createInfo = async (data: NurseryInfoCreate): Promise<NurseryInfo> => {
   const response = await api.post('/info/', data);
   return response.data;
+};
+
+// 子供 (SOT-1368: option A, 1家族で複数の子供)
+export const getChildren = async (): Promise<Child[]> => {
+  const response = await api.get('/children');
+  return response.data;
+};
+
+export const createChild = async (name: string): Promise<Child> => {
+  const response = await api.post('/children', { name });
+  return response.data;
+};
+
+export const deleteChild = async (id: number | string): Promise<void> => {
+  await api.delete(`/children/${id}`);
 };
 
 // 既存の仮登録(draft)を部分更新する (SOT-1175: 写真アップ後の best-effort 補完用)

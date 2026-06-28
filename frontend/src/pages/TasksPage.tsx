@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getInfoList, createInfo } from '../api';
+import { getInfoList, createInfo, getChildren } from '../api';
 import type { NurseryInfo } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import DatedInfoList from '../components/DatedInfoList';
@@ -20,6 +20,11 @@ const TasksPage: React.FC = () => {
     queryKey: ['info', 'all'],
     queryFn: () => getInfoList({ include_attachments: false }),
   });
+  // SOT-1368: 紐づけるお子さまの選択肢。
+  const { data: children } = useQuery({
+    queryKey: ['children'],
+    queryFn: getChildren,
+  });
 
   // 種別/ステータスの選択肢ラベル（保存値は日本語のまま、表示は設定言語に翻訳）。
   const optLabel = (group: string, value: string) => {
@@ -34,6 +39,7 @@ const TasksPage: React.FC = () => {
   const [eventDate, setEventDate] = useState('');
   const [infoType, setInfoType] = useState(INFO_TYPES[0]);
   const [status, setStatus] = useState(STATUS_TYPES[0]);
+  const [childId, setChildId] = useState('');
   const [content, setContent] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -47,6 +53,7 @@ const TasksPage: React.FC = () => {
     setEventDate('');
     setInfoType(INFO_TYPES[0]);
     setStatus(STATUS_TYPES[0]);
+    setChildId('');
     setContent('');
     setSubmitError(null);
   };
@@ -72,6 +79,7 @@ const TasksPage: React.FC = () => {
         event_date: eventDate,
         status,
         priority: '普通',
+        child_id: childId || null,
       });
       await queryClient.invalidateQueries({ queryKey: ['info', 'all'] });
       closeForm();
@@ -140,6 +148,22 @@ const TasksPage: React.FC = () => {
               </select>
             </label>
           </div>
+
+          {children && children.length > 0 && (
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium text-foreground">{t('child.fieldLabel')}</span>
+              <select
+                value={childId}
+                onChange={(e) => setChildId(e.target.value)}
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-foreground"
+              >
+                <option value="">{t('child.none')}</option>
+                {children.map((c) => (
+                  <option key={c.id} value={String(c.id)}>{c.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <label className="block text-sm">
             <span className="mb-1 block font-medium text-foreground">{t('tasks.fieldContent')}</span>
