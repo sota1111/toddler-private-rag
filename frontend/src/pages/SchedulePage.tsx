@@ -1,13 +1,15 @@
 import React, { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getInfoList } from '../api';
 import type { NurseryInfo } from '../types';
 import { useI18n } from '../i18n/useI18n';
-import { getStatusDateChipClass } from './infoFormOptions';
+import DatedInfoList from '../components/DatedInfoList';
 
 // SOT-1306: 日付つきの予定（event_date あり）を月カレンダーで可視化し、
 // カレンダーの下に予定一覧を表示する。該当日はカレンダー上で強調表示する。
+// SOT-1342: カレンダー下の予定一覧（ステータス絞り込み + 行リスト）は、タスク一覧と共通の
+// 共有コンポーネント DatedInfoList に1箇所化（タスク一覧が正）。カレンダー・選択日フィルタ・
+// 見出しバー（ブランド配色）・絞り込み中インジケータは本ページ固有として維持する。
 
 const pad = (n: number): string => String(n).padStart(2, '0');
 
@@ -21,12 +23,6 @@ const WEEKDAY_LABELS: Record<'ja' | 'en', string[]> = {
 
 const SchedulePage: React.FC = () => {
   const { t, lang } = useI18n();
-  // 種別ラベル（保存値は日本語のまま、表示は設定言語に合わせて翻訳）
-  const optLabel = (group: string, value: string) => {
-    const key = `options.${group}.${value}`;
-    const label = t(key);
-    return label === key ? value : label;
-  };
   const { data, isLoading } = useQuery({
     queryKey: ['info', 'all'],
     queryFn: () => getInfoList({ include_attachments: false }),
@@ -36,18 +32,6 @@ const SchedulePage: React.FC = () => {
   const [viewYear, setViewYear] = useState<number>(today.getFullYear());
   const [viewMonth, setViewMonth] = useState<number>(today.getMonth()); // 0-11
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  // SOT-1344: 一覧のステータス絞り込み。集合・順序・表記を統一
-  // （すべて → 未確認 → 確認済 → 未対応 → 対応済。タスク一覧ページ TasksPage と同一）。
-  // 'all' は全件、それ以外は実在ステータスで絞る。
-  type StatusFilter = 'all' | '未確認' | '確認済' | '未対応' | '対応済';
-  const STATUS_FILTERS: { key: StatusFilter; labelKey: string }[] = [
-    { key: 'all', labelKey: 'schedule.showAll' },
-    { key: '未確認', labelKey: 'schedule.showUnconfirmed' },
-    { key: '確認済', labelKey: 'schedule.showConfirmed' },
-    { key: '未対応', labelKey: 'schedule.showPending' },
-    { key: '対応済', labelKey: 'schedule.showDone' },
-  ];
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   // 日付つきの予定のみを対象にする。
   const events = useMemo<NurseryInfo[]>(
@@ -87,17 +71,12 @@ const SchedulePage: React.FC = () => {
     return rows;
   }, [viewYear, viewMonth]);
 
-  // 一覧（既定: 日付つき予定をすべて日付昇順。カレンダーで日付選択時はその日のみ。
-  // ステータスフィルタが 'all' 以外のときは該当ステータスのみ。selectedDate とは AND）。
-  const listItems = useMemo<NurseryInfo[]>(() => {
-    let filtered = selectedDate
-      ? events.filter((ev) => ev.event_date === selectedDate)
-      : events;
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter((ev) => ev.status === statusFilter);
-    }
-    return [...filtered].sort((a, b) => (a.event_date as string).localeCompare(b.event_date as string));
-  }, [events, selectedDate, statusFilter]);
+  // 一覧に渡す項目（カレンダーで日付選択時はその日のみ。ステータス絞り込みとソートは
+  // DatedInfoList が担当）。
+  const listItems = useMemo<NurseryInfo[]>(
+    () => (selectedDate ? events.filter((ev) => ev.event_date === selectedDate) : events),
+    [events, selectedDate],
+  );
 
   const todayStr = fmtDate(today);
 
@@ -228,61 +207,19 @@ const SchedulePage: React.FC = () => {
             </button>
           )}
         </div>
-        {/* SOT-1344: ステータス絞り込み（すべて / 未確認 / 確認済 / 未対応 / 対応済） */}
-        <div className="flex flex-wrap gap-2 px-4 pt-3" role="group" aria-label={t('schedule.listTitle')}>
-          {STATUS_FILTERS.map(({ key, labelKey }) => {
-            const active = statusFilter === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setStatusFilter(key)}
-                aria-pressed={active}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-brand/40 ${
-                  active
-                    ? 'bg-brand text-white border-brand'
-                    : 'bg-surface text-foreground border-border hover:bg-surface-muted'
-                }`}
-              >
-                {t(labelKey)}
-              </button>
-            );
-          })}
-        </div>
-        <div className="p-4">
-          {selectedDate && (
-            <p className="text-xs text-muted-foreground mb-2">
-              {t('schedule.filteredBy')}
-              {selectedDate}
-            </p>
-          )}
-          {isLoading ? (
-            <p className="text-muted-foreground">{t('common.loading')}</p>
-          ) : listItems.length === 0 ? (
-            <p className="text-muted-foreground text-sm">{t('common.noData')}</p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {listItems.map((item) => (
-                <li key={item.id}>
-                  <Link
-                    to={`/data/${item.id}`}
-                    className="block py-2.5 -mx-2 px-3 rounded-xl border-l-4 border-transparent transition-colors hover:bg-surface-muted hover:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
-                  >
-                    <div className="flex justify-between items-center gap-3">
-                      <span className="font-medium text-foreground truncate">{item.title}</span>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${getStatusDateChipClass(item.status)}`}>
-                          {item.event_date}
-                        </span>
-                        <span className="text-xs text-muted-foreground">{optLabel('infoType', item.info_type)}</span>
-                      </div>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <DatedInfoList
+          items={listItems}
+          isLoading={isLoading}
+          namespace="schedule"
+          beforeList={
+            selectedDate ? (
+              <p className="text-xs text-muted-foreground mb-2">
+                {t('schedule.filteredBy')}
+                {selectedDate}
+              </p>
+            ) : null
+          }
+        />
       </div>
     </div>
   );
