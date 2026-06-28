@@ -35,7 +35,7 @@ wif_pool_id     = "github-pool"
 wif_provider_id = "github-provider"
 
 # Account id (before @) of the deploy SA (GitHub secret GCP_SERVICE_ACCOUNT).
-deploy_service_account_id = "github-deployer"
+deploy_service_account_id = "github-actions-deployer"
 
 # --- Optional ---
 # Dedicated least-privilege runtime service accounts (SOT-1366 item A).

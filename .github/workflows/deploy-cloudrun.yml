@@ -149,6 +149,7 @@ jobs:
             --project ${{ secrets.GCP_PROJECT_ID }} \
             --platform managed \
             --allow-unauthenticated \
+            --clear-secrets \
             $SA_FLAG \
             --set-env-vars "BACKEND_URL=$BACKEND_URL,UPLOAD_URL=$UPLOAD_URL" \
             --memory 256Mi \
