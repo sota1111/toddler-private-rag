@@ -127,30 +127,35 @@ const SchedulePage: React.FC = () => {
   return (
     <div className="w-full lg:max-w-4xl lg:mx-auto">
       {/* カレンダー */}
-      <div className="bg-surface rounded-2xl shadow-card overflow-hidden mb-6">
-        <div className="flex items-center justify-between px-4 py-3 bg-brand/10 text-foreground font-bold">
+      <div className="bg-surface rounded-2xl shadow-card hover:shadow-card-hover transition-shadow border border-border overflow-hidden mb-6">
+        <div className="flex items-center justify-between px-4 py-3.5 bg-gradient-to-r from-brand to-brand-strong text-white font-bold">
           <button
             type="button"
             onClick={goPrevMonth}
             aria-label={t('schedule.prevMonth')}
-            className="px-3 py-1 rounded-lg hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand/40"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-lg leading-none hover:bg-white/30 transition-colors focus:outline-none focus:ring-2 focus:ring-white/60"
           >
             ‹
           </button>
-          <span>{monthTitle}</span>
+          <span className="text-lg tracking-wide">{monthTitle}</span>
           <button
             type="button"
             onClick={goNextMonth}
             aria-label={t('schedule.nextMonth')}
-            className="px-3 py-1 rounded-lg hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand/40"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-lg leading-none hover:bg-white/30 transition-colors focus:outline-none focus:ring-2 focus:ring-white/60"
           >
             ›
           </button>
         </div>
         <div className="p-3">
           <div className="grid grid-cols-7 gap-1 mb-1">
-            {WEEKDAY_LABELS[lang].map((w) => (
-              <div key={w} className="text-center text-xs font-semibold text-muted-foreground py-1">
+            {WEEKDAY_LABELS[lang].map((w, i) => (
+              <div
+                key={w}
+                className={`text-center text-xs font-bold py-1 ${
+                  i === 0 ? 'text-brand' : i === 6 ? 'text-accent' : 'text-muted-foreground'
+                }`}
+              >
                 {w}
               </div>
             ))}
@@ -165,18 +170,18 @@ const SchedulePage: React.FC = () => {
               const isSelected = dateStr === selectedDate;
 
               const base =
-                'relative aspect-square rounded-lg flex flex-col items-center justify-center text-sm transition-colors';
+                'relative aspect-square rounded-xl flex flex-col items-center justify-center text-sm transition-all';
               const tone = inMonth ? 'text-foreground' : 'text-muted-foreground/50';
               let cls = `${base} ${tone}`;
               if (isSelected) {
-                cls += ' bg-brand text-white font-bold';
+                cls += ' bg-gradient-to-br from-brand to-brand-strong text-white font-bold shadow-card-hover scale-[1.04]';
               } else if (hasEvent) {
-                cls += ' bg-brand/15 font-semibold hover:bg-brand/25 cursor-pointer';
+                cls += ' bg-brand-soft border border-accent-border font-semibold hover:bg-accent-bg hover:border-accent cursor-pointer';
               } else {
                 cls += ' hover:bg-surface-muted';
               }
               if (isToday && !isSelected) {
-                cls += ' ring-2 ring-brand/50';
+                cls += ' ring-2 ring-brand ring-offset-1 ring-offset-surface bg-brand-soft/60';
               }
 
               if (hasEvent) {
@@ -192,7 +197,7 @@ const SchedulePage: React.FC = () => {
                     <span>{d.getDate()}</span>
                     <span
                       aria-hidden
-                      className={`mt-0.5 h-1.5 w-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-brand'}`}
+                      className={`mt-0.5 h-1.5 w-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-accent'}`}
                     />
                   </button>
                 );
@@ -208,15 +213,15 @@ const SchedulePage: React.FC = () => {
       </div>
 
       {/* カレンダーの下の予定一覧 */}
-      <div className="bg-surface rounded-2xl shadow-card overflow-hidden mb-6">
-        <div className="flex items-center gap-2 px-4 py-3 bg-emerald-50 text-emerald-700 font-bold">
+      <div className="bg-surface rounded-2xl shadow-card border border-border overflow-hidden mb-6">
+        <div className="flex items-center gap-2 px-4 py-3 bg-accent-bg text-brand-strong font-bold border-b border-accent-border">
           <span aria-hidden className="text-lg">📅</span>
           <span>{t('schedule.listTitle')}</span>
           {selectedDate && (
             <button
               type="button"
               onClick={() => setSelectedDate(null)}
-              className="ml-auto text-xs font-normal text-emerald-700 underline hover:no-underline focus:outline-none focus:ring-2 focus:ring-brand/40 rounded"
+              className="ml-auto text-xs font-normal text-brand-strong underline hover:no-underline focus:outline-none focus:ring-2 focus:ring-brand/40 rounded"
             >
               {t('schedule.clearFilter')}
             </button>
@@ -260,12 +265,12 @@ const SchedulePage: React.FC = () => {
                 <li key={item.id}>
                   <Link
                     to={`/data/${item.id}`}
-                    className="block py-2 -mx-2 px-2 rounded-lg transition-colors hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand/40"
+                    className="block py-2.5 -mx-2 px-3 rounded-xl border-l-4 border-transparent transition-colors hover:bg-surface-muted hover:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
                   >
                     <div className="flex justify-between items-center gap-3">
                       <span className="font-medium text-foreground truncate">{item.title}</span>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full">
+                        <span className="text-xs bg-brand-soft text-brand-strong font-semibold px-2 py-1 rounded-full">
                           {item.event_date}
                         </span>
                         <span className="text-xs text-muted-foreground">{optLabel('infoType', item.info_type)}</span>
