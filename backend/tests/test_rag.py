@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.main import app
+from app import models
 from app.database import Base, get_db
 from app.routers.auth import get_current_user
 
@@ -106,6 +107,24 @@ def test_build_documents_ocr_chunks_carry_filename():
     assert content_chunks and all(d.filename is None for d in content_chunks)
 
 
+def test_build_documents_ocr_only_excludes_content():
+    # SOT-1357: ocr_only=True では写真の文字起こし(source="ocr")のみを対象とする
+    class FakeAtt:
+        ocr_text = "OCRから抽出した持ち物リスト"
+        original_filename = "おたより_2026-06.pdf"
+
+    class FakeInfo:
+        id = 1
+        title = "遠足のお知らせ"
+        content = "来週の遠足について"
+        attachments = [FakeAtt()]
+
+    docs = build_documents([FakeInfo()], ocr_only=True)
+    sources = {d.source for d in docs}
+    assert sources == {"ocr"}
+    assert docs and all(d.source == "ocr" for d in docs)
+
+
 # --- embeddings ---
 
 def test_fake_embedding_deterministic_and_dimension():
@@ -170,21 +189,55 @@ def _seed(title, info_type, content):
     return resp.json()["id"]
 
 
+def _seed_with_ocr(title, info_type, ocr_text, *, filename="おたより.png", content=""):
+    """info を作成し、その添付として ``ocr_text`` を持つ写真を直接DBに登録する。
+
+    SOT-1357: RAG /ask は写真の文字起こし(添付OCR)のみを根拠にするため、テストでは
+    添付の ocr_text に根拠テキストを持たせる。
+    """
+    info_id = _seed(title, info_type, content)
+    db = TestingSessionLocal()
+    try:
+        att = models.Attachment(
+            info_id=info_id,
+            stored_filename="stored.png",
+            original_filename=filename,
+            mime_type="image/png",
+            file_size=123,
+            storage_backend="local",
+            ocr_text=ocr_text,
+            ocr_status="done",
+        )
+        db.add(att)
+        db.commit()
+    finally:
+        db.close()
+    return info_id
+
+
 def test_ask_endpoint_returns_answer_and_sources():
-    id1 = _seed("遠足のお知らせ", "行事", "来週の遠足では お弁当 水筒 レジャーシート を持参してください")
-    _seed("発表会", "行事", "発表会の衣装は各家庭で準備してください")
+    id1 = _seed_with_ocr(
+        "遠足のお知らせ", "行事", "来週の遠足では お弁当 水筒 レジャーシート を持参してください"
+    )
+    _seed_with_ocr("発表会", "行事", "発表会の衣装は各家庭で準備してください")
 
     resp = client.post("/api/info/ask", json={"query": "遠足に持っていくものは？", "top_k": 3})
     assert resp.status_code == 200
     data = resp.json()
     assert data["answer"]
     assert len(data["sources"]) >= 1
+    # SOT-1357: 根拠はすべて写真の文字起こし(ocr)のみ。
+    assert all(s["source"] == "ocr" for s in data["sources"])
     # The most relevant source should be the 遠足 info.
     assert data["sources"][0]["info_id"] == id1
 
 
 def test_ask_endpoint_sources_include_citation_label():
-    _seed("遠足のお知らせ", "行事", "来週の遠足では お弁当 水筒 レジャーシート を持参してください")
+    _seed_with_ocr(
+        "遠足のお知らせ", "行事",
+        "来週の遠足では お弁当 水筒 レジャーシート を持参してください",
+        filename="遠足のしおり.png",
+    )
 
     resp = client.post("/api/info/ask", json={"query": "遠足の持ち物", "top_k": 3})
     assert resp.status_code == 200
@@ -194,15 +247,18 @@ def test_ask_endpoint_sources_include_citation_label():
         # citation metadata is present for every source
         assert "filename" in s and "label" in s
         assert s["label"]
-    # content-sourced citations fall back to the info title
-    content_sources = [s for s in sources if s["source"] == "content"]
-    assert content_sources
-    assert content_sources[0]["label"] == content_sources[0]["title"]
+    # SOT-1357: 出典は写真の文字起こし(ocr)のみで、ラベルに添付ファイル名を含む。
+    ocr_sources = [s for s in sources if s["source"] == "ocr"]
+    assert ocr_sources
+    assert all(s["source"] == "ocr" for s in sources)
+    assert "遠足のしおり.png" in ocr_sources[0]["label"]
 
 
 def test_ask_endpoint_sources_include_text_snippet():
     # SOT-1094: 回答の根拠となる元テキストの抜粋(引用)を出典に含める
-    _seed("遠足のお知らせ", "行事", "来週の遠足では お弁当 水筒 レジャーシート を持参してください")
+    _seed_with_ocr(
+        "遠足のお知らせ", "行事", "来週の遠足では お弁当 水筒 レジャーシート を持参してください"
+    )
 
     resp = client.post("/api/info/ask", json={"query": "遠足の持ち物", "top_k": 3})
     assert resp.status_code == 200
@@ -270,27 +326,9 @@ def test_answer_includes_extra_contexts():
     assert "七夕会" in result.answer
 
 
-def test_ask_endpoint_answers_relative_date_event_question():
-    # SOT-1304: ベクトル検索に漏れても、直近の行事はコンテキストに含め回答できる。
-    import datetime
-
-    from app import clock
-
-    event_date = (clock.today() + datetime.timedelta(days=10)).isoformat()
-    resp = client.post(
-        "/api/info/",
-        json={
-            "title": "七夕会",
-            "info_type": "行事",
-            "content": "短冊に願い事を書きましょう",
-            "event_date": event_date,
-        },
-    )
-    assert resp.status_code == 200
-
-    resp = client.post("/api/info/ask", json={"query": "再来週の予定を教えて", "top_k": 1})
-    assert resp.status_code == 200
-    assert "七夕会" in resp.json()["answer"]
+# SOT-1357: /ask の日付イベント追加コンテキスト注入(SOT-1304)は廃止したため、
+# 旧 test_ask_endpoint_answers_relative_date_event_question は削除。
+# RagService.answer の extra_contexts 機能自体は test_answer_includes_extra_contexts で維持。
 
 
 def test_vector_search_endpoint():
