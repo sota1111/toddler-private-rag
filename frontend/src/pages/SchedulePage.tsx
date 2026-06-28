@@ -126,9 +126,9 @@ const SchedulePage: React.FC = () => {
   }).format(new Date(viewYear, viewMonth, 1));
 
   return (
-    <div className="w-full lg:max-w-4xl lg:mx-auto">
-      {/* カレンダー */}
-      <div className="bg-surface rounded-2xl shadow-card hover:shadow-card-hover transition-shadow border border-border overflow-hidden mb-6">
+    <div className="w-full lg:max-w-6xl lg:mx-auto lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
+      {/* カレンダー（PCではカレンダーと予定一覧を左右に並べる / モバイルは縦積み） */}
+      <div className="bg-surface rounded-2xl shadow-card hover:shadow-card-hover transition-shadow border border-border overflow-hidden mb-6 lg:mb-0">
         <div className="flex items-center justify-between px-4 py-3.5 bg-gradient-to-r from-brand to-brand-strong text-white font-bold">
           <button
             type="button"
@@ -213,8 +213,8 @@ const SchedulePage: React.FC = () => {
         </div>
       </div>
 
-      {/* カレンダーの下の予定一覧 */}
-      <div className="bg-surface rounded-2xl shadow-card border border-border overflow-hidden mb-6">
+      {/* 予定一覧（PCではカレンダーの右、モバイルはカレンダーの下） */}
+      <div className="bg-surface rounded-2xl shadow-card border border-border overflow-hidden mb-6 lg:mb-0">
         <div className="flex items-center gap-2 px-4 py-3 bg-accent-bg text-brand-strong font-bold border-b border-accent-border">
           <span aria-hidden className="text-lg">📅</span>
           <span>{t('schedule.listTitle')}</span>
