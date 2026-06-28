@@ -1,45 +1,33 @@
-# Worker Report
+# Worker Report — Verification (SOT-1359)
+
+## Fallback Disclosure (Worker Non-Response Policy)
+- Non-responsive worker: **Codex CLI** (usage-limit cooldown; `scripts/ai/run_codex.sh` exited with non-response code `75`). Retry futile (deterministic cooldown).
+- Action: Claude Code performed verification directly under the Worker Non-Response Fallback Policy. All Quality Gates applied identically.
 
 ## Summary
-Verified SOT-1350 backend implementation and tests. The full backend pytest suite passes, and the focused SOT-1350 tests pass.
-
-The consolidation behavior is meaningful for the reported examples:
-- Same-date/same-event pairs for `七夕会`, `水あそび`, and `お誕生日会` merge to one task each.
-- Different dates do not merge.
-- Same-date unrelated titles do not merge.
-- Empty dates never merge.
-- `build_task_drafts()` applies consolidation after `_llm_tasks()` and before draft mapping.
-- The LLM prompt includes the same-event merge instruction.
-
-No code fixes were applied. Repo-wide ruff is configured but fails on pre-existing unrelated lint in test files outside the SOT-1350 change. The touched Python files pass ruff.
+Verified the gen2 upload Cloud Function migration (SOT-1359). The function reproduces the old upload service's public contract; auth/path/validation/CORS branches are unit-tested and pass. The full backend suite is green and the obsolete service import was removed cleanly. Frontend lint/build are green (only a comment changed in nginx.conf).
 
 ## Changed Files
-- `docs/ai/60_worker_codex_report.md` - updated this verification report.
+- none (verification only; implementation in `docs/ai/50_worker_antigravity_report.md`).
 
 ## Commands Run
-- `cd /workspaces/toddler-private-rag/backend && python -m pytest -q`
-  - Result: PASS, `157 passed, 6 warnings in 260.13s`.
-- `cd /workspaces/toddler-private-rag/backend && python -m pytest -q tests/test_extraction.py -k "consolidate or SOT or build_task_drafts_consolidates"`
-  - Result: PASS, `5 passed, 19 deselected`.
-- `cd /workspaces/toddler-private-rag/backend && ruff check app/ tests/`
-  - Result: FAIL, 21 lint errors in unrelated existing files: `tests/test_attachments.py`, `tests/test_ocr_search.py`, `tests/test_privacy.py`, `tests/test_repository.py`, `tests/test_storage_backend.py`.
-- `cd /workspaces/toddler-private-rag/backend && ruff check app/extraction.py tests/test_extraction.py`
-  - Result: PASS, `All checks passed!`.
-- `cd /workspaces/toddler-private-rag && git --no-pager diff --stat main...HEAD`
-  - Result: no output because local `main` and `feat/SOT-1350-merge-same-event-tasks` currently point to the same commit.
-- `cd /workspaces/toddler-private-rag && git --no-pager diff --stat HEAD`
-  - Result: only `backend/app/extraction.py`, `backend/tests/test_extraction.py`, `docs/ai/50_worker_antigravity_report.md`, and `docs/ai/60_worker_codex_report.md` are modified.
+- `python -c "import ast; ast.parse(open('backend/upload_function/main.py').read())"` → OK.
+- `python -c "import yaml; yaml.safe_load(open('.github/workflows/deploy-cloudrun.yml'))"` → workflow YAML valid.
+- backend suite (`.venv/bin/python -m pytest -q`) → **164 passed, 1 skipped** (the function test module skips without functions-framework, mirroring CI). No date-flaky failures today (2026-06-28).
+- function tests in isolated venv with functions-framework (`pytest tests/test_upload_function.py`) → **7 passed** (405 GET, 404 bad path, 401 missing cookie, 401 invalid cookie, 400 missing file, 400 unsupported type, 204 OPTIONS preflight with CORS headers).
+- frontend `npm run lint` → exit 0; `npm run build` (tsc -b && vite build) → success.
 
 ## Acceptance Criteria
-- [x] pytest all pass (incl. new SOT-1350 tests)
-- [ ] ruff pass / N/A
-- [x] only intended files changed
-- [x] consolidation behaves per SOT-1350 examples; no regression in existing extraction tests
+- [x] Upload migrated to gen2 Cloud Function (`backend/upload_function/`), self-contained + slim
+- [x] Public contract preserved (path/cookie HMAC/multipart/response shape)
+- [x] deploy workflow switched to `gcloud functions deploy --gen2`; frontend UPLOAD_URL via function URL
+- [x] old Cloud Run upload service removed; no dangling imports
+- [x] backend pytest green; function unit tests green; frontend lint/build green
 
 ## Risks
-Repo-wide ruff is not green due to existing unrelated lint. I did not fix those files because doing so would expand the change scope beyond SOT-1350 and break the "only intended files changed" criterion.
-
-`git --no-pager diff --stat main...HEAD` is not useful in this checkout because `main` and the feature branch resolve to the same commit; `git diff --stat HEAD` confirms the working tree changes are scoped to the intended implementation/test/docs files.
+- Cloud Functions deploy + live upload cannot be exercised in this environment (no GCP). Human must verify after merge and configure GitHub secret `CLOUD_FUNCTION_UPLOAD`.
+- e2e not run: no frontend source changed (nginx.conf change is a comment only); upload is mocked in e2e.
+- Rollback: `git revert` of this PR restores the previous Cloud Run upload service.
 
 ## Next Action
-NEEDS_DEBUG
+READY_FOR_REVIEW

@@ -1,0 +1,7 @@
+# SOT-1359: keep the uploaded function bundle small.
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+tests/
+*.md
