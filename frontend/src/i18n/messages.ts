@@ -175,7 +175,10 @@ export const messages: Record<Lang, Messages> = {
     'create.autoSavedNoText': '写真は登録しました。文字の読み取りに失敗しました（写真一覧の詳細から手入力で編集できます）。',
     'create.autoFallbackTitle': '写真から登録（要手入力）',
     'create.autoSavedBodyHeading': '整理した本文',
+    'create.autoSavedDraftHint':
+      '読み取った内容からタスクなどを作成しています。完了まで少し時間がかかります。生成された項目は「仮登録」からご確認ください。',
     'create.autoOpenDrafts': '写真一覧を開く',
+    'create.autoOpenDraftCheck': '仮登録を確認する',
     'create.autoUploadAnother': '続けて写真をアップ',
     'create.autoAddPhotoWhileProcessing': '別の写真を追加',
     'create.photoHeading': '写真から自動入力',
@@ -486,7 +489,10 @@ export const messages: Record<Lang, Messages> = {
     'create.autoSavedNoText': 'The photo was registered, but text recognition failed (you can edit it manually from the photo detail).',
     'create.autoFallbackTitle': 'Saved from photo (needs manual entry)',
     'create.autoSavedBodyHeading': 'Organized text',
+    'create.autoSavedDraftHint':
+      'We\'re creating tasks and other items from the photo. This takes a little time. Check the generated items under "Provisional registration".',
     'create.autoOpenDrafts': 'Open the photo list',
+    'create.autoOpenDraftCheck': 'Check provisional registration',
     'create.autoUploadAnother': 'Upload another photo',
     'create.autoAddPhotoWhileProcessing': 'Add another photo',
     'create.photoHeading': 'Auto-fill from photo',

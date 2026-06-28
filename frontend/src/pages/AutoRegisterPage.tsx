@@ -241,6 +241,8 @@ const AutoRegisterPage: React.FC = () => {
             <p className="text-sm text-foreground text-center">
               {enrichFailed ? t('create.autoSavedNoText') : t('create.autoSavedDesc')}
             </p>
+            {/* SOT-1354: 生成されたタスク等は仮登録に出る。確認を促し、時間がかかることを説明する。 */}
+            <p className="text-xs text-muted-foreground text-center">{t('create.autoSavedDraftHint')}</p>
             {savedDraft.title && (
               <p className="text-sm font-medium text-foreground truncate text-center">「{savedDraft.title}」</p>
             )}
@@ -257,6 +259,14 @@ const AutoRegisterPage: React.FC = () => {
                 className="px-5 py-2.5 bg-brand text-white text-sm font-medium rounded-md shadow-sm hover:bg-brand-strong"
               >
                 {t('create.autoOpenDrafts')}
+              </button>
+              {/* SOT-1354: 仮登録(生成されたタスク等)の確認導線。 */}
+              <button
+                type="button"
+                onClick={() => navigate('/drafts')}
+                className="px-5 py-2.5 bg-surface text-foreground text-sm font-medium border border-border rounded-md hover:bg-surface-muted"
+              >
+                {t('create.autoOpenDraftCheck')}
               </button>
               <button
                 type="button"
