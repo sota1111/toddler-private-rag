@@ -15,8 +15,8 @@ export const messages: Record<Lang, Messages> = {
     'nav.createAuto': '自動登録',
     'nav.drafts': '仮登録',
     'nav.registered': '写真一覧',
-    'nav.schedule': '予定',
-    'nav.tasks': 'タスク一覧',
+    'nav.schedule': 'カレンダー',
+    'nav.tasks': 'やること',
     'nav.settings': '設定',
     'nav.logout': 'ログアウト',
 
@@ -49,8 +49,8 @@ export const messages: Record<Lang, Messages> = {
     'schedule.showDone': '対応済',
 
     // tasks (SOT-1313)
-    'tasks.title': 'タスク一覧',
-    'tasks.listTitle': 'タスク一覧',
+    'tasks.title': 'やることリスト',
+    'tasks.listTitle': 'やることリスト',
     'tasks.showAll': 'すべて',
     'tasks.showUnconfirmed': '未確認',
     'tasks.showPending': '未対応',
@@ -346,7 +346,7 @@ export const messages: Record<Lang, Messages> = {
     'nav.createAuto': 'Auto',
     'nav.drafts': 'Drafts',
     'nav.registered': 'Photos',
-    'nav.schedule': 'Schedule',
+    'nav.schedule': 'Calendar',
     'nav.tasks': 'Tasks',
     'nav.settings': 'Settings',
     'nav.logout': 'Log out',
