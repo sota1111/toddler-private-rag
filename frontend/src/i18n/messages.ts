@@ -5,7 +5,7 @@ export type Messages = Record<string, string>
 export const messages: Record<Lang, Messages> = {
   ja: {
     // nav / shell
-    'app.title': '保育園RAG',
+    'app.title': 'おたよりナビ',
     'nav.dashboard': '掲示板',
     'nav.info': '質問',
     'nav.ask': '質問',
@@ -60,7 +60,7 @@ export const messages: Record<Lang, Messages> = {
     'role.label': '表示モード',
     'role.admin': '管理者',
     'role.user': 'ユーザー',
-    'footer.copyright': '© 2026 保育園情報アシスタント MVP',
+    'footer.copyright': '© 2026 おたよりナビ MVP',
 
     // common
     'common.loading': '読み込み中...',
@@ -316,7 +316,7 @@ export const messages: Record<Lang, Messages> = {
   },
   en: {
     // nav / shell
-    'app.title': '保育園RAG',
+    'app.title': 'Nursery Notice Guide',
     'nav.dashboard': 'Board',
     'nav.info': 'Questions',
     'nav.ask': 'Ask',
@@ -371,7 +371,7 @@ export const messages: Record<Lang, Messages> = {
     'role.label': 'Display mode',
     'role.admin': 'Admin',
     'role.user': 'User',
-    'footer.copyright': '© 2026 Nursery Info Assistant MVP',
+    'footer.copyright': '© 2026 Nursery Notice Guide MVP',
 
     // common
     'common.loading': 'Loading...',

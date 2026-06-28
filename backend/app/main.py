@@ -18,7 +18,7 @@ if database_type != "firestore":
 if database_type == "sqlite":
     ensure_sqlite_schema(engine)
 
-app = FastAPI(title="保育園情報アシスタント API")
+app = FastAPI(title="おたよりナビ API")
 
 _cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
 app.add_middleware(
