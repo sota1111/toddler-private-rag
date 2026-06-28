@@ -18,6 +18,16 @@ output "deploy_service_account_email" {
   value       = google_service_account.deploy.email
 }
 
+output "runtime_service_account_email" {
+  description = "Backend/function runtime SA email (set as GitHub secret CLOUD_RUN_RUNTIME_SA)."
+  value       = google_service_account.runtime.email
+}
+
+output "frontend_service_account_email" {
+  description = "Frontend runtime SA email (set as GitHub secret CLOUD_RUN_FRONTEND_SA)."
+  value       = google_service_account.frontend.email
+}
+
 output "attachments_bucket" {
   description = "GCS bucket for attachments."
   value       = google_storage_bucket.attachments.name

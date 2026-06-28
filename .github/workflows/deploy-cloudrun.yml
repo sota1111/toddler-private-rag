@@ -51,21 +51,31 @@ jobs:
       - name: Deploy backend to Cloud Run
         env:
           IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_BACKEND }}
+          RUNTIME_SA: ${{ secrets.CLOUD_RUN_RUNTIME_SA }}
         run: |
+          # SOT-1366 item A: adopt the least-privilege runtime SA when configured.
+          SA_FLAG=""
+          [ -n "$RUNTIME_SA" ] && SA_FLAG="--service-account=$RUNTIME_SA"
           gcloud run deploy ${{ secrets.CLOUD_RUN_SERVICE_BACKEND }} \
             --image "$IMAGE:${{ github.sha }}" \
             --region ${{ secrets.GCP_REGION }} \
             --project ${{ secrets.GCP_PROJECT_ID }} \
             --platform managed \
             --allow-unauthenticated \
+            $SA_FLAG \
             --set-secrets "AUTH_SECRET=rag-auth-secret:latest,ALLOWED_USER_EMAILS=rag-allowed-emails:latest,FIREBASE_API_KEY=rag-firebase-api-key:latest,WORKER_INVOKE_TOKEN=rag-worker-invoke-token:latest" \
             --set-env-vars "APP_ENV=production,CORS_ORIGINS=https://${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }}-${{ secrets.GCP_PROJECT_NUMBER }}.${{ secrets.GCP_REGION }}.run.app,GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=gen-lang-client-0243034020,GOOGLE_CLOUD_LOCATION=global,GEMINI_MODEL=gemini-3.5-flash,DATABASE_TYPE=firestore,STORAGE_BACKEND=gcs,GCS_BUCKET_NAME=gen-lang-client-0243034020-toddler-private-rag" \
             --memory 512Mi \
-            --timeout 300
+            --timeout 300 \
+            --min-instances 0 \
+            --max-instances 5 \
+            --concurrency 40
 
       # ----- Upload Cloud Function (SOT-1359: gen2, slim, fast-booting, upload-only) -----
       # Replaces the former lightweight upload Cloud Run service. Source: backend/upload_function.
       - name: Deploy upload Cloud Function (gen2)
+        env:
+          RUNTIME_SA: ${{ secrets.CLOUD_RUN_RUNTIME_SA }}
         run: |
           BACKEND_URL=$(gcloud run services describe ${{ secrets.CLOUD_RUN_SERVICE_BACKEND }} \
             --region ${{ secrets.GCP_REGION }} \
@@ -75,6 +85,9 @@ jobs:
             echo "ERROR: backend URL not resolved" >&2
             exit 1
           fi
+          # SOT-1366 item A: adopt the least-privilege runtime SA when configured.
+          SA_FLAG=""
+          [ -n "$RUNTIME_SA" ] && SA_FLAG="--service-account=$RUNTIME_SA"
           gcloud functions deploy ${{ secrets.CLOUD_FUNCTION_UPLOAD }} \
             --gen2 \
             --region ${{ secrets.GCP_REGION }} \
@@ -84,10 +97,12 @@ jobs:
             --entry-point upload_attachment \
             --trigger-http \
             --allow-unauthenticated \
+            $SA_FLAG \
             --set-secrets "AUTH_SECRET=rag-auth-secret:latest,WORKER_INVOKE_TOKEN=rag-worker-invoke-token:latest" \
             --set-env-vars "APP_ENV=production,CORS_ORIGINS=https://${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }}-${{ secrets.GCP_PROJECT_NUMBER }}.${{ secrets.GCP_REGION }}.run.app,DATABASE_TYPE=firestore,STORAGE_BACKEND=gcs,GCS_BUCKET_NAME=gen-lang-client-0243034020-toddler-private-rag,GOOGLE_CLOUD_PROJECT=gen-lang-client-0243034020,AI_WORKER_URL=$BACKEND_URL" \
             --memory 256Mi \
-            --timeout 60s
+            --timeout 60s \
+            --max-instances 5
 
       # ----- Frontend -----
       - name: Build frontend image
@@ -106,6 +121,7 @@ jobs:
       - name: Deploy frontend to Cloud Run
         env:
           IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }}
+          FRONTEND_SA: ${{ secrets.CLOUD_RUN_FRONTEND_SA }}
         run: |
           BACKEND_URL=$(gcloud run services describe ${{ secrets.CLOUD_RUN_SERVICE_BACKEND }} \
             --region ${{ secrets.GCP_REGION }} \
@@ -124,12 +140,18 @@ jobs:
             echo "ERROR: upload function URL not resolved" >&2
             exit 1
           fi
+          # SOT-1366 item A: adopt the minimal frontend SA when configured.
+          SA_FLAG=""
+          [ -n "$FRONTEND_SA" ] && SA_FLAG="--service-account=$FRONTEND_SA"
           gcloud run deploy ${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }} \
             --image "$IMAGE:${{ github.sha }}" \
             --region ${{ secrets.GCP_REGION }} \
             --project ${{ secrets.GCP_PROJECT_ID }} \
             --platform managed \
             --allow-unauthenticated \
+            $SA_FLAG \
             --set-env-vars "BACKEND_URL=$BACKEND_URL,UPLOAD_URL=$UPLOAD_URL" \
             --memory 256Mi \
-            --timeout 300
+            --timeout 300 \
+            --min-instances 0 \
+            --max-instances 5

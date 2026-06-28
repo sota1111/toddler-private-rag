@@ -16,6 +16,7 @@ locals {
     "eventarc.googleapis.com",
     "cloudresourcemanager.googleapis.com",
     "sts.googleapis.com",
+    "cloudscheduler.googleapis.com", # SOT-1366 item B: orphan-cleanup scheduler.
   ]
 }
 

@@ -33,35 +33,62 @@ resource "google_project_iam_member" "deploy" {
   member  = "serviceAccount:${google_service_account.deploy.email}"
 }
 
-# --- Optional: dedicated least-privilege RUNTIME service account ---
+# --- Dedicated least-privilege RUNTIME service accounts (SOT-1366 / item A) ---
 #
-# Current state: Cloud Run services and the upload function run as the project
-# DEFAULT compute service account (the deploy workflow does not pass
-# --service-account). That is why no runtime SA is created by default here and
-# var.cloud_run_service_account_email defaults to "".
+# Hardening over the previous state, where Cloud Run services and the upload
+# function ran as the project DEFAULT compute service account (≈ Editor). Two
+# SAs are used:
+#   * runtime  — backend (AI worker) + upload function. Needs Secret Manager,
+#     Firestore, GCS, Vertex AI, plus log/metric writing.
+#   * frontend — nginx only; no data-plane roles, just log/metric writing.
 #
-# To harden (least privilege, see the architecture review), uncomment the block
-# below, set var.cloud_run_service_account_email to its email, then redeploy so
-# the services adopt it.
-#
-# resource "google_service_account" "runtime" {
-#   project      = var.project_id
-#   account_id   = "toddler-run-runtime"
-#   display_name = "toddler-private-rag Cloud Run runtime"
-# }
-#
-# locals {
-#   runtime_sa_roles = [
-#     "roles/secretmanager.secretAccessor",
-#     "roles/datastore.user",
-#     "roles/storage.objectAdmin",
-#     "roles/aiplatform.user",
-#   ]
-# }
-#
-# resource "google_project_iam_member" "runtime" {
-#   for_each = toset(local.runtime_sa_roles)
-#   project  = var.project_id
-#   role     = each.value
-#   member   = "serviceAccount:${google_service_account.runtime.email}"
-# }
+# The deploy workflow passes these via --service-account (secrets
+# CLOUD_RUN_RUNTIME_SA / CLOUD_RUN_FRONTEND_SA). Terraform wires them through
+# var.cloud_run_service_account_email / var.frontend_service_account_email.
+
+resource "google_service_account" "runtime" {
+  project      = var.project_id
+  account_id   = "toddler-run-runtime"
+  display_name = "toddler-private-rag Cloud Run / function runtime"
+
+  depends_on = [google_project_service.services]
+}
+
+resource "google_service_account" "frontend" {
+  project      = var.project_id
+  account_id   = "toddler-run-frontend"
+  display_name = "toddler-private-rag frontend (nginx) runtime"
+
+  depends_on = [google_project_service.services]
+}
+
+locals {
+  runtime_sa_roles = [
+    "roles/secretmanager.secretAccessor",
+    "roles/datastore.user",
+    "roles/storage.objectAdmin",
+    "roles/aiplatform.user",
+    "roles/logging.logWriter",
+    "roles/monitoring.metricWriter",
+  ]
+
+  # The frontend only needs to emit logs/metrics; no data-plane access.
+  frontend_sa_roles = [
+    "roles/logging.logWriter",
+    "roles/monitoring.metricWriter",
+  ]
+}
+
+resource "google_project_iam_member" "runtime" {
+  for_each = toset(local.runtime_sa_roles)
+  project  = var.project_id
+  role     = each.value
+  member   = "serviceAccount:${google_service_account.runtime.email}"
+}
+
+resource "google_project_iam_member" "frontend" {
+  for_each = toset(local.frontend_sa_roles)
+  project  = var.project_id
+  role     = each.value
+  member   = "serviceAccount:${google_service_account.frontend.email}"
+}

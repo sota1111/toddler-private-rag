@@ -61,6 +61,11 @@ class LocalStorage(StorageBackend):
     def local_path_for_ocr(self, object_key: str, content: bytes) -> Path:
         return get_file_path(object_key)
 
+    def list_blobs(self, prefix: str = ""):
+        """Yield (object_key, created_at) pairs. Local storage is not used for
+        orphan reconciliation; return nothing."""
+        return []
+
     @property
     def name(self) -> str:
         return "local"
@@ -103,6 +108,12 @@ class GCSStorage(StorageBackend):
         bucket = self.client.bucket(self.bucket_name)
         blob = bucket.blob(object_key)
         return blob.download_as_bytes()
+
+    def list_blobs(self, prefix: str = ""):
+        """Yield (object_key, created_at) for every object under ``prefix``.
+        Used by the orphan-attachment reconciler (SOT-1366)."""
+        for blob in self.client.list_blobs(self.bucket_name, prefix=prefix):
+            yield blob.name, blob.time_created
 
     def generate_signed_url(self, object_key: str, content_type: Optional[str] = None) -> str:
         from datetime import timedelta

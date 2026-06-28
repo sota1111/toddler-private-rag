@@ -38,9 +38,18 @@ wif_provider_id = "github-provider"
 deploy_service_account_id = "github-deployer"
 
 # --- Optional ---
-# Leave empty to keep current behavior (services run as the default compute SA).
-# Set to a dedicated runtime SA email only after enabling the runtime SA block in iam.tf.
-cloud_run_service_account_email = ""
+# Dedicated least-privilege runtime service accounts (SOT-1366 item A).
+# Leave empty to keep the default compute SA; set to the SA emails once created
+# (terraform output runtime_service_account_email / frontend_service_account_email).
+cloud_run_service_account_email = "" # e.g. toddler-run-runtime@gen-lang-client-0243034020.iam.gserviceaccount.com
+frontend_service_account_email  = "" # e.g. toddler-run-frontend@gen-lang-client-0243034020.iam.gserviceaccount.com
+
+# --- SOT-1366 item B: orphan-attachment cleanup scheduler ---
+# Cron (Asia/Tokyo). Default daily 03:00.
+orphan_purge_schedule = "0 3 * * *"
+# Value of rag-worker-invoke-token; sent as X-Worker-Token. Sensitive — keep in
+# the gitignored terraform.tfvars only. Managed out-of-band (like other secrets).
+worker_invoke_token = ""
 
 # Container images / function source are managed by CI and ignored by Terraform;
 # normally leave these unset.

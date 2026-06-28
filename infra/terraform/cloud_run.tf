@@ -8,7 +8,8 @@ locals {
   # workflow constructs it.
   frontend_url = "https://${var.frontend_service_name}-${var.project_number}.${var.region}.run.app"
 
-  runtime_sa = var.cloud_run_service_account_email != "" ? var.cloud_run_service_account_email : null
+  runtime_sa  = var.cloud_run_service_account_email != "" ? var.cloud_run_service_account_email : null
+  frontend_sa = var.frontend_service_account_email != "" ? var.frontend_service_account_email : null
 }
 
 resource "google_cloud_run_v2_service" "backend" {
@@ -21,6 +22,12 @@ resource "google_cloud_run_v2_service" "backend" {
   template {
     timeout         = "300s"
     service_account = local.runtime_sa
+
+    # SOT-1366 item C: cap fan-out to protect cost / Vertex AI quota.
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 5
+    }
 
     containers {
       image = var.backend_image
@@ -127,7 +134,13 @@ resource "google_cloud_run_v2_service" "frontend" {
 
   template {
     timeout         = "300s"
-    service_account = local.runtime_sa
+    service_account = local.frontend_sa
+
+    # SOT-1366 item C: cap fan-out to protect cost.
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 5
+    }
 
     containers {
       image = var.frontend_image
