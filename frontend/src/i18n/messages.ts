@@ -55,7 +55,7 @@ export const messages: Record<Lang, Messages> = {
     'tasks.showPending': '未対応',
     'tasks.showDone': '対応済',
     // tasks: manual add (SOT-1358)
-    'tasks.addButton': 'タスク追加',
+    'tasks.addButton': 'リスト追加',
     'tasks.formTitle': 'タスク追加',
     'tasks.fieldTitle': 'タイトル',
     'tasks.fieldDate': '日付',
