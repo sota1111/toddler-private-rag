@@ -180,6 +180,84 @@ def test_build_task_drafts_forwards_language(monkeypatch):
     assert seen["language"] == "en"
 
 
+# --- 同一日・同一イベントのタスク統合 (SOT-1350) ---
+
+
+def test_consolidate_tasks_merges_same_date_same_event():
+    tasks = [
+        {"title": "七夕会のお願いごと", "date": "2026-07-07", "detail": "短冊にお願いごとを書いてください", "category": "notes"},
+        {"title": "七夕会", "date": "2026-07-07", "detail": "7月7日に七夕会を行います", "category": "events"},
+        {"title": "水あそびの持ち物", "date": "2026-07-12", "detail": "水着とタオルを持参", "category": "belongings"},
+        {"title": "水あそび開始", "date": "2026-07-12", "detail": "7月12日から水あそびを始めます", "category": "events"},
+        {"title": "お誕生日会の服装", "date": "2026-07-17", "detail": "私服で参加", "category": "belongings"},
+        {"title": "お誕生日会", "date": "2026-07-17", "detail": "7月17日にお誕生日会を開催", "category": "events"},
+    ]
+    merged = extraction._consolidate_tasks(tasks)
+    # 3イベントに統合される
+    assert len(merged) == 3
+    by_date = {t["date"]: t for t in merged}
+    # events 優先で category=events、title はイベント名
+    assert by_date["2026-07-07"]["category"] == "events"
+    assert by_date["2026-07-07"]["title"] == "七夕会"
+    # detail に両方の情報が含まれる
+    assert "お願いごと" in by_date["2026-07-07"]["detail"]
+    assert "七夕会を行います" in by_date["2026-07-07"]["detail"]
+    assert by_date["2026-07-12"]["category"] == "events"
+    assert "水着" in by_date["2026-07-12"]["detail"]
+    assert by_date["2026-07-17"]["category"] == "events"
+    assert "私服" in by_date["2026-07-17"]["detail"]
+
+
+def test_consolidate_tasks_does_not_merge_different_dates():
+    tasks = [
+        {"title": "七夕会", "date": "2026-07-07", "detail": "七夕会", "category": "events"},
+        {"title": "七夕会の準備", "date": "2026-07-06", "detail": "前日準備", "category": "events"},
+    ]
+    merged = extraction._consolidate_tasks(tasks)
+    assert len(merged) == 2  # 日付が違えばマージしない
+
+
+def test_consolidate_tasks_does_not_merge_unrelated_titles():
+    tasks = [
+        {"title": "運動会", "date": "2026-07-07", "detail": "運動会", "category": "events"},
+        {"title": "面談のお知らせ", "date": "2026-07-07", "detail": "面談", "category": "notes"},
+    ]
+    merged = extraction._consolidate_tasks(tasks)
+    assert len(merged) == 2  # 共通接頭辞が短い無関係タイトルはマージしない
+
+
+def test_consolidate_tasks_never_merges_empty_dates():
+    tasks = [
+        {"title": "七夕会", "date": "", "detail": "七夕会その1", "category": "events"},
+        {"title": "七夕会のお願い", "date": "", "detail": "七夕会その2", "category": "notes"},
+    ]
+    merged = extraction._consolidate_tasks(tasks)
+    assert len(merged) == 2  # 日付不明同士は同一日と確認できないためマージしない
+
+
+def test_build_task_drafts_consolidates_via_llm(monkeypatch):
+    monkeypatch.setattr(extraction.ai_client, "gemini_available", lambda: True)
+
+    def _fake_llm_tasks(text, language="ja"):
+        return [
+            {"title": "七夕会のお願いごと", "date": "2026-07-07", "detail": "短冊", "category": "notes"},
+            {"title": "七夕会", "date": "2026-07-07", "detail": "七夕会を行います", "category": "events"},
+        ]
+
+    monkeypatch.setattr(extraction, "_llm_tasks", _fake_llm_tasks)
+    drafts = extraction.build_task_drafts("七夕会のおたより", language="ja")
+    assert len(drafts) == 1  # 同一日・同一イベントは1 draft に統合
+    assert drafts[0]["info_type"] == "行事"
+    assert _TASK_DRAFT_KEYS.issubset(set(drafts[0].keys()))
+
+
+def test_llm_tasks_prompt_includes_same_event_merge_instruction(monkeypatch):
+    captured = {}
+    _patch_fake_genai(monkeypatch, captured)
+    extraction._llm_tasks("七夕会のおたより", "ja")
+    assert "SAME event" in captured["prompt"]
+
+
 # --- 設定言語でのタイトル生成 (SOT-1336) ---
 
 
