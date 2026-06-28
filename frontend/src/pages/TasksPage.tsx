@@ -186,8 +186,8 @@ const TasksPage: React.FC = () => {
         </form>
       )}
 
-      <div className="bg-surface rounded-2xl shadow-card overflow-hidden mb-6">
-        <div className="flex items-center gap-2 px-4 py-3 bg-emerald-50 text-emerald-700 font-bold">
+      <div className="bg-surface rounded-2xl shadow-card border border-border overflow-hidden mb-6">
+        <div className="flex items-center gap-2 px-4 py-3 bg-accent-bg text-brand-strong font-bold border-b border-accent-border">
           <span aria-hidden className="text-lg">📅</span>
           <span>{t('tasks.listTitle')}</span>
         </div>
