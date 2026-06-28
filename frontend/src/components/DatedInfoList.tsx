@@ -55,7 +55,7 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({ items, isLoading, namespa
   return (
     <>
       {/* ステータス絞り込み（すべて / 未確認 / 未対応 / 対応済）。未選択時は全ピル共通デザイン。 */}
-      <div className="flex flex-wrap gap-1 px-4 pt-3" role="group" aria-label={t(`${namespace}.listTitle`)}>
+      <div className="flex flex-wrap gap-2 px-4 pt-3" role="group" aria-label={t(`${namespace}.listTitle`)}>
         {STATUS_FILTERS.map(({ key, suffix }) => {
           const active = statusFilter === key;
           return (
@@ -64,7 +64,7 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({ items, isLoading, namespa
               type="button"
               onClick={() => setStatusFilter(key)}
               aria-pressed={active}
-              className={`px-2 py-1.5 text-xs font-medium rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-brand/40 ${
+              className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-brand/40 ${
                 active
                   ? 'bg-brand text-white border-brand'
                   : 'bg-surface text-foreground border-border hover:bg-surface-muted'
