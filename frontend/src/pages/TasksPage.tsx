@@ -89,7 +89,6 @@ const TasksPage: React.FC = () => {
       <div className="flex items-start justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold mb-1 text-foreground">{t('tasks.title')}</h1>
-          <p className="text-sm text-muted-foreground">{t('tasks.subtitle')}</p>
         </div>
         {!formOpen && (
           <button

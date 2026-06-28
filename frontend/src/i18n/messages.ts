@@ -50,15 +50,14 @@ export const messages: Record<Lang, Messages> = {
 
     // tasks (SOT-1313)
     'tasks.title': 'タスク一覧',
-    'tasks.subtitle': '予定のあるタスクを一覧で確認できます。',
     'tasks.listTitle': 'タスク一覧',
     'tasks.showAll': 'すべて',
     'tasks.showUnconfirmed': '未確認',
     'tasks.showPending': '未対応',
     'tasks.showDone': '対応済',
     // tasks: manual add (SOT-1358)
-    'tasks.addButton': 'タスクを追加',
-    'tasks.formTitle': 'タスクを追加',
+    'tasks.addButton': 'タスク追加',
+    'tasks.formTitle': 'タスク追加',
     'tasks.fieldTitle': 'タイトル',
     'tasks.fieldDate': '日付',
     'tasks.fieldType': '種別',
@@ -382,7 +381,6 @@ export const messages: Record<Lang, Messages> = {
 
     // tasks (SOT-1313)
     'tasks.title': 'Task list',
-    'tasks.subtitle': 'Browse all dated tasks in a list.',
     'tasks.listTitle': 'Task list',
     'tasks.showAll': 'All',
     'tasks.showUnconfirmed': 'Unconfirmed',
