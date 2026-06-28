@@ -68,7 +68,7 @@ test('ログイン前はタイトルと言語切替のみ表示される (SOT-13
   await page.goto('/login')
   await expect(page).toHaveURL(/\/login/)
   // タイトルと言語切替（JP/EN）は表示される。
-  await expect(page.getByText('保育園RAG')).toBeVisible()
+  await expect(page.getByText('おたよりナビ', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'JP' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'EN' })).toBeVisible()
   // 認証後のみのナビ（登録リンク）は表示されない。
