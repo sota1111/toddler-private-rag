@@ -127,12 +127,18 @@ def ask_info(
 ):
     """ベクトル検索で関連情報を取得し、LLMで回答を生成する (RAG)。
 
-    SOT-1357: RAG の根拠は写真の文字起こし（添付OCR）のみを対象とする。info/タスクの本文
-    （content チャンク）と日付イベントの追加コンテキスト注入（SOT-1304）は /ask では使わない。
+    SOT-1357: RAG の検索コーパス（根拠）は写真の文字起こし（添付OCR）のみを対象とする。
+    info/タスクの本文（content チャンク）は /ask では検索対象にしない（ocr_only=True）。
+    SOT-1357 follow-up（「日付クエリ対策は残して」）: ただし相対日付クエリ（今週/来週/再来週の
+    予定）対策の追加コンテキスト注入（SOT-1304）は維持する。ベクトル検索コーパスはOCRのみのまま、
+    直近の登録済み行事を日付つきで LLM コンテキストに補い、日付クエリの取りこぼしを防ぐ。
     検索機能 (/search, /hybrid-search) は従来どおり content + ocr を対象とする。
     """
     service = get_rag_service(repo, ocr_only=True)
-    result = service.answer(payload.query, top_k=payload.top_k)
+    extra_contexts = _upcoming_event_contexts(repo)
+    result = service.answer(
+        payload.query, top_k=payload.top_k, extra_contexts=extra_contexts
+    )
     return schemas.RagAnswer(
         answer=result.answer,
         sources=[_to_rag_source(s) for s in result.sources],

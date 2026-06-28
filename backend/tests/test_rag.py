@@ -326,9 +326,29 @@ def test_answer_includes_extra_contexts():
     assert "七夕会" in result.answer
 
 
-# SOT-1357: /ask の日付イベント追加コンテキスト注入(SOT-1304)は廃止したため、
-# 旧 test_ask_endpoint_answers_relative_date_event_question は削除。
-# RagService.answer の extra_contexts 機能自体は test_answer_includes_extra_contexts で維持。
+# SOT-1357 follow-up（「日付クエリ対策は残して」）: RAG の検索コーパスは写真OCRのみのままだが、
+# 相対日付クエリ対策(SOT-1304)の追加コンテキスト注入は /ask で維持する。
+def test_ask_endpoint_answers_relative_date_event_question():
+    # SOT-1304: ベクトル検索(OCRコーパス)に漏れても、直近の行事はコンテキストに含め回答できる。
+    import datetime
+
+    from app import clock
+
+    event_date = (clock.today() + datetime.timedelta(days=10)).isoformat()
+    resp = client.post(
+        "/api/info/",
+        json={
+            "title": "七夕会",
+            "info_type": "行事",
+            "content": "短冊に願い事を書きましょう",
+            "event_date": event_date,
+        },
+    )
+    assert resp.status_code == 200
+
+    resp = client.post("/api/info/ask", json={"query": "再来週の予定を教えて", "top_k": 1})
+    assert resp.status_code == 200
+    assert "七夕会" in resp.json()["answer"]
 
 
 def test_vector_search_endpoint():
