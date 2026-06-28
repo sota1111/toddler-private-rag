@@ -190,7 +190,7 @@ class SqliteInfoRepository(InfoRepository):
             models.NurseryInfo.info_type == "行事",
             models.NurseryInfo.event_date >= today,
             models.NurseryInfo.event_date <= next_week
-        ).all()
+        ).order_by(models.NurseryInfo.event_date.asc()).all()
 
     def list_next_week(self) -> List[models.NurseryInfo]:
         # 来週の予定 (SOT-1296): 今週 weekly[today..+7] と重複しない翌7日間の行事。
@@ -202,7 +202,7 @@ class SqliteInfoRepository(InfoRepository):
             models.NurseryInfo.info_type == "行事",
             models.NurseryInfo.event_date > next_week_start,
             models.NurseryInfo.event_date <= next_week_end
-        ).all()
+        ).order_by(models.NurseryInfo.event_date.asc()).all()
 
     def list_pending(self) -> List[models.NurseryInfo]:
         # 未対応のタスク: 提出物に限らず全カテゴリ横断で status=="未対応" (SOT-1093)
@@ -582,6 +582,7 @@ class FirestoreInfoRepository(InfoRepository):
             att_refs = self.db.collection("attachments").where("info_id", "==", doc.id).stream()
             attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
             results.append(_info_doc_to_obj(doc.id, data, attachments))
+        results.sort(key=lambda r: r.event_date or "")
         return results
 
     def list_next_week(self) -> List[FirestoreNurseryInfo]:
@@ -608,6 +609,7 @@ class FirestoreInfoRepository(InfoRepository):
             att_refs = self.db.collection("attachments").where("info_id", "==", doc.id).stream()
             attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
             results.append(_info_doc_to_obj(doc.id, data, attachments))
+        results.sort(key=lambda r: r.event_date or "")
         return results
 
     def list_pending(self) -> List[FirestoreNurseryInfo]:
