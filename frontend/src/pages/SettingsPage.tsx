@@ -6,12 +6,13 @@ import type { Lang } from '../i18n/i18nContextValue';
 import type { Child } from '../types';
 import { deleteAllData, getChildren, createChild, deleteChild } from '../api';
 
-// SOT-1315: 設定メニュー。言語・標準時間(タイムゾーン)・子どもの名前を設定できる。
-// 言語は既存 i18n、タイムゾーン/子どもの名前は SettingsContext に永続化される。
+// SOT-1315: 設定メニュー。言語・標準時間(タイムゾーン)を設定できる。
+// 言語は既存 i18n、タイムゾーンは SettingsContext に永続化される。
 // SOT-1356: 全データ削除（全タスク + 全写真）。破壊的・不可逆のため2段階確認。
+// SOT-1375: 旧「子どもの名前」欄は削除（お子さまの登録 SOT-1368 に統合）。
 const SettingsPage: React.FC = () => {
   const { t, lang, setLang } = useI18n();
-  const { timezone, childName, setTimezone, setChildName } = useSettings();
+  const { timezone, setTimezone } = useSettings();
 
   const [confirming, setConfirming] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
@@ -110,21 +111,6 @@ const SettingsPage: React.FC = () => {
               </option>
             ))}
           </select>
-        </div>
-
-        {/* 子どもの名前 */}
-        <div>
-          <label className="block text-sm font-semibold text-foreground mb-2">
-            {t('settings.childName')}
-          </label>
-          <input
-            type="text"
-            aria-label={t('settings.childName')}
-            value={childName}
-            onChange={(e) => setChildName(e.target.value)}
-            placeholder={t('settings.childNamePlaceholder')}
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40"
-          />
         </div>
       </div>
 

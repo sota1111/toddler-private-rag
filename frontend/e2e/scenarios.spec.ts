@@ -169,7 +169,7 @@ test.describe('toddler-private-rag シナリオ', () => {
     ).toBeVisible()
   })
 
-  test('S10: 設定メニューで言語・標準時間・子どもの名前を設定でき、再読込後も保持される (SOT-1315)', async ({ page }) => {
+  test('S10: 設定メニューで言語・標準時間を設定でき、再読込後も保持される (SOT-1315)', async ({ page }) => {
     await installApiMocks(page, { authed: true })
     await login(page)
 
@@ -177,19 +177,16 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page).toHaveURL(/\/settings/)
     await expect(page.getByRole('heading', { name: '設定' })).toBeVisible()
 
-    // 言語・標準時間・子どもの名前のコントロールが表示される
+    // 言語・標準時間のコントロールが表示される
     await expect(page.getByLabel('言語')).toBeVisible()
     await expect(page.getByLabel('標準時間（タイムゾーン）')).toBeVisible()
-    await expect(page.getByLabel('子どもの名前')).toBeVisible()
 
-    // 標準時間と子どもの名前を設定する
+    // 標準時間を設定する
     await page.getByLabel('標準時間（タイムゾーン）').selectOption('America/New_York')
-    await page.getByLabel('子どもの名前').fill('たろう')
 
     // 再読込しても設定が保持される（localStorage 永続化）
     await page.reload()
     await expect(page.getByLabel('標準時間（タイムゾーン）')).toHaveValue('America/New_York')
-    await expect(page.getByLabel('子どもの名前')).toHaveValue('たろう')
   })
 
   test('S11: 登録一覧メニュー（仮登録の右）から本登録タイトル一覧を開き、タイトルクリックで詳細(写真+文字起こし)へ遷移できる (SOT-1311)', async ({ page }) => {
