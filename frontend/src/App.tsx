@@ -10,6 +10,7 @@ import { SettingsProvider } from './settings/SettingsContext';
 import LanguageToggle from './components/LanguageToggle';
 import RoleToggle from './components/RoleToggle';
 import ReminderBanner from './components/ReminderBanner';
+import ScrollToTop from './components/ScrollToTop';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -176,6 +177,7 @@ const App: React.FC = () => {
         <RoleProvider>
           <AuthProvider>
             <Router>
+            <ScrollToTop />
             <Layout>
               <Routes>
                 <Route path="/login" element={<LoginPage />} />
