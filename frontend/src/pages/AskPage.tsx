@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { askInfo } from '../api';
+import { askInfo, askInfoStream } from '../api';
 import type { RagAnswer } from '../types';
 import { useI18n } from '../i18n/useI18n';
 
@@ -40,12 +40,31 @@ const AskPage: React.FC = () => {
     if (!q || isLoading) return;
     setIsLoading(true);
     setError(null);
+    setResult(null);
     try {
-      const data = await askInfo(q);
-      setResult(data);
+      // SOT-1374 / C: まずストリーミングで回答を逐次表示し、体感待ち時間を縮める。
+      let streamed = '';
+      let streamedSources: RagAnswer['sources'] = [];
+      const data = await askInfoStream(q, {
+        onSources: (s) => {
+          streamedSources = s;
+          setResult({ answer: streamed, sources: s });
+        },
+        onToken: (text) => {
+          streamed += text;
+          setResult({ answer: streamed, sources: streamedSources });
+        },
+      });
+      // ストリームが空(未対応/モック等)なら非ストリーミングにフォールバックする。
+      setResult(data.answer.trim() ? data : await askInfo(q));
     } catch {
-      setError(t('ask.error'));
-      setResult(null);
+      // ストリーミング自体が失敗したら従来の /ask にフォールバックする。
+      try {
+        setResult(await askInfo(q));
+      } catch {
+        setError(t('ask.error'));
+        setResult(null);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -112,7 +131,7 @@ const AskPage: React.FC = () => {
         </div>
       )}
 
-      {isLoading && (
+      {isLoading && !result && (
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <span className="h-8 w-8 mb-3 rounded-full border-2 border-border border-t-blue-500 animate-spin" aria-hidden />
           <p className="text-sm">{t('ask.generating')}</p>
@@ -127,7 +146,7 @@ const AskPage: React.FC = () => {
         </div>
       )}
 
-      {!isLoading && result && (
+      {result && (
         <div className="space-y-6">
           <div className="bg-surface rounded-lg shadow-sm border border-border p-5">
             <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2">{t('ask.answer')}</h2>

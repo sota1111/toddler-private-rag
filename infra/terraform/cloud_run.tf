@@ -24,8 +24,9 @@ resource "google_cloud_run_v2_service" "backend" {
     service_account = local.runtime_sa
 
     # SOT-1366 item C: cap fan-out to protect cost / Vertex AI quota.
+    # SOT-1374 item A: keep 1 warm instance to avoid cold-start latency on the backend.
     scaling {
-      min_instance_count = 0
+      min_instance_count = 1
       max_instance_count = 5
     }
 

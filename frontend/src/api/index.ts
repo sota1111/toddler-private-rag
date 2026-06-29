@@ -173,6 +173,71 @@ export const askInfo = async (query: string, top_k = 4): Promise<RagAnswer> => {
   return response.data;
 };
 
+// SOT-1374 / C: ストリーミング版の質問。回答トークンを逐次受け取り、体感待ち時間を縮める。
+// SSE(text/event-stream)を fetch で読み、token を onToken に流す。非対応環境では呼び出し側が
+// askInfo(/info/ask) にフォールバックできるよう、失敗時は例外を投げる。
+export const askInfoStream = async (
+  query: string,
+  handlers: { onToken?: (text: string) => void; onSources?: (sources: RagAnswer['sources']) => void },
+  top_k = 4,
+): Promise<RagAnswer> => {
+  const response = await fetch('/api/info/ask-stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ query, top_k }),
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`ask-stream failed: ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let answer = '';
+  let sources: RagAnswer['sources'] = [];
+
+  const handleEvent = (event: string, data: string) => {
+    if (event === 'sources') {
+      try {
+        sources = JSON.parse(data);
+        handlers.onSources?.(sources);
+      } catch {
+        /* ignore malformed sources frame */
+      }
+    } else if (event === 'token') {
+      try {
+        const text = JSON.parse(data).text ?? '';
+        answer += text;
+        if (text) handlers.onToken?.(text);
+      } catch {
+        /* ignore malformed token frame */
+      }
+    }
+  };
+
+  // SSE フレームは空行(\n\n)区切り。各フレームの "event:" と "data:" 行をパースする。
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let sep: number;
+    while ((sep = buffer.indexOf('\n\n')) !== -1) {
+      const frame = buffer.slice(0, sep);
+      buffer = buffer.slice(sep + 2);
+      let event = 'message';
+      const dataLines: string[] = [];
+      for (const line of frame.split('\n')) {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+      }
+      if (dataLines.length) handleEvent(event, dataLines.join('\n'));
+    }
+  }
+
+  return { answer, sources };
+};
+
 // SOT-1039 / 提案3: 登録時AI自動タグ付け
 export const suggestInfoTags = async (payload: {
   title: string;

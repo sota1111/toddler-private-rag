@@ -1,10 +1,12 @@
 import asyncio
 import datetime
+import json
 import logging
 import os
 import tempfile
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import StreamingResponse
 from typing import List, Optional, Union
 from .. import schemas, storage, ocr, tagging, extraction, reminders, clock, submission_agent
 from ..privacy import redact_pii
@@ -13,6 +15,7 @@ from ..routers.auth import get_current_user
 from ..rag.service import get_rag_service
 from ..rag.hybrid import hybrid_search
 from ..rag.indexing import index_info_id
+from ..timing import time_block
 
 logger = logging.getLogger(__name__)
 
@@ -136,13 +139,52 @@ def ask_info(
     """
     service = get_rag_service(repo, ocr_only=True)
     extra_contexts = _upcoming_event_contexts(repo)
-    result = service.answer(
-        payload.query, top_k=payload.top_k, extra_contexts=extra_contexts
-    )
+    # SOT-1374 / D: /ask 全体(検索+生成)の所要時間も計測する(内訳は service 側で個別に出る)。
+    with time_block("ask_total", top_k=payload.top_k):
+        result = service.answer(
+            payload.query, top_k=payload.top_k, extra_contexts=extra_contexts
+        )
     return schemas.RagAnswer(
         answer=result.answer,
         sources=[_to_rag_source(s) for s in result.sources],
     )
+
+
+@router.post("/ask-stream")
+def ask_info_stream(
+    payload: schemas.RagQuery,
+    repo: InfoRepository = Depends(get_info_repository),
+    current_user: str = Depends(get_current_user),
+):
+    """`/ask` のストリーミング版 (SOT-1374 / C)。回答を逐次返し、体感待ち時間を縮める。
+
+    既存の `POST /info/ask`(JSON)は後方互換のためそのまま維持する。本エンドポイントは
+    Server-Sent Events 風の text/event-stream で、まず ``event: sources`` を1回、続けて
+    ``event: token`` を逐次、最後に ``event: done`` を返す。フロントは未対応でも `/ask` に
+    フォールバックできる。
+    """
+    service = get_rag_service(repo, ocr_only=True)
+    extra_contexts = _upcoming_event_contexts(repo)
+    sources, chunks = service.answer_stream(
+        payload.query, top_k=payload.top_k, extra_contexts=extra_contexts
+    )
+    sources_payload = [_to_rag_source(s).model_dump() for s in sources]
+
+    def _event_stream():
+        # 先に sources(出典)を流す。
+        yield "event: sources\ndata: " + json.dumps(
+            sources_payload, ensure_ascii=False
+        ) + "\n\n"
+        with time_block("ask_stream_generate", top_k=payload.top_k):
+            for piece in chunks:
+                if not piece:
+                    continue
+                yield "event: token\ndata: " + json.dumps(
+                    {"text": piece}, ensure_ascii=False
+                ) + "\n\n"
+        yield "event: done\ndata: {}\n\n"
+
+    return StreamingResponse(_event_stream(), media_type="text/event-stream")
 
 
 @router.get("/search", response_model=schemas.RagSearchResponse)

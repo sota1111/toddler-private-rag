@@ -1,14 +1,67 @@
+import hashlib
 import logging
 import os
 import re
+import tempfile
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Optional, Union
+
+from .concurrency import BoundedCache
 
 if TYPE_CHECKING:
     from .schemas import DocumentExtraction
 
 logger = logging.getLogger(__name__)
+
+# SOT-1374 / B: 同じ画像/PDF を再 OCR しないためのプロセス内キャッシュ。
+# キー = (ファイルバイト列のハッシュ, mime_type)。OCR は外部API待ちが主体なので、
+# 同一バイト列の再アップロード時に外部呼び出しを丸ごと省ける。
+_OCR_CACHE = BoundedCache(maxsize=128)
+
+
+def _ocr_max_image_dim() -> int:
+    """OCR 前に画像を縮小する最大辺(px)。``OCR_MAX_IMAGE_DIM``、既定 2048。0 以下で無効。"""
+    try:
+        return int(os.getenv("OCR_MAX_IMAGE_DIM", "2048"))
+    except (TypeError, ValueError):
+        return 2048
+
+
+def _maybe_downscale_image(file_path: Path) -> Optional[Path]:
+    """画像の最大辺が上限を超える場合のみ、縮小したコピーを temp に作って返す (SOT-1374 / C)。
+
+    縮小不要 / Pillow 不在 / 失敗時は ``None`` を返す(呼び出し側は元ファイルを使う)。
+    返り値が Path のときは呼び出し側が使用後に削除する責務を持つ。
+    元ファイルは一切上書きしない。
+    """
+    max_dim = _ocr_max_image_dim()
+    if max_dim <= 0:
+        return None
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    try:
+        with Image.open(file_path) as img:
+            width, height = img.size
+            if max(width, height) <= max_dim:
+                return None
+            scale = max_dim / float(max(width, height))
+            new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
+            resized = img.convert("RGB") if img.mode not in ("RGB", "L") else img.copy()
+            resized = resized.resize(new_size)
+            fd, tmp_name = tempfile.mkstemp(suffix=".jpg", prefix="ocr_down_")
+            os.close(fd)
+            tmp_path = Path(tmp_name)
+            resized.save(tmp_path, format="JPEG", quality=85)
+        logger.info(
+            "[ocr] downscaled image %dx%d -> %dx%d for OCR", width, height, *new_size
+        )
+        return tmp_path
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning("image downscale failed, using original: %s", type(e).__name__)
+        return None
 
 
 def _gemini_ocr_enabled() -> bool:
@@ -256,11 +309,23 @@ def extract_text(file_path: Union[str, Path], mime_type: str) -> str:
         logger.warning("OCR target file not found")
         return ""
 
+    # SOT-1374 / B: 同一バイト列 + mime の OCR 結果はキャッシュから返し、再 OCR を省く。
+    cache_key = None
+    try:
+        digest = hashlib.sha256(file_path.read_bytes()).hexdigest()
+        cache_key = (digest, mime_type)
+        cached = _OCR_CACHE.get(cache_key)
+        if cached is not None:
+            logger.info("[ocr] cache hit (mime=%s)", mime_type)
+            return cached
+    except Exception:  # pragma: no cover - hashing must never break OCR
+        cache_key = None
+
     try:
         if mime_type.startswith("image/"):
-            return _extract_from_image(file_path)
+            result = _extract_from_image(file_path)
         elif mime_type == "application/pdf":
-            return _extract_from_pdf(file_path)
+            result = _extract_from_pdf(file_path)
         else:
             logger.warning(f"Unsupported mime type for OCR: {mime_type}")
             return ""
@@ -268,37 +333,58 @@ def extract_text(file_path: Union[str, Path], mime_type: str) -> str:
         logger.warning(f"OCR extraction failed (ext={file_path.suffix}): {type(e).__name__}")
         return ""
 
+    if cache_key is not None and result:
+        _OCR_CACHE.set(cache_key, result)
+    return result
+
 def _extract_from_image(file_path: Path) -> str:
     # どのエンジンを試したかを記録し、全エンジンが空を返したときに原因追跡できるようにする。
     attempted: list[str] = []
 
-    # Prefer Cloud Vision API when configured; fall back to Gemini, then local OCR.
-    if _vision_ocr_enabled():
-        attempted.append("vision")
-        vision_text = _extract_from_image_vision(file_path)
-        if vision_text:
-            return vision_text
+    # SOT-1374 / C: 大きすぎる画像は OCR 前に縮小し、転送・処理時間を削減する。
+    # 縮小コピーは temp に作り、元ファイルは変更しない。使用後に削除する。
+    downscaled = _maybe_downscale_image(file_path)
+    work_path = downscaled or file_path
+    try:
+        # Prefer Cloud Vision API when configured; fall back to Gemini, then local OCR.
+        if _vision_ocr_enabled():
+            attempted.append("vision")
+            vision_text = _extract_from_image_vision(work_path)
+            if vision_text:
+                return vision_text
 
-    # Prefer Gemini vision when configured; fall back to local OCR on empty/failure.
-    if _gemini_ocr_enabled():
-        attempted.append("gemini")
-        gemini_text = _extract_from_image_gemini(file_path)
-        if gemini_text:
-            return gemini_text
+        # Prefer Gemini vision when configured; fall back to local OCR on empty/failure.
+        if _gemini_ocr_enabled():
+            attempted.append("gemini")
+            gemini_text = _extract_from_image_gemini(work_path)
+            if gemini_text:
+                return gemini_text
 
+        attempted.append("tesseract")
+        return _tesseract_image(work_path, attempted)
+    finally:
+        if downscaled is not None:
+            try:
+                os.remove(downscaled)
+            except OSError:
+                pass
+
+
+def _tesseract_image(file_path: Path, attempted: list[str]) -> str:
     try:
         from PIL import Image
         import pytesseract
     except ImportError:
         logger.warning("OCR libraries (Pillow/pytesseract) not installed")
-        if attempted:
+        # tesseract も使えない場合、それ以前に試したエンジン名を記録しておく。
+        prior = [a for a in attempted if a != "tesseract"]
+        if prior:
             logger.warning(
                 "OCR produced no text (engines attempted: %s; tesseract unavailable)",
-                ", ".join(attempted),
+                ", ".join(prior),
             )
         return ""
 
-    attempted.append("tesseract")
     try:
         img = Image.open(file_path)
         # Try with Japanese and English

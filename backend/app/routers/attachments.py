@@ -4,6 +4,8 @@ import os
 import logging
 from typing import Optional, Union
 from .. import schemas, storage, ocr, extraction, clock
+from ..concurrency import run_parallel
+from ..timing import time_block
 from ..privacy import redact_pii
 from ..repository import (
     AttachmentRepository,
@@ -37,7 +39,10 @@ async def process_ocr(
     structured = None
     ocr_ok = False
     try:
-        ocr_text = ocr.extract_text(ocr_path, content_type)
+        # SOT-1374 / D: OCR(外部API待ちが主体)の所要時間を計測する。OCR は並列化しない(指示)。
+        with time_block("ocr", attachment_id=att_id) as t:
+            ocr_text = ocr.extract_text(ocr_path, content_type)
+            t["chars"] = len(ocr_text or "")
         # 構造化抽出を生成（detected_dates / detected_items を enrich に活用する）
         structured = ocr.build_extraction(ocr_text)
 
@@ -112,10 +117,20 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
         # SOT-1324: 写真(メイン)レコードは本登録(finalize)を介さず直接 `registered` で昇格する。
         extra_ids = []
         try:
+            # SOT-1374 / B: 全体タイトル抽出(build_draft_fields)とタスク分割(build_task_drafts)は
+            # 同じ safe_text に対する互いに独立した LLM 呼び出しなので、並列実行して待ち時間を縮める。
+            # （OCR は並列化しない。並列化は LLM/埋め込みのみ、という指示に従う。）
+            with time_block("llm_extract_parallel"):
+                overall, tasks = run_parallel(
+                    lambda: extraction.build_draft_fields(
+                        safe_text or "", detected_dates, detected_items, language=language
+                    ),
+                    lambda: extraction.build_task_drafts(
+                        safe_text or "", detected_dates, detected_items, language=language
+                    ),
+                )
+
             # 写真+タイトルの登録レコード: 全体タイトル/種別/本文を作り、event_date は持たせない。
-            overall = extraction.build_draft_fields(
-                safe_text or "", detected_dates, detected_items, language=language
-            )
             info_repo.update(
                 info_id,
                 schemas.NurseryInfoUpdate(
@@ -130,9 +145,6 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
             )
 
             # タスクは別レコードに分離する（写真添付なし）。
-            tasks = extraction.build_task_drafts(
-                safe_text or "", detected_dates, detected_items, language=language
-            )
             for task in tasks:
                 try:
                     created = info_repo.create(

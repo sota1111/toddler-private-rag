@@ -12,12 +12,20 @@ import logging
 import math
 import os
 import re
-from typing import List
+from typing import Iterator, List
 
 logger = logging.getLogger(__name__)
 
 _FAKE_DIMENSION = 256
 _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
+
+
+def _embed_max_workers() -> int:
+    """並列 embed のワーカー数(``EMBED_MAX_WORKERS``、既定 4)。"""
+    try:
+        return max(1, int(os.getenv("EMBED_MAX_WORKERS", "4")))
+    except (TypeError, ValueError):
+        return 4
 
 
 # --- Interfaces ---
@@ -39,6 +47,14 @@ class LLMProvider(abc.ABC):
     def generate(self, question: str, contexts: List[str]) -> str:
         """Generate an answer for ``question`` grounded in ``contexts``."""
         ...
+
+    def generate_stream(self, question: str, contexts: List[str]) -> Iterator[str]:
+        """回答を逐次(チャンク)で返す (SOT-1374 / C ストリーミング)。
+
+        既定実装は ``generate`` を1回呼んで全文を1チャンクとして返す
+        (後方互換: ストリーミング非対応プロバイダでも動く)。
+        """
+        yield self.generate(question, contexts)
 
 
 # --- Fake (deterministic, offline) implementations ---
@@ -89,6 +105,13 @@ class FakeLLMProvider(LLMProvider):
         excerpt = " / ".join(c.strip().replace("\n", " ")[:200] for c in contexts if c.strip())
         return f"「{question}」について、関連情報に基づくと: {excerpt}"
 
+    def generate_stream(self, question: str, contexts: List[str]) -> Iterator[str]:
+        # オフライン/テストでもストリーミング経路を観測できるよう、全文を空白で分割して逐次返す。
+        text = self.generate(question, contexts)
+        parts = text.split(" ")
+        for i, part in enumerate(parts):
+            yield part if i == 0 else " " + part
+
 
 # --- Real (Gemini) implementations — Vertex AI via google-genai, SDK imported lazily ---
 
@@ -103,16 +126,22 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         return self._dimension
 
     def embed(self, texts: List[str]) -> List[List[float]]:
+        # SOT-1374 / B+C: 埋め込みは外部API待ちが主体なので、複数テキストを
+        # ThreadPoolExecutor で並列(バッチ的)に embed して壁時計時間を縮める。
+        # 入力順は parallel_map が保持する。OCR は並列化しない(指示)。
         from ..ai_client import get_genai_client, with_retry
+        from ..concurrency import parallel_map
 
         client = get_genai_client()
-        vectors: List[List[float]] = []
-        for text in texts:
+
+        def _embed_one(text: str) -> List[float]:
             result = with_retry(
                 lambda t=text: client.models.embed_content(model=self._model, contents=t)
             )
-            vectors.append(list(result.embeddings[0].values))
-        return vectors
+            return list(result.embeddings[0].values)
+
+        max_workers = _embed_max_workers()
+        return parallel_map(_embed_one, list(texts), max_workers=max_workers)
 
 
 class GeminiLLMProvider(LLMProvider):
@@ -121,11 +150,9 @@ class GeminiLLMProvider(LLMProvider):
 
         self._model = model or get_model_name()
 
-    def generate(self, question: str, contexts: List[str]) -> str:
-        from ..ai_client import default_generate_config, get_genai_client, with_retry
+    def _build_prompt(self, question: str, contexts: List[str]) -> str:
         from .. import clock
 
-        client = get_genai_client()
         context_block = "\n\n".join(f"- {c}" for c in contexts)
         # SOT-1297: 今日の日付(JST)を注入し、相対的な日付の質問に答えられるようにする。
         _weekdays_ja = ("月", "火", "水", "木", "金", "土", "日")
@@ -134,12 +161,18 @@ class GeminiLLMProvider(LLMProvider):
             f"今日の日付は {today.isoformat()}（{_weekdays_ja[today.weekday()]}曜日）です。"
             "「今日」「明日」「今週」「来週」などの相対的な日付はこれを基準に解釈してください。"
         )
-        prompt = (
+        return (
             "あなたはおたよりナビです。以下のコンテキストのみに基づいて、"
             "日本語で簡潔に質問へ回答してください。コンテキストに無いことは推測しないでください。\n\n"
             f"{today_line}\n\n"
             f"# コンテキスト\n{context_block}\n\n# 質問\n{question}\n\n# 回答"
         )
+
+    def generate(self, question: str, contexts: List[str]) -> str:
+        from ..ai_client import default_generate_config, get_genai_client, with_retry
+
+        client = get_genai_client()
+        prompt = self._build_prompt(question, contexts)
         cfg = default_generate_config(max_output_tokens=4096)
 
         def _gen():
@@ -151,6 +184,43 @@ class GeminiLLMProvider(LLMProvider):
 
         response = with_retry(_gen)
         return (getattr(response, "text", "") or "").strip()
+
+    def generate_stream(self, question: str, contexts: List[str]) -> Iterator[str]:
+        """Gemini のストリーミング生成 (SOT-1374 / C)。
+
+        逐次チャンクを yield する。SDK 差異/失敗時は ``generate`` の全文を1回 yield する
+        フォールバックに落ちる(回答が必ず返るようにする)。
+        """
+        from ..ai_client import default_generate_config, get_genai_client
+
+        prompt = self._build_prompt(question, contexts)
+        cfg = default_generate_config(max_output_tokens=4096)
+        try:
+            client = get_genai_client()
+            stream_fn = getattr(client.models, "generate_content_stream", None)
+            if stream_fn is None:  # SDK が古い等
+                yield self.generate(question, contexts)
+                return
+            if cfg is not None:
+                chunks = stream_fn(model=self._model, contents=prompt, config=cfg)
+            else:
+                chunks = stream_fn(model=self._model, contents=prompt)
+            emitted = False
+            for chunk in chunks:
+                piece = getattr(chunk, "text", "") or ""
+                if piece:
+                    emitted = True
+                    yield piece
+            if not emitted:
+                # ストリームが空だったら非ストリームで取り直す。
+                text = self.generate(question, contexts)
+                if text:
+                    yield text
+        except Exception as e:  # graceful degradation
+            logger.warning("generate_stream failed, falling back to non-stream: %s", e)
+            text = self.generate(question, contexts)
+            if text:
+                yield text
 
 
 # --- Factories (env-selected; default = gemini when AI client available, else fake) ---
