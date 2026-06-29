@@ -97,6 +97,8 @@ def _reminder(info: Any, *, kind: str, target: datetime.date, days_until: int,
         "status": getattr(info, "status", "") or "",
         "priority": getattr(info, "priority", "") or "",
         "message": message[:120],
+        # SOT-1397: 持ち物リマインドの文言をフロントで言語設定に合わせて再構成するため items を公開。
+        "items": getattr(info, "items", None),
     }
 
 

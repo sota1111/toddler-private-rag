@@ -56,6 +56,29 @@ const DashboardSection: React.FC<{
   );
 };
 
+// SOT-1397: 能動リマインドの文言を表示言語に合わせてフロントで再構成する。
+// サーバの message は固定の日本語なので、種別/緊急度/残り日数/タイトル/持ち物から組み立てる。
+const composeReminderMessage = (
+  item: ReminderItem,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): string => {
+  const bucket = item.urgency === 'overdue' ? 'overdue' : item.urgency === 'today' ? 'today' : 'future';
+  const n = Math.abs(item.days_until);
+  const title = item.title;
+  switch (item.kind) {
+    case 'belongings':
+      return t('reminder.msg.belongings', { items: item.items ?? '', title });
+    case 'event':
+      // 行事は overdue を持たない。防御的に overdue→today に畳む。
+      return t(`reminder.msg.event.${bucket === 'overdue' ? 'today' : bucket}`, { n, title });
+    case 'submission':
+      return t(`reminder.msg.submission.${bucket}`, { n, title });
+    case 'deadline':
+    default:
+      return t(`reminder.msg.deadline.${bucket}`, { n, title });
+  }
+};
+
 const ReminderRow: React.FC<{ item: ReminderItem }> = ({ item }) => {
   const { t } = useI18n();
   // 種別ラベル（保存値は日本語のまま、表示は設定言語に合わせて翻訳）
@@ -76,7 +99,7 @@ const ReminderRow: React.FC<{ item: ReminderItem }> = ({ item }) => {
               {t('reminder.kind.submission')}
             </span>
           )}
-          <p className="font-medium text-foreground truncate">{item.message}</p>
+          <p className="font-medium text-foreground truncate">{composeReminderMessage(item, t)}</p>
         </div>
         <p className="text-xs text-muted-foreground">
           {optLabel('infoType', item.info_type)} ・ {item.target_date}

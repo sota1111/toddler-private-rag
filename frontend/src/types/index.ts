@@ -139,6 +139,7 @@ export interface ReminderItem {
   status: string
   priority: string
   message: string
+  items?: string | null
 }
 
 export interface ReminderFeed {

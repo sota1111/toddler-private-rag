@@ -244,6 +244,7 @@ class ReminderItem(BaseModel):
     status: str
     priority: str
     message: str
+    items: Optional[str] = None  # SOT-1397: 持ち物リマインドの持ち物テキスト（フロントで言語化に使用）
 
 
 class ReminderFeed(BaseModel):
