@@ -477,6 +477,8 @@ def investigate_deadline(
                         event_date=(sub.get("event_date") or None),
                         due_date=(sub.get("due_date") or None),
                         tags=(sub.get("tags") or None),
+                        # SOT-1368 follow-up: 親レコードに紐づけた子どもを引き継ぐ。
+                        child_id=getattr(db_info, "child_id", None),
                         status="未確認",
                         priority="普通",
                         registration_state="draft",
