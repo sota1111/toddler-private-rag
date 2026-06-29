@@ -136,6 +136,16 @@ const putFileToSignedUrl = async (session: UploadSession, file: File): Promise<v
   }
 };
 
+// SOT-1378: GCS 直 PUT 完了後、finalize を明示的に呼んで OCR を起動する。
+// GCS OBJECT_FINALIZE→Pub/Sub 通知に依存させない（冪等なので二重起動でも安全）。
+// これを呼ばないと、画像は GCS に保存されても仮登録・写真一覧に反映されない。
+export const finalizeUploadSession = async (
+  infoId: number | string,
+  uploadId: number | string,
+): Promise<void> => {
+  await api.post(`/info/${infoId}/upload/session/${uploadId}/finalize`);
+};
+
 // 2段アップロード。session 発行に失敗（未対応 501 等）したときだけ従来の multipart に
 // フォールバックする。session 取得後の PUT 失敗はそのまま投げる（二重アップロード防止）。
 export const uploadAttachmentSmart = async (
@@ -143,19 +153,22 @@ export const uploadAttachmentSmart = async (
   file: File,
   language?: string,
 ): Promise<void> => {
-  let session: UploadSession | null = null;
+  let session: UploadSession | null;
   try {
     session = await createUploadSession(infoId, file, language);
   } catch {
     session = null;
   }
   // session 未対応（501 / エラー / 署名URLを返さない）の場合は従来の multipart に
-  // フォールバックする。upload_url が得られたときだけ GCS へ直接 PUT する。
+  // フォールバックする（multipart 側は同期 OCR なので finalize 不要）。
+  // upload_url が得られたときだけ GCS へ直接 PUT する。
   if (!session || !session.upload_url) {
     await uploadAttachment(infoId, file, language);
     return;
   }
   await putFileToSignedUrl(session, file);
+  // SOT-1378: PUT 成功直後に OCR を明示起動する（仮登録/写真一覧に確実に反映させる）。
+  await finalizeUploadSession(infoId, session.upload_id);
 };
 
 export const extractInfoDraft = async (file: File): Promise<InfoExtractDraft> => {
