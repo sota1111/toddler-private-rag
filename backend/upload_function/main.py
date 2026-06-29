@@ -13,18 +13,49 @@ cold-starts fast. It reproduces the exact public contract of the old ``routers/u
 
 The heavy OCR/enrich work still runs on the existing backend ("AI worker"), triggered over HTTP.
 """
+import contextlib
 import datetime
 import hashlib
 import hmac
 import logging
 import os
 import re
+import time
 import uuid
 
 import functions_framework
 from flask import Response, jsonify, request
 
 logger = logging.getLogger(__name__)
+
+
+# --- Timing (SOT-1374) ---
+# 軽量アップロード関数は backend/app(重依存)を読み込まない設計のため、共有 timing.py は使えない。
+# 同じ `[timing] stage=<name> elapsed_ms=<float> <k=v ...>` 形式をインラインで再現する。
+def _fmt_timing_fields(fields: dict) -> str:
+    if not fields:
+        return ""
+    return " " + " ".join(f"{k}={v}" for k, v in fields.items() if v is not None)
+
+
+@contextlib.contextmanager
+def _time_block(stage: str, **fields):
+    start = time.perf_counter()
+    status = "ok"
+    try:
+        yield fields
+    except Exception:
+        status = "error"
+        raise
+    finally:
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        merged = {**fields, "status": status} if status == "error" else fields
+        logger.info(
+            "[timing] stage=%s elapsed_ms=%.1f%s",
+            stage,
+            elapsed_ms,
+            _fmt_timing_fields(merged),
+        )
 
 # --- Constants (mirrors backend/app) ---
 _APP_NAME = "toddler-private-rag"
@@ -201,46 +232,50 @@ def upload_attachment(req):
     if content_type != "application/pdf" and not content_type.startswith("image/"):
         return _json({"detail": "Unsupported file type"}, 400)
 
-    content = file.read()
-    file_size = len(content)
-    if file_size > MAX_FILE_SIZE:
+    # SOT-1374: 画像アップロード(受信→GCS書込→Firestore)の所要時間を計測する。
+    with _time_block("upload_total", info_id=info_id):
+        with _time_block("upload_read"):
+            content = file.read()
+        file_size = len(content)
+        if file_size > MAX_FILE_SIZE:
+            return _json(
+                {"detail": f"File too large. Maximum size is {MAX_FILE_SIZE / (1024 * 1024)}MB"},
+                413,
+            )
+
+        try:
+            if not _info_exists(info_id):
+                return _json({"detail": "NurseryInfo not found"}, 404)
+
+            stored_filename = _generate_stored_filename(file.filename)
+            object_key = f"uploads/{stored_filename}"
+            with _time_block("upload_gcs", bytes=file_size):
+                _save_to_gcs(object_key, content, content_type)
+
+            att = _create_attachment(
+                info_id=info_id,
+                stored_filename=stored_filename,
+                original_filename=file.filename,
+                mime_type=content_type,
+                file_size=file_size,
+                object_key=object_key,
+            )
+        except Exception as e:
+            logger.exception("upload failed: %s", e)
+            return _json({"detail": "Upload failed"}, 500)
+
+        # Best-effort OCR dispatch; never blocks the response.
+        _dispatch_ocr(att["id"], info_id, language)
+
         return _json(
-            {"detail": f"File too large. Maximum size is {MAX_FILE_SIZE / (1024 * 1024)}MB"},
-            413,
+            {
+                "id": att["id"],
+                "info_id": att["info_id"],
+                "original_filename": att["original_filename"],
+                "mime_type": att["mime_type"],
+                "file_size": att["file_size"],
+                "ocr_status": att["ocr_status"],
+                "created_at": att["created_at"].isoformat(),
+            },
+            200,
         )
-
-    try:
-        if not _info_exists(info_id):
-            return _json({"detail": "NurseryInfo not found"}, 404)
-
-        stored_filename = _generate_stored_filename(file.filename)
-        object_key = f"uploads/{stored_filename}"
-        _save_to_gcs(object_key, content, content_type)
-
-        att = _create_attachment(
-            info_id=info_id,
-            stored_filename=stored_filename,
-            original_filename=file.filename,
-            mime_type=content_type,
-            file_size=file_size,
-            object_key=object_key,
-        )
-    except Exception as e:
-        logger.exception("upload failed: %s", e)
-        return _json({"detail": "Upload failed"}, 500)
-
-    # Best-effort OCR dispatch; never blocks the response.
-    _dispatch_ocr(att["id"], info_id, language)
-
-    return _json(
-        {
-            "id": att["id"],
-            "info_id": att["info_id"],
-            "original_filename": att["original_filename"],
-            "mime_type": att["mime_type"],
-            "file_size": att["file_size"],
-            "ocr_status": att["ocr_status"],
-            "created_at": att["created_at"].isoformat(),
-        },
-        200,
-    )

@@ -38,39 +38,42 @@ async def process_ocr(
     safe_text = ""
     structured = None
     ocr_ok = False
-    try:
-        # SOT-1374 / D: OCR(外部API待ちが主体)の所要時間を計測する。OCR は並列化しない(指示)。
-        with time_block("ocr", attachment_id=att_id) as t:
-            ocr_text = ocr.extract_text(ocr_path, content_type)
-            t["chars"] = len(ocr_text or "")
-        # 構造化抽出を生成（detected_dates / detected_items を enrich に活用する）
-        structured = ocr.build_extraction(ocr_text)
+    # SOT-1374: 写真1枚あたりのOCR処理全体(OCR本体+構造化抽出+保存+事前翻訳)の所要時間を計測する。
+    # 細粒度の `stage=ocr`(OCR本体)はそのまま残し、ここでは end-to-end の `process_ocr_total` を出す。
+    with time_block("process_ocr_total", attachment_id=att_id):
+        try:
+            # SOT-1374 / D: OCR(外部API待ちが主体)の所要時間を計測する。OCR は並列化しない(指示)。
+            with time_block("ocr", attachment_id=att_id) as t:
+                ocr_text = ocr.extract_text(ocr_path, content_type)
+                t["chars"] = len(ocr_text or "")
+            # 構造化抽出を生成（detected_dates / detected_items を enrich に活用する）
+            structured = ocr.build_extraction(ocr_text)
 
-        # PIIをマスクしてから保存
-        safe_text = redact_pii(structured.raw_text)
-        repo.set_ocr_result(att_id, ocr_text=safe_text, ocr_status="done")
-        ocr_ok = True
-        # SOT-1330: 文字起こし完了直後に一度だけ翻訳して保存する（読み込みの度に翻訳しない）。
-        if safe_text.strip():
-            try:
-                pre_lang = language if language in ("ja", "en") else "ja"
-                repo.set_translation(
-                    att_id,
-                    language=pre_lang,
-                    text=extraction.translate_text(safe_text, pre_lang),
-                )
-            except Exception as te:
-                logger.warning("pre-translate failed for attachment %s: %s", att_id, te)
-    except Exception as e:
-        logger.error(f"OCR failed for attachment {att_id}: {str(e)}")
-        repo.set_ocr_result(att_id, ocr_text=None, ocr_status="failed")
-    finally:
-        if cleanup_local and os.path.exists(ocr_path):
-            os.remove(ocr_path)
+            # PIIをマスクしてから保存
+            safe_text = redact_pii(structured.raw_text)
+            repo.set_ocr_result(att_id, ocr_text=safe_text, ocr_status="done")
+            ocr_ok = True
+            # SOT-1330: 文字起こし完了直後に一度だけ翻訳して保存する（読み込みの度に翻訳しない）。
+            if safe_text.strip():
+                try:
+                    pre_lang = language if language in ("ja", "en") else "ja"
+                    repo.set_translation(
+                        att_id,
+                        language=pre_lang,
+                        text=extraction.translate_text(safe_text, pre_lang),
+                    )
+                except Exception as te:
+                    logger.warning("pre-translate failed for attachment %s: %s", att_id, te)
+        except Exception as e:
+            logger.error(f"OCR failed for attachment {att_id}: {str(e)}")
+            repo.set_ocr_result(att_id, ocr_text=None, ocr_status="failed")
+        finally:
+            if cleanup_local and os.path.exists(ocr_path):
+                os.remove(ocr_path)
 
-        # Close session if SQLite
-        if isinstance(repo, SqliteAttachmentRepository):
-            repo.db.close()
+            # Close session if SQLite
+            if isinstance(repo, SqliteAttachmentRepository):
+                repo.db.close()
 
     # SOT-1293: 自動登録(processing)のレコードは、ブラウザ操作に依存せず、ここ(サーバ側)で
     # enrich(JSON生成)→Firestore永続化→draft昇格まで完了させる。OCR失敗時もフォールバック
