@@ -115,7 +115,10 @@ const ReminderRow: React.FC<{ item: ReminderItem }> = ({ item }) => {
 const ProactiveReminders: React.FC = () => {
   const { t } = useI18n();
   const remindersQuery = useQuery({ queryKey: ['reminders'], queryFn: () => getReminders(7) });
-  const items = remindersQuery.data?.items ?? [];
+  // SOT-1398: 「持ち物(items)」は写真OCRの原文（未翻訳の日本語）をそのまま保持するため、
+  // 掲示板には表示しない（英語設定での日本語混在を解消し、写真の文字起こしを掲示板に出さない）。
+  // 通知(digest/push)用にサーバの belongings リマインド自体は温存し、掲示板表示のみ除外する。
+  const items = (remindersQuery.data?.items ?? []).filter((item) => item.kind !== 'belongings');
 
   if (remindersQuery.isLoading) {
     return (
@@ -194,8 +197,8 @@ const DashboardPage: React.FC = () => {
           accentClass="bg-sky-50 text-sky-700"
           renderItem={(item) => (
             <div>
+              {/* SOT-1398: 持ち物(items)は写真OCRの原文（未翻訳）なので掲示板には出さず、タイトルのみ表示する。 */}
               <p className="font-medium text-foreground">{item.title}</p>
-              {item.items && <p className="text-sm text-muted-foreground">{t('dashboard.itemsLabel')}{item.items}</p>}
             </div>
           )}
         />
