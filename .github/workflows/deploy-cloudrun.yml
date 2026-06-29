@@ -71,10 +71,26 @@ jobs:
             --max-instances 5 \
             --concurrency 40
 
-      # ----- Upload Cloud Function (SOT-1359: gen2, slim, fast-booting, upload-only) -----
-      # Replaces the former lightweight upload Cloud Run service. Source: backend/upload_function.
-      - name: Deploy upload Cloud Function (gen2)
+      # ----- Upload Cloud Run service (SOT-1376: upload-api, slim, always-warm, upload-only) -----
+      # Replaces the SOT-1359 gen2 Cloud Function. Same functions-framework app
+      # (backend/upload_function/main.py), now packaged as a Cloud Run container with
+      # --min-instances 1 so the upload entrypoint stays warm (cold-start mitigation).
+      - name: Build upload-api image
         env:
+          IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }}
+        run: |
+          docker build -f backend/upload_function/Dockerfile -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" backend/upload_function
+
+      - name: Push upload-api image
+        env:
+          IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }}
+        run: |
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
+      - name: Deploy upload-api to Cloud Run
+        env:
+          IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }}
           RUNTIME_SA: ${{ secrets.CLOUD_RUN_RUNTIME_SA }}
         run: |
           BACKEND_URL=$(gcloud run services describe ${{ secrets.CLOUD_RUN_SERVICE_BACKEND }} \
@@ -88,21 +104,20 @@ jobs:
           # SOT-1366 item A: adopt the least-privilege runtime SA when configured.
           SA_FLAG=""
           [ -n "$RUNTIME_SA" ] && SA_FLAG="--service-account=$RUNTIME_SA"
-          gcloud functions deploy ${{ secrets.CLOUD_FUNCTION_UPLOAD }} \
-            --gen2 \
+          gcloud run deploy ${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }} \
+            --image "$IMAGE:${{ github.sha }}" \
             --region ${{ secrets.GCP_REGION }} \
             --project ${{ secrets.GCP_PROJECT_ID }} \
-            --runtime python311 \
-            --source backend/upload_function \
-            --entry-point upload_attachment \
-            --trigger-http \
+            --platform managed \
             --allow-unauthenticated \
             $SA_FLAG \
             --set-secrets "AUTH_SECRET=rag-auth-secret:latest,WORKER_INVOKE_TOKEN=rag-worker-invoke-token:latest" \
             --set-env-vars "APP_ENV=production,CORS_ORIGINS=https://${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }}-${{ secrets.GCP_PROJECT_NUMBER }}.${{ secrets.GCP_REGION }}.run.app,DATABASE_TYPE=firestore,STORAGE_BACKEND=gcs,GCS_BUCKET_NAME=gen-lang-client-0243034020-toddler-private-rag,GOOGLE_CLOUD_PROJECT=gen-lang-client-0243034020,AI_WORKER_URL=$BACKEND_URL" \
             --memory 256Mi \
-            --timeout 60s \
-            --max-instances 5
+            --timeout 60 \
+            --min-instances 1 \
+            --max-instances 5 \
+            --concurrency 40
 
       # ----- Frontend -----
       - name: Build frontend image
@@ -131,13 +146,12 @@ jobs:
             echo "ERROR: backend URL not resolved" >&2
             exit 1
           fi
-          UPLOAD_URL=$(gcloud functions describe ${{ secrets.CLOUD_FUNCTION_UPLOAD }} \
-            --gen2 \
+          UPLOAD_URL=$(gcloud run services describe ${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }} \
             --region ${{ secrets.GCP_REGION }} \
             --project ${{ secrets.GCP_PROJECT_ID }} \
-            --format 'value(serviceConfig.uri)')
+            --format 'value(status.url)')
           if [ -z "$UPLOAD_URL" ]; then
-            echo "ERROR: upload function URL not resolved" >&2
+            echo "ERROR: upload-api service URL not resolved" >&2
             exit 1
           fi
           # SOT-1366 item A: adopt the minimal frontend SA when configured.

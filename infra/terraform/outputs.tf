@@ -8,9 +8,9 @@ output "frontend_url" {
   value       = google_cloud_run_v2_service.frontend.uri
 }
 
-output "upload_function_url" {
-  description = "gen2 upload Cloud Function URL."
-  value       = google_cloudfunctions2_function.upload.service_config[0].uri
+output "upload_url" {
+  description = "Cloud Run upload-api service URL (SOT-1376)."
+  value       = google_cloud_run_v2_service.upload.uri
 }
 
 output "deploy_service_account_email" {

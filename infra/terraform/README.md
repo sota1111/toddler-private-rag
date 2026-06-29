@@ -18,7 +18,7 @@ already exist and fail with "already exists".
 | `storage.tf` | GCS attachments bucket |
 | `firestore.tf` | Firestore native database `(default)` |
 | `cloud_run.tf` | Cloud Run `backend` + `frontend` services (+ public invoker, scaling caps) |
-| `cloud_function.tf` | gen2 upload Cloud Function (+ public invoker, scaling cap) |
+| `cloud_run_upload.tf` | Cloud Run `upload-api` upload service, min-instances=1 (+ public invoker) (SOT-1376) |
 | `iam.tf` | Deploy SA + project roles; dedicated least-privilege **runtime** + **frontend** SAs |
 | `scheduler.tf` | Daily orphan-attachment cleanup Cloud Scheduler job (SOT-1366 item B) |
 | `wif.tf` | Workload Identity Federation pool/provider + SA binding |
@@ -28,14 +28,13 @@ already exist and fail with "already exists".
 - **Container images** — built/pushed/deployed by CI. `lifecycle.ignore_changes` keeps
   Terraform from reverting image changes, so the existing GitHub Actions workflow keeps
   working unchanged. **Do not delete `.github/workflows/deploy-cloudrun.yml`.**
-- **Function source zip** — produced by the `gcloud functions deploy` step; ignored.
 
 ## Relationship to the existing CI workflow
 
 Terraform owns the **platform and service definitions**; CI owns **image builds and
 rollouts**. After adopting Terraform:
-- `git push main` → CI builds images and runs `gcloud run deploy` / `gcloud functions deploy`
-  to ship a new image (Terraform ignores the image, so no drift fight).
+- `git push main` → CI builds images and runs `gcloud run deploy` (backend, frontend,
+  upload-api) to ship a new image (Terraform ignores the image, so no drift fight).
 - Infra changes (memory, env, IAM, new resources) → edit `.tf`, `terraform plan`, `terraform apply`.
 
 ## Prerequisites
@@ -54,7 +53,6 @@ rollouts**. After adopting Terraform:
    Discover real names if unsure:
    ```bash
    gcloud run services list --project gen-lang-client-0243034020
-   gcloud functions list --project gen-lang-client-0243034020 --gen2
    gcloud artifacts repositories list --project gen-lang-client-0243034020
    gcloud iam workload-identity-pools list --location global --project gen-lang-client-0243034020
    gcloud iam service-accounts list --project gen-lang-client-0243034020
@@ -93,17 +91,15 @@ rollouts**. After adopting Terraform:
    terraform import google_firestore_database.default \
      projects/PROJECT_ID/databases/'(default)'
 
-   # Cloud Run services
+   # Cloud Run services (backend, frontend, upload-api)
    terraform import google_cloud_run_v2_service.backend  projects/PROJECT_ID/locations/REGION/services/BACKEND_SERVICE
    terraform import google_cloud_run_v2_service.frontend projects/PROJECT_ID/locations/REGION/services/FRONTEND_SERVICE
+   terraform import google_cloud_run_v2_service.upload   projects/PROJECT_ID/locations/REGION/services/UPLOAD_SERVICE
 
    # Cloud Run invoker bindings (member tuple, space-separated)
    terraform import google_cloud_run_v2_service_iam_member.backend_invoker  "projects/PROJECT_ID/locations/REGION/services/BACKEND_SERVICE roles/run.invoker allUsers"
    terraform import google_cloud_run_v2_service_iam_member.frontend_invoker "projects/PROJECT_ID/locations/REGION/services/FRONTEND_SERVICE roles/run.invoker allUsers"
-
-   # Upload function (gen2) + its invoker (backed by a Cloud Run service of same name)
-   terraform import google_cloudfunctions2_function.upload projects/PROJECT_ID/locations/REGION/functions/UPLOAD_FUNCTION
-   terraform import google_cloud_run_v2_service_iam_member.upload_invoker "projects/PROJECT_ID/locations/REGION/services/UPLOAD_FUNCTION roles/run.invoker allUsers"
+   terraform import google_cloud_run_v2_service_iam_member.upload_invoker   "projects/PROJECT_ID/locations/REGION/services/UPLOAD_SERVICE roles/run.invoker allUsers"
 
    # Deploy service account + WIF
    terraform import google_service_account.deploy \
@@ -143,13 +139,14 @@ the declarations in sync so `terraform import` + `plan` converge to no-op. Run
 `terraform import` for the new resources below to bring them under state.
 
 - **A — least-privilege runtime SAs (`iam.tf`).** `toddler-run-runtime`
-  (backend + upload function: secretAccessor / datastore.user / storage.objectAdmin
+  (backend + upload-api: secretAccessor / datastore.user / storage.objectAdmin
   / aiplatform.user / logging / monitoring) and `toddler-run-frontend` (nginx:
   logging / monitoring only). The workflow passes them via the GitHub secrets
   `CLOUD_RUN_RUNTIME_SA` / `CLOUD_RUN_FRONTEND_SA`. **Set those secrets** so the
   next deploy adopts the SAs (empty secret = keep the default compute SA).
-- **C — scaling caps.** `min_instance_count = 0`, `max_instance_count = 5` on
-  Cloud Run; `max_instance_count = 5` on the function. Mirrored in the workflow.
+- **C — scaling caps.** `max_instance_count = 5` on all Cloud Run services;
+  `min_instance_count = 1` on backend and upload-api (always-warm), `0` on frontend.
+  Mirrored in the workflow.
 - **B — orphan cleanup (`scheduler.tf`).** Daily Cloud Scheduler POST to the
   backend `/internal/purge-orphans` (worker-token protected; the `/internal/*`
   routes are not under `/api`, so nginx never proxies them). It deletes only

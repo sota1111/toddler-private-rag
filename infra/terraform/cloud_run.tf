@@ -158,7 +158,7 @@ resource "google_cloud_run_v2_service" "frontend" {
       }
       env {
         name  = "UPLOAD_URL"
-        value = google_cloudfunctions2_function.upload.service_config[0].uri
+        value = google_cloud_run_v2_service.upload.uri
       }
     }
   }
