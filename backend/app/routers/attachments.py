@@ -345,6 +345,47 @@ async def create_upload_session(
     )
 
 
+@router.post("/info/{info_id}/upload/session/{upload_id}/finalize")
+async def finalize_upload_session(
+    info_id: Union[int, str],
+    upload_id: Union[int, str],
+    background_tasks: BackgroundTasks,
+    repo: AttachmentRepository = Depends(get_attachment_repository),
+    current_user: str = Depends(get_current_user),
+):
+    """SOT-1378: direct upload の client-confirmed finalize。
+
+    ブラウザが署名URLへ画像本体を直接 PUT し終えた直後に呼ぶ。GCS の OBJECT_FINALIZE →
+    Pub/Sub → `/internal/gcs-finalize` の非同期通知に依存せず、OCR をここで明示的に起動する。
+    これにより「画像は保存されたのに仮登録・写真一覧に出ない」（通知不達）を防ぐ。
+    Pub/Sub 経路と二重に呼ばれても begin_ocr_if_pending(pending→processing CAS) で冪等に吸収する。
+    """
+    att = repo.get(upload_id)
+    if att is None or str(getattr(att, "info_id", "")) != str(info_id):
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    # CAS: pending のときだけ OCR 起動権を得る（重複起動・gcs-finalize との競合を吸収）。
+    if not repo.begin_ocr_if_pending(att.id):
+        return {"status": "skipped", "reason": "already processing/done", "att_id": att.id}
+
+    storage_backend = storage.get_storage()
+    content = storage_backend.read(att.object_key)
+    ocr_path = storage_backend.local_path_for_ocr(att.object_key, content)
+    cleanup_local = (storage_backend.name == "gcs")
+    language = getattr(att, "language", None) or "ja"
+
+    background_tasks.add_task(
+        process_ocr,
+        att.id,
+        str(ocr_path),
+        att.mime_type,
+        cleanup_local,
+        att.info_id,
+        language,
+    )
+    return {"status": "accepted", "att_id": att.id}
+
+
 @router.get("/attachments/{att_id}/file")
 def get_attachment_file(
     att_id: Union[int, str],

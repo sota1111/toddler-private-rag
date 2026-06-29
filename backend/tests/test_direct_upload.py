@@ -223,3 +223,49 @@ def test_finalize_triggers_ocr_once(monkeypatch):
 
     assert len(calls) == 1
     assert calls[0][0] == att_id
+
+
+def test_client_finalize_triggers_ocr_once(monkeypatch):
+    """SOT-1378: client-confirmed finalize (直 PUT 直後の明示起動)。
+
+    session 発行で作られた pending Attachment に対し finalize を 2 回呼んでも、
+    CAS により OCR は 1 回だけ起動する（Pub/Sub 経路との二重起動も同様に吸収される）。
+    """
+    from app.routers import attachments as attachments_router
+
+    calls = []
+    monkeypatch.setattr(attachments_router, "process_ocr", lambda *a, **k: calls.append(a))
+
+    info_id = _create_info()
+    resp = client.post(
+        f"/api/info/{info_id}/upload/session",
+        json={"filename": "photo.jpg", "content_type": "image/jpeg", "file_size": 1234, "language": "ja"},
+    )
+    assert resp.status_code == 200, resp.text
+    upload_id = resp.json()["upload_id"]
+
+    r1 = client.post(f"/api/info/{info_id}/upload/session/{upload_id}/finalize")
+    assert r1.status_code == 200, r1.text
+    assert r1.json()["status"] == "accepted"
+
+    r2 = client.post(f"/api/info/{info_id}/upload/session/{upload_id}/finalize")
+    assert r2.status_code == 200
+    assert r2.json()["status"] == "skipped"
+
+    assert len(calls) == 1
+
+
+def test_client_finalize_404_for_wrong_info():
+    """SOT-1378: upload_id が指定 info_id に属さないときは 404。"""
+    info_id = _create_info()
+    other_info_id = _create_info()
+    resp = client.post(
+        f"/api/info/{info_id}/upload/session",
+        json={"filename": "photo.jpg", "content_type": "image/jpeg", "file_size": 1234, "language": "ja"},
+    )
+    assert resp.status_code == 200, resp.text
+    upload_id = resp.json()["upload_id"]
+
+    # 別の info_id 配下として finalize すると突合に失敗する
+    resp2 = client.post(f"/api/info/{other_info_id}/upload/session/{upload_id}/finalize")
+    assert resp2.status_code == 404
