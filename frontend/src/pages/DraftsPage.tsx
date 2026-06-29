@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDrafts, finalizeInfo, deleteInfo, updateInfo, getAttachmentFileUrl, getProcessingCount } from '../api';
 import type { NurseryInfo, NurseryInfoCreate } from '../types';
@@ -24,6 +24,32 @@ const DraftsPage: React.FC = () => {
     queryFn: getProcessingCount,
     refetchInterval: 5000,
   });
+  // SOT-1380 follow-up: processingCount(=サーバ側OCR処理中件数)だけだと、
+  // 写真アップ完了画面→仮登録画面へ移動した時点では OCR が既に終わっている／5秒ポーリングの
+  // 谷間で 0 になりやすく、「写真アップ直後」に文字起こし中メッセージが出ないことがあった。
+  // AutoRegisterPage がアップ成功時に保存する直近アップロード時刻を読み、一定時間内(=写真アップ
+  // 直後)であれば processingCount に依らず文字起こし中とみなす。仮登録が表示されるか、ウィンドウ
+  // (90秒)を過ぎれば自動的に通常表示へ戻る。時刻参照は副作用(useEffect)で行い、レンダーを純粋に保つ。
+  const readRecentRemainingMs = () => {
+    let ts: number;
+    try {
+      ts = Number(sessionStorage.getItem('tpr.lastPhotoUploadAt') || 0);
+    } catch {
+      ts = 0;
+    }
+    return ts > 0 ? 90_000 - (Date.now() - ts) : 0;
+  };
+  // マウント時点(=仮登録画面に来た瞬間)の判定を lazy initializer で一度だけ確定し、
+  // 残り時間が尽きたら setTimeout(非同期)で解除する。レンダー中に時刻参照しないため純粋。
+  const [recentUpload, setRecentUpload] = useState(() => readRecentRemainingMs() > 0);
+  useEffect(() => {
+    const remaining = readRecentRemainingMs();
+    if (remaining <= 0) return;
+    const timer = setTimeout(() => setRecentUpload(false), remaining);
+    return () => clearTimeout(timer);
+  }, []);
+  // 一覧が空のときに「文字起こし中」表示を出すかどうか。
+  const showProcessing = processingCount > 0 || recentUpload;
   const [busyId, setBusyId] = useState<number | string | null>(null);
   // SOT-1341: 「全て本登録する」処理中フラグ（個別 busyId とは別に管理）
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -184,8 +210,9 @@ const DraftsPage: React.FC = () => {
 
       {!isLoading && !isError && (!drafts || drafts.length === 0) && (
         <div className="bg-surface border border-border rounded-lg p-8 text-center text-muted-foreground">
-          {/* SOT-1380: 文字起こし中(processing)は一覧がまだ空でも進行中だと分かる説明にする。 */}
-          {processingCount > 0 ? t('drafts.emptyProcessing') : t('drafts.empty')}
+          {/* SOT-1380: 文字起こし中(processing)、または写真アップ直後(=showProcessing)は、
+              一覧がまだ空でも進行中だと分かる説明にする。 */}
+          {showProcessing ? t('drafts.emptyProcessing') : t('drafts.empty')}
         </div>
       )}
 

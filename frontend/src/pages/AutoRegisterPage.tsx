@@ -166,6 +166,13 @@ const AutoRegisterPage: React.FC = () => {
       await uploadAttachmentSmart(created.id, processed, lang);
       // SOT-1322: アップロード成功＝写真はサーバ保存済み。整理(OCR/enrich)はサーバ側の
       // バックグラウンドで進むため、ユーザーを待たせず即「完了」表示にする。
+      // SOT-1380 follow-up: 写真アップ直後だと仮登録画面に知らせるため、アップ時刻を記録する。
+      // 仮登録画面はこの時刻が一定時間内なら processingCount に依らず「文字起こし中」を表示する。
+      try {
+        sessionStorage.setItem('tpr.lastPhotoUploadAt', String(Date.now()));
+      } catch {
+        /* sessionStorage が使えなくても致命的ではない（表示の最適化のみ） */
+      }
       applyIfCurrent(() => {
         setSavedDraft(created);
         setPhase('done');
