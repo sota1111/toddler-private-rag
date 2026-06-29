@@ -173,7 +173,7 @@ const SchedulePage: React.FC = () => {
               if (isSelected) {
                 cls += ' bg-gradient-to-br from-brand to-brand-strong text-white font-bold shadow-card-hover scale-[1.04]';
               } else if (hasEvent) {
-                cls += ' bg-brand-soft border border-accent-border font-semibold hover:bg-accent-bg hover:border-accent cursor-pointer';
+                cls += ' bg-brand-soft border-2 border-accent font-semibold hover:bg-accent-bg hover:border-brand cursor-pointer';
               } else {
                 cls += ' hover:bg-surface-muted';
               }
@@ -193,12 +193,14 @@ const SchedulePage: React.FC = () => {
                   >
                     <span>{d.getDate()}</span>
                     {/* SOT-1368 follow-up: その日に予定がある子どもごとの色ドットを並べる（最大4つ）。
-                        選択中は白背景に揃える（既存挙動）。 */}
-                    <span aria-hidden className="mt-0.5 flex gap-0.5">
+                        選択中は白背景に揃える（既存挙動）。
+                        SOT-1384: PC でもマークがはっきり見えるよう、ドットを大きく（h-2.5）し、
+                        白リング + 影でセル背景から際立たせる。 */}
+                    <span aria-hidden className="mt-1 flex gap-1">
                       {(childIdsByDate[dateStr] ?? ['']).slice(0, 4).map((cid, i) => (
                         <span
                           key={cid || `none-${i}`}
-                          className={`h-1.5 w-1.5 rounded-full ${
+                          className={`h-2.5 w-2.5 rounded-full ring-1 ring-white shadow-sm ${
                             isSelected ? 'bg-white' : getChildColorClasses(cid || null, childList).dot
                           }`}
                         />
