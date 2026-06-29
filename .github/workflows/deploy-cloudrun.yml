@@ -67,7 +67,7 @@ jobs:
             --set-env-vars "APP_ENV=production,CORS_ORIGINS=https://${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }}-${{ secrets.GCP_PROJECT_NUMBER }}.${{ secrets.GCP_REGION }}.run.app,GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=gen-lang-client-0243034020,GOOGLE_CLOUD_LOCATION=global,GEMINI_MODEL=gemini-3.5-flash,DATABASE_TYPE=firestore,STORAGE_BACKEND=gcs,GCS_BUCKET_NAME=gen-lang-client-0243034020-toddler-private-rag" \
             --memory 512Mi \
             --timeout 300 \
-            --min-instances 0 \
+            --min-instances 1 \
             --max-instances 5 \
             --concurrency 40
 
