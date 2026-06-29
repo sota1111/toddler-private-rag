@@ -4,6 +4,7 @@ import type {
   NurseryInfo,
   NurseryInfoCreate,
   Attachment,
+  UploadSession,
   AttachmentTranscription,
   RagAnswer,
   InfoExtractDraft,
@@ -102,6 +103,59 @@ export const uploadAttachment = async (
     },
   });
   return response.data;
+};
+
+// SOT-1377: GCS direct upload。session を発行し、画像本体は Cloud Run を経由せず
+// ブラウザから GCS へ直接 PUT する。OCR は GCS finalize イベント経由で非同期起動する。
+export const createUploadSession = async (
+  infoId: number | string,
+  file: File,
+  language?: string,
+): Promise<UploadSession> => {
+  const response = await api.post<UploadSession>(`/info/${infoId}/upload/session`, {
+    filename: file.name,
+    content_type: file.type,
+    file_size: file.size,
+    language: language || 'ja',
+  });
+  return response.data;
+};
+
+// session の署名付き URL に画像本体を直接 PUT する。api(axios, baseURL=/api, credentials)
+// ではなく素の fetch を使う（署名 URL は GCS の絶対 URL で、Cookie/baseURL を付けない）。
+const putFileToSignedUrl = async (session: UploadSession, file: File): Promise<void> => {
+  const headers: Record<string, string> = { ...(session.required_headers || {}) };
+  if (!headers['Content-Type'] && file.type) headers['Content-Type'] = file.type;
+  const res = await fetch(session.upload_url, {
+    method: session.method || 'PUT',
+    headers,
+    body: file,
+  });
+  if (!res.ok) {
+    throw new Error(`Direct upload failed: ${res.status}`);
+  }
+};
+
+// 2段アップロード。session 発行に失敗（未対応 501 等）したときだけ従来の multipart に
+// フォールバックする。session 取得後の PUT 失敗はそのまま投げる（二重アップロード防止）。
+export const uploadAttachmentSmart = async (
+  infoId: number | string,
+  file: File,
+  language?: string,
+): Promise<void> => {
+  let session: UploadSession | null = null;
+  try {
+    session = await createUploadSession(infoId, file, language);
+  } catch {
+    session = null;
+  }
+  // session 未対応（501 / エラー / 署名URLを返さない）の場合は従来の multipart に
+  // フォールバックする。upload_url が得られたときだけ GCS へ直接 PUT する。
+  if (!session || !session.upload_url) {
+    await uploadAttachment(infoId, file, language);
+    return;
+  }
+  await putFileToSignedUrl(session, file);
 };
 
 export const extractInfoDraft = async (file: File): Promise<InfoExtractDraft> => {

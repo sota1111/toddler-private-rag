@@ -7,6 +7,16 @@ export interface Attachment {
   created_at: string;
 }
 
+// SOT-1377: GCS direct upload の session 発行レスポンス。
+export interface UploadSession {
+  upload_id: number | string
+  upload_url: string
+  object_key: string
+  expires_at: string
+  method: string
+  required_headers: Record<string, string>
+}
+
 // SOT-1325: 添付の文字起こし(OCR原文)を設定言語に翻訳して取得する。
 export interface AttachmentTranscription {
   text: string
