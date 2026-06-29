@@ -71,6 +71,12 @@ export const getDrafts = async (): Promise<NurseryInfo[]> => {
   return response.data;
 };
 
+// 文字起こし中(processing)の件数 (SOT-1380)。仮登録画面のインジケータ用。
+export const getProcessingCount = async (): Promise<number> => {
+  const response = await api.get('/info/drafts/processing-count');
+  return response.data?.count ?? 0;
+};
+
 // 仮登録を本登録(registered)に確定する (SOT-1113)
 export const finalizeInfo = async (id: number | string): Promise<NurseryInfo> => {
   const response = await api.post(`/info/${id}/finalize`);

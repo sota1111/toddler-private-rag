@@ -54,6 +54,10 @@ class InfoRepository(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def count_processing(self) -> int:
+        pass
+
+    @abc.abstractmethod
     def finalize(self, id: Union[int, str]) -> Optional[Any]:
         pass
 
@@ -254,6 +258,12 @@ class SqliteInfoRepository(InfoRepository):
         return self.db.query(models.NurseryInfo).filter(
             models.NurseryInfo.registration_state == "draft"
         ).order_by(models.NurseryInfo.created_at.desc()).all()
+
+    def count_processing(self) -> int:
+        # SOT-1380: 文字起こし中(processing)の件数。仮登録画面のインジケータ用。
+        return self.db.query(models.NurseryInfo).filter(
+            models.NurseryInfo.registration_state == "processing"
+        ).count()
 
     def finalize(self, id: Union[int, str]) -> Optional[models.NurseryInfo]:
         db_info = self.get(id)
@@ -744,6 +754,14 @@ class FirestoreInfoRepository(InfoRepository):
             results.append(_info_doc_to_obj(doc.id, doc_data, attachments))
         results.sort(key=lambda i: i.created_at, reverse=True)
         return results
+
+    def count_processing(self) -> int:
+        # SOT-1380: 文字起こし中(processing)の件数。件数のみ集計し attachments は読まない。
+        count = 0
+        for doc in self.db.collection("nursery_info").stream():
+            if (doc.to_dict().get("registration_state") or "registered") == "processing":
+                count += 1
+        return count
 
     def finalize(self, id: Union[int, str]) -> Optional[FirestoreNurseryInfo]:
         doc_ref = self.db.collection("nursery_info").document(str(id))

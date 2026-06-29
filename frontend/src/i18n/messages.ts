@@ -294,6 +294,7 @@ export const messages: Record<Lang, Messages> = {
     'drafts.actionFail': '操作に失敗しました。もう一度お試しください。',
     'drafts.refresh': '更新',
     'drafts.refreshing': '更新中…',
+    'drafts.processing': '写真を文字起こし中です（{count}件）。完了すると下に表示されます。',
 
     // ハイブリッド検索 (SOT-1039 / 提案6)
     'search.title': 'ハイブリッド検索',
@@ -641,6 +642,7 @@ export const messages: Record<Lang, Messages> = {
     'drafts.actionFail': 'The action failed. Please try again.',
     'drafts.refresh': 'Refresh',
     'drafts.refreshing': 'Refreshing…',
+    'drafts.processing': 'Transcribing photo(s)… ({count}). They will appear below when done.',
 
     // hybrid search (SOT-1039 / proposal 6)
     'search.title': 'Hybrid search',
