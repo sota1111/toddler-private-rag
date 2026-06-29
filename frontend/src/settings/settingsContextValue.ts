@@ -5,13 +5,10 @@ import { createContext } from 'react'
 export interface AppSettings {
   /** 標準時間（タイムゾーン）。例: 'Asia/Tokyo' */
   timezone: string
-  /** 子どもの名前。 */
-  childName: string
 }
 
 export interface SettingsContextType extends AppSettings {
   setTimezone: (tz: string) => void
-  setChildName: (name: string) => void
 }
 
 export const DEFAULT_TIMEZONE = 'Asia/Tokyo'
@@ -29,7 +26,5 @@ export const TIMEZONE_OPTIONS = [
 
 export const SettingsContext = createContext<SettingsContextType>({
   timezone: DEFAULT_TIMEZONE,
-  childName: '',
   setTimezone: () => {},
-  setChildName: () => {},
 })

@@ -5,18 +5,16 @@ import {
   type AppSettings,
 } from './settingsContextValue'
 
-// SOT-1315: 設定（タイムゾーン・子どもの名前）を localStorage に永続化する。
+// SOT-1315: 設定（タイムゾーン）を localStorage に永続化する。
 // 既存の I18nContext と同じ保存方式に揃える。
 const TZ_KEY = 'tpr.timezone'
-const CHILD_NAME_KEY = 'tpr.childName'
 
 function getInitial(): AppSettings {
   if (typeof window === 'undefined') {
-    return { timezone: DEFAULT_TIMEZONE, childName: '' }
+    return { timezone: DEFAULT_TIMEZONE }
   }
   const tz = window.localStorage.getItem(TZ_KEY) || DEFAULT_TIMEZONE
-  const childName = window.localStorage.getItem(CHILD_NAME_KEY) || ''
-  return { timezone: tz, childName }
+  return { timezone: tz }
 }
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
@@ -31,18 +29,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const setChildName = useCallback((name: string) => {
-    setSettings((prev) => ({ ...prev, childName: name }))
-    try {
-      window.localStorage.setItem(CHILD_NAME_KEY, name)
-    } catch {
-      /* localStorage unavailable — keep in-memory only */
-    }
-  }, [])
-
   return (
     <SettingsContext.Provider
-      value={{ ...settings, setTimezone, setChildName }}
+      value={{ ...settings, setTimezone }}
     >
       {children}
     </SettingsContext.Provider>
