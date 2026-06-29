@@ -54,3 +54,41 @@ export const getStatusFilterPillClass = (
         : "bg-surface text-foreground border-border hover:bg-surface-muted";
   }
 };
+
+// SOT-1368 follow-up: 子どもごとに色を割り当てる共有ヘルパ。
+// children 配列内の登録順（インデックス）でパレットを決定的に割り当て、
+// 一覧の子ども名タグ（chip）とカレンダーの日付強調ドット（dot）で同じ色を使い対応づける。
+// ステータス色（orange/yellow/green = getStatusDateChipClass）と衝突しない色相のみ採用する。
+// Tailwind の動的クラス生成を避けるため、完全な静的クラス文字列を返す。
+export interface ChildColorClasses {
+  chip: string;
+  dot: string;
+}
+
+const CHILD_COLOR_PALETTE: ChildColorClasses[] = [
+  { chip: "bg-sky-100 text-sky-800", dot: "bg-sky-500" },
+  { chip: "bg-pink-100 text-pink-800", dot: "bg-pink-500" },
+  { chip: "bg-violet-100 text-violet-800", dot: "bg-violet-500" },
+  { chip: "bg-fuchsia-100 text-fuchsia-800", dot: "bg-fuchsia-500" },
+  { chip: "bg-teal-100 text-teal-800", dot: "bg-teal-500" },
+  { chip: "bg-rose-100 text-rose-800", dot: "bg-rose-500" },
+  { chip: "bg-indigo-100 text-indigo-800", dot: "bg-indigo-500" },
+  { chip: "bg-cyan-100 text-cyan-800", dot: "bg-cyan-500" },
+];
+
+// 子ども未指定/未解決（children 未取得・不明な child_id）時の中立色。
+// 既存のカレンダー既定ドット（bg-accent）と整合させる。
+const NEUTRAL_CHILD_COLOR: ChildColorClasses = {
+  chip: "bg-surface-muted text-foreground",
+  dot: "bg-accent",
+};
+
+export const getChildColorClasses = (
+  childId: string | null | undefined,
+  children: { id: number | string; name: string }[],
+): ChildColorClasses => {
+  if (!childId) return NEUTRAL_CHILD_COLOR;
+  const index = children.findIndex((c) => String(c.id) === String(childId));
+  if (index < 0) return NEUTRAL_CHILD_COLOR;
+  return CHILD_COLOR_PALETTE[index % CHILD_COLOR_PALETTE.length];
+};
