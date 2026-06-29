@@ -77,10 +77,11 @@ const CHILD_COLOR_PALETTE: ChildColorClasses[] = [
 ];
 
 // 子ども未指定/未解決（children 未取得・不明な child_id）時の中立色。
-// 既存のカレンダー既定ドット（bg-accent）と整合させる。
+// SOT-1384: カレンダーの予定日マークを PC でもはっきり視認できるよう、
+// 既定ドットを淡い bg-accent（amber）から高コントラストな bg-brand（orange）に変更する。
 const NEUTRAL_CHILD_COLOR: ChildColorClasses = {
   chip: "bg-surface-muted text-foreground",
-  dot: "bg-accent",
+  dot: "bg-brand",
 };
 
 export const getChildColorClasses = (
