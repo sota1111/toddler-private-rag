@@ -106,3 +106,12 @@ resource "google_service_account_iam_member" "deploy_act_as_frontend" {
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.deploy.email}"
 }
+
+# SOT-1377: GCS direct upload の V4 署名(キーレス signBlob)。Cloud Run の runtime SA は
+# 秘密鍵を持たないため、自分自身に対する serviceAccountTokenCreator を付与し、IAM
+# signBlob 経由で署名付き PUT URL を発行できるようにする。
+resource "google_service_account_iam_member" "runtime_sign_self" {
+  service_account_id = google_service_account.runtime.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.runtime.email}"
+}

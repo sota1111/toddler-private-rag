@@ -21,6 +21,7 @@ already exist and fail with "already exists".
 | `cloud_run_upload.tf` | Cloud Run `upload-api` upload service, min-instances=1 (+ public invoker) (SOT-1376) |
 | `iam.tf` | Deploy SA + project roles; dedicated least-privilege **runtime** + **frontend** SAs |
 | `scheduler.tf` | Daily orphan-attachment cleanup Cloud Scheduler job (SOT-1366 item B) |
+| `pubsub.tf` | GCS direct-upload finalize: Pub/Sub topic + GCS notification + push subscription (SOT-1377) |
 | `wif.tf` | Workload Identity Federation pool/provider + SA binding |
 
 ### Not managed by Terraform (by design)
@@ -177,7 +178,28 @@ terraform import google_cloud_scheduler_job.purge_orphans \
 # new API
 terraform import 'google_project_service.services["cloudscheduler.googleapis.com"]' \
   PROJECT_ID/cloudscheduler.googleapis.com
+
+# --- SOT-1377: GCS direct upload (Pub/Sub finalize events) ---
+terraform import 'google_project_service.services["pubsub.googleapis.com"]' \
+  PROJECT_ID/pubsub.googleapis.com
+terraform import google_pubsub_topic.gcs_finalize \
+  projects/PROJECT_ID/topics/toddler-gcs-finalize
+terraform import google_pubsub_subscription.gcs_finalize_push \
+  projects/PROJECT_ID/subscriptions/toddler-gcs-finalize-push
+# GCS notification id: bucket + the numeric notificationConfigs id from `gsutil notification list`
+terraform import google_storage_notification.gcs_finalize \
+  BUCKET_NAME/notificationConfigs/NOTIFICATION_ID
+# GCS service agent → pubsub.publisher on the topic
+terraform import google_pubsub_topic_iam_member.gcs_publisher \
+  "projects/PROJECT_ID/topics/toddler-gcs-finalize roles/pubsub.publisher serviceAccount:service-PROJECT_NUMBER@gs-project-accounts.iam.gserviceaccount.com"
+# runtime SA self-signBlob (keyless V4 signing)
+terraform import google_service_account_iam_member.runtime_sign_self \
+  "projects/PROJECT_ID/serviceAccounts/toddler-run-runtime@PROJECT_ID.iam.gserviceaccount.com roles/iam.serviceAccountTokenCreator serviceAccount:toddler-run-runtime@PROJECT_ID.iam.gserviceaccount.com"
 ```
+
+SOT-1377 also adds a `cors` block to `google_storage_bucket.attachments` and a
+`GCS_SIGNER_SA_EMAIL` env var on the backend service; both converge on the next
+`terraform import` + `plan` of the already-imported bucket / backend resources.
 
 ## Notes
 - This config was validated for structure only; `terraform validate` / `plan` against
