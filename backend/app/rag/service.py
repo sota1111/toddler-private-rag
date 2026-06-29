@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, List, Optional, Tuple
 
+from ..timing import time_block
 from .chunking import Chunk, build_documents
 from .embedding_cache import EmbeddingCache, get_embedding_cache, text_hash
 from .providers import (
@@ -67,7 +68,10 @@ class RagService:
         if missing_keys:
             key_to_text = {k: t for k, t in zip(keys, texts)}
             miss_texts = [key_to_text[k] for k in missing_keys]
-            miss_vectors = self.embedding_provider.embed(miss_texts)
+            # SOT-1374 / D: キャッシュミス分の埋め込み(外部API)所要時間を計測する。
+            # 埋め込みは provider 側で並列(バッチ)実行される (SOT-1374 / B+C)。
+            with time_block("embedding", texts=len(miss_texts)):
+                miss_vectors = self.embedding_provider.embed(miss_texts)
             new_items = dict(zip(missing_keys, miss_vectors))
             self.embedding_cache.put_many(new_items, model=model, dim=dim or 0)
             cached = {**cached, **new_items}
@@ -106,8 +110,10 @@ class RagService:
     def _search_chunks(self, query: str, top_k: int = 4) -> List[Tuple[Chunk, float]]:
         if len(self.store) == 0:
             return []
-        query_vector = self.embedding_provider.embed([query])[0]
-        return self.store.search(query_vector, top_k=top_k)
+        # SOT-1374 / D: ベクトル検索(クエリ埋め込み + cosine)の所要時間を計測する。
+        with time_block("vector_search", top_k=top_k, chunks=len(self.store)):
+            query_vector = self.embedding_provider.embed([query])[0]
+            return self.store.search(query_vector, top_k=top_k)
 
     def search(self, query: str, top_k: int = 4) -> List[Source]:
         hits = self._search_chunks(query, top_k=top_k)
@@ -135,8 +141,27 @@ class RagService:
         # 相対日付クエリ（今週/来週/再来週）は語が一致せず検索で取りこぼすため、ここで補う。
         if extra_contexts:
             contexts = [c for c in extra_contexts if c] + contexts
-        answer_text = self.llm_provider.generate(query, contexts)
+        # SOT-1374 / D: 回答生成(LLM 外部API)の所要時間を計測する。
+        with time_block("ask_generate", contexts=len(contexts)):
+            answer_text = self.llm_provider.generate(query, contexts)
         return Answer(answer=answer_text, sources=sources)
+
+    def answer_stream(
+        self,
+        query: str,
+        top_k: int = 4,
+        extra_contexts: Optional[List[str]] = None,
+    ) -> Tuple[List[Source], Any]:
+        """検索済みソースと、回答チャンクを逐次返すジェネレータを返す (SOT-1374 / C)。
+
+        返り値: ``(sources, chunk_iterator)``。chunk_iterator は LLM 回答テキストを
+        逐次 yield する。検索(埋め込み)は yield 前に完了させる。
+        """
+        sources = self.search(query, top_k=top_k)
+        contexts = [s.text for s in sources]
+        if extra_contexts:
+            contexts = [c for c in extra_contexts if c] + contexts
+        return sources, self.llm_provider.generate_stream(query, contexts)
 
 
 def get_rag_service(repo, *, ocr_only: bool = False, **kwargs) -> RagService:
