@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createInfo, uploadAttachment, getInfoById, getChildren } from '../api';
+import { createInfo, uploadAttachmentSmart, getInfoById, getChildren } from '../api';
 import type { Child, NurseryInfo, NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import { compressImageFile } from '../utils/imageCompression';
@@ -161,7 +161,9 @@ const AutoRegisterPage: React.FC = () => {
       // 写真アップロードがサーバ側 enrich→draft 昇格のトリガーになる。
       created = await createInfo(initial);
       // SOT-1315: 設定言語(lang)を渡し、文字起こし後のタスク登録をその言語で生成させる。
-      await uploadAttachment(created.id, processed, lang);
+      // SOT-1377: 画像本体は Cloud Run を経由せず GCS へ直接アップロードする(session方式)。
+      // session 未対応(ローカル等)時は従来の multipart に自動フォールバックする。
+      await uploadAttachmentSmart(created.id, processed, lang);
       // SOT-1322: アップロード成功＝写真はサーバ保存済み。整理(OCR/enrich)はサーバ側の
       // バックグラウンドで進むため、ユーザーを待たせず即「完了」表示にする。
       applyIfCurrent(() => {

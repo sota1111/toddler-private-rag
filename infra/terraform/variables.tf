@@ -146,8 +146,14 @@ variable "orphan_purge_schedule" {
 }
 
 variable "worker_invoke_token" {
-  description = "Value of the worker invoke token (rag-worker-invoke-token) sent by Cloud Scheduler as the X-Worker-Token header. Sensitive; supply via terraform.tfvars (gitignored). Managed out-of-band like the other secret values."
+  description = "Value of the worker invoke token (rag-worker-invoke-token) sent by Cloud Scheduler as the X-Worker-Token header and as the ?token= query of the Pub/Sub push subscription (SOT-1377). Sensitive; supply via terraform.tfvars (gitignored). Managed out-of-band like the other secret values."
   type        = string
   default     = ""
   sensitive   = true
+}
+
+variable "gcs_finalize_topic" {
+  description = "SOT-1377: Pub/Sub topic name for GCS direct-upload OBJECT_FINALIZE events."
+  type        = string
+  default     = "toddler-gcs-finalize"
 }

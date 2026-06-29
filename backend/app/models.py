@@ -43,6 +43,9 @@ class Attachment(Base):
     # SOT-1330: 文字起こし(OCR原文)の翻訳を言語ごとに一度だけ保存して再利用する
     # （読み込みの度に翻訳しない）。例: {"ja": "...", "en": "..."}
     translations = Column(JSON, nullable=True, default=None)
+    # SOT-1377: GCS direct-upload では OCR が finalize イベント経由で非同期起動するため、
+    # session 発行時のリクエスト言語をここに保持しておき finalize 時に再利用する。
+    language = Column(String(8), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     info = relationship("NurseryInfo", back_populates="attachments")

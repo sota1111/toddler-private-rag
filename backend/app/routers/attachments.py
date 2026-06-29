@@ -278,6 +278,73 @@ async def upload_attachment(
 
     return db_attachment
 
+@router.post("/info/{info_id}/upload/session", response_model=schemas.UploadSessionResponse)
+async def create_upload_session(
+    info_id: Union[int, str],
+    payload: schemas.UploadSessionRequest,
+    repo: AttachmentRepository = Depends(get_attachment_repository),
+    current_user: str = Depends(get_current_user),
+):
+    """SOT-1377: GCS direct upload の session を発行する。
+
+    画像本体は受け取らず、署名付き PUT URL を返す。ブラウザはその URL へ直接 GCS に
+    アップロードし、GCS の OBJECT_FINALIZE → Pub/Sub → `/internal/gcs-finalize` 経由で
+    OCR が非同期起動する。pending の Attachment をここで先に作成しておき、finalize 時に
+    object_key で逆引きして突合する。
+    """
+    if not repo.info_exists(info_id):
+        raise HTTPException(status_code=404, detail="NurseryInfo not found")
+
+    content_type = payload.content_type or ""
+    if content_type != "application/pdf" and not content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type. Allowed types: {', '.join(ALLOWED_CONTENT_TYPES)}",
+        )
+
+    if payload.file_size is not None and payload.file_size > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {MAX_FILE_SIZE / (1024 * 1024)}MB",
+        )
+
+    backend = storage.get_storage()
+    # 署名URL発行は GCS バックエンドのみ対応。未対応(ローカル等)時はフロントが
+    # 既存の multipart アップロードにフォールバックする。
+    if not hasattr(backend, "generate_upload_signed_url"):
+        raise HTTPException(status_code=501, detail="Direct upload not supported")
+
+    language = payload.language if payload.language in ("ja", "en") else "ja"
+    stored_filename = storage.generate_stored_filename(payload.filename)
+    # direct upload は専用プレフィックス配下に置く。GCS finalize 通知をこのプレフィックスに
+    # 限定することで、従来の multipart アップロード(同期OCR起動)で二重OCRにならないようにする。
+    object_key = f"{storage.DIRECT_UPLOAD_PREFIX}{stored_filename}"
+
+    signed = backend.generate_upload_signed_url(object_key, content_type)
+
+    db_attachment = repo.create(
+        info_id=info_id,
+        stored_filename=stored_filename,
+        original_filename=payload.filename,
+        mime_type=content_type,
+        file_size=payload.file_size or 0,
+        storage_backend=backend.name,
+        object_key=object_key,
+        ocr_text=None,
+        ocr_status="pending",
+        language=language,
+    )
+
+    return schemas.UploadSessionResponse(
+        upload_id=db_attachment.id,
+        upload_url=signed["url"],
+        object_key=object_key,
+        expires_at=signed["expires_at"],
+        method="PUT",
+        required_headers={"Content-Type": content_type},
+    )
+
+
 @router.get("/attachments/{att_id}/file")
 def get_attachment_file(
     att_id: Union[int, str],

@@ -25,6 +25,27 @@ class AttachmentResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class UploadSessionRequest(BaseModel):
+    """SOT-1377: GCS direct upload の session 発行リクエスト。
+
+    画像本体は送らず、ファイルのメタ情報だけを送って署名付き PUT URL を受け取る。
+    """
+    filename: str
+    content_type: str
+    file_size: Optional[int] = None
+    language: str = "ja"
+
+
+class UploadSessionResponse(BaseModel):
+    """session 発行の応答。ブラウザはこの upload_url へ画像本体を直接 PUT する。"""
+    upload_id: Union[int, str]
+    upload_url: str
+    object_key: str
+    expires_at: datetime.datetime
+    method: str = "PUT"
+    required_headers: dict = {}
+
+
 class AttachmentTranscriptionResponse(BaseModel):
     """添付の文字起こし(OCR原文)を設定言語に翻訳して返す (SOT-1325)。"""
     text: str = ""

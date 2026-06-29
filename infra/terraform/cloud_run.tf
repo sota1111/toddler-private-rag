@@ -75,6 +75,12 @@ resource "google_cloud_run_v2_service" "backend" {
         name  = "GCS_BUCKET_NAME"
         value = var.gcs_bucket_name
       }
+      # SOT-1377: GCS direct upload の V4 署名(キーレス signBlob)で使う署名 SA。
+      # runtime SA 自身を指定する（runtime SA には自分への serviceAccountTokenCreator が必要）。
+      env {
+        name  = "GCS_SIGNER_SA_EMAIL"
+        value = var.cloud_run_service_account_email
+      }
 
       env {
         name = "AUTH_SECRET"

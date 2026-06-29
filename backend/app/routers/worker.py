@@ -7,9 +7,11 @@ downloads the file from storage (GCS) by the attachment's object key and schedul
 Protected by a shared secret header (``X-Worker-Token`` vs ``WORKER_INVOKE_TOKEN``). The backend is
 public (allow-unauthenticated) on Cloud Run, so the token check is the access gate.
 """
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional, Union
+import base64
+import json
 import os
 import logging
 
@@ -65,6 +67,98 @@ async def internal_process_ocr(
         payload.language,
     )
     return {"status": "accepted", "att_id": payload.att_id}
+
+
+def _extract_object_name(envelope: dict) -> Optional[tuple]:
+    """Pub/Sub push envelope から (object_name, event_type) を取り出す。
+
+    GCS notification(Pub/Sub) は object 名を message.attributes.objectId に入れる。
+    payload(JSON_API_V1) を使う場合は data(base64) に object metadata が入るので、
+    attributes が無ければ data をデコードして name を拾う。
+    """
+    message = envelope.get("message") or {}
+    attributes = message.get("attributes") or {}
+    object_name = attributes.get("objectId")
+    event_type = attributes.get("eventType")
+    if not object_name:
+        raw = message.get("data")
+        if raw:
+            try:
+                data = json.loads(base64.b64decode(raw).decode("utf-8"))
+                object_name = data.get("name")
+            except Exception:
+                object_name = None
+    return (object_name, event_type) if object_name else None
+
+
+@router.post("/internal/gcs-finalize", status_code=200)
+async def internal_gcs_finalize(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    token: Optional[str] = None,
+):
+    """SOT-1377: GCS OBJECT_FINALIZE の Pub/Sub push を受け取り、OCR を冪等に起動する。
+
+    direct upload では画像本体は backend を経由しないため、GCS への保存完了を
+    Pub/Sub push で受けて OCR を起動する。Pub/Sub は同一メッセージを重複配送し得るので、
+    Firestore metadata と突合し ocr_status を pending→processing に CAS 遷移できた
+    ときだけ OCR を起動する（重複・不正イベントは ack して握りつぶす）。
+
+    Pyb/Sub push は任意ヘッダを付けられないため、worker-token は query (`?token=`) で検証する。
+    """
+    expected = os.getenv("WORKER_INVOKE_TOKEN")
+    if expected and token != expected:
+        raise HTTPException(status_code=403, detail="invalid worker token")
+
+    try:
+        envelope = await request.json()
+    except Exception:
+        # 不正な body は ack（再配送させない）。
+        return {"status": "ignored", "reason": "invalid body"}
+
+    extracted = _extract_object_name(envelope if isinstance(envelope, dict) else {})
+    if not extracted:
+        return {"status": "ignored", "reason": "no object name"}
+    object_name, event_type = extracted
+
+    # finalize 以外(削除等)は対象外。eventType 不明時は finalize 相当として続行する。
+    if event_type and event_type != "OBJECT_FINALIZE":
+        return {"status": "ignored", "reason": f"event {event_type}"}
+
+    repo = get_attachment_repo_standalone()
+    try:
+        att = repo.get_by_object_key(object_name)
+        if att is None:
+            # 正規 session 以外のオブジェクト（孤児）→ 起動しない。
+            return {"status": "ignored", "reason": "no matching attachment"}
+
+        att_id = att.id
+        info_id = getattr(att, "info_id", None)
+        mime_type = att.mime_type
+        language = getattr(att, "language", None) or "ja"
+
+        # CAS: pending の場合のみ processing に遷移し OCR 起動権を得る（重複配送を吸収）。
+        if not repo.begin_ocr_if_pending(att_id):
+            return {"status": "skipped", "reason": "already processing/done", "att_id": att_id}
+    finally:
+        if isinstance(repo, SqliteAttachmentRepository):
+            repo.db.close()
+
+    storage_backend = storage.get_storage()
+    content = storage_backend.read(object_name)
+    ocr_path = storage_backend.local_path_for_ocr(object_name, content)
+    cleanup_local = (storage_backend.name == "gcs")
+
+    background_tasks.add_task(
+        process_ocr,
+        att_id,
+        str(ocr_path),
+        mime_type,
+        cleanup_local,
+        info_id,
+        language,
+    )
+    return {"status": "accepted", "att_id": att_id}
 
 
 @router.post("/internal/purge-orphans")
