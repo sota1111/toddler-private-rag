@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getInfoList } from '../api';
+import { getInfoList, getChildren } from '../api';
 import type { NurseryInfo } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import DatedInfoList from '../components/DatedInfoList';
+import { getChildColorClasses } from './infoFormOptions';
 
 // SOT-1306: 日付つきの予定（event_date あり）を月カレンダーで可視化し、
 // カレンダーの下に予定一覧を表示する。該当日はカレンダー上で強調表示する。
@@ -27,6 +28,9 @@ const SchedulePage: React.FC = () => {
     queryKey: ['info', 'all'],
     queryFn: () => getInfoList({ include_attachments: false }),
   });
+  // SOT-1368 follow-up: カレンダーの日付強調ドットを子どもごとの色にするため children を取得。
+  const { data: children } = useQuery({ queryKey: ['children'], queryFn: getChildren });
+  const childList = children ?? [];
 
   const today = new Date();
   const [viewYear, setViewYear] = useState<number>(today.getFullYear());
@@ -45,6 +49,19 @@ const SchedulePage: React.FC = () => {
     for (const ev of events) {
       const key = ev.event_date as string;
       map[key] = (map[key] ?? 0) + 1;
+    }
+    return map;
+  }, [events]);
+
+  // SOT-1368 follow-up: 日付ごとに、その日に予定がある子ども（child_id）の集合（順序保持・重複排除）。
+  // 子ども未指定の予定は '' で表す（中立色のドット）。カレンダーの強調ドットを子どもごとの色で並べる。
+  const childIdsByDate = useMemo<Record<string, string[]>>(() => {
+    const map: Record<string, string[]> = {};
+    for (const ev of events) {
+      const key = ev.event_date as string;
+      const cid = ev.child_id ? String(ev.child_id) : '';
+      if (!map[key]) map[key] = [];
+      if (!map[key].includes(cid)) map[key].push(cid);
     }
     return map;
   }, [events]);
@@ -175,10 +192,18 @@ const SchedulePage: React.FC = () => {
                     aria-label={`${dateStr} (${count})`}
                   >
                     <span>{d.getDate()}</span>
-                    <span
-                      aria-hidden
-                      className={`mt-0.5 h-1.5 w-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-accent'}`}
-                    />
+                    {/* SOT-1368 follow-up: その日に予定がある子どもごとの色ドットを並べる（最大4つ）。
+                        選択中は白背景に揃える（既存挙動）。 */}
+                    <span aria-hidden className="mt-0.5 flex gap-0.5">
+                      {(childIdsByDate[dateStr] ?? ['']).slice(0, 4).map((cid, i) => (
+                        <span
+                          key={cid || `none-${i}`}
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            isSelected ? 'bg-white' : getChildColorClasses(cid || null, childList).dot
+                          }`}
+                        />
+                      ))}
+                    </span>
                   </button>
                 );
               }

@@ -1,8 +1,14 @@
 import React, { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import type { NurseryInfo } from '../types';
 import { useI18n } from '../i18n/useI18n';
-import { getStatusDateChipClass, getStatusFilterPillClass } from '../pages/infoFormOptions';
+import { getChildren } from '../api';
+import {
+  getStatusDateChipClass,
+  getStatusFilterPillClass,
+  getChildColorClasses,
+} from '../pages/infoFormOptions';
 
 // SOT-1342: タスク一覧（TasksPage）と予定一覧（SchedulePage のカレンダー下リスト）の
 // 重複していた「ステータス絞り込み + 行リスト」を1箇所にまとめた共有コンポーネント。
@@ -41,6 +47,11 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({ items, isLoading, namespa
     const label = t(key);
     return label === key ? value : label;
   };
+
+  // SOT-1368 follow-up: 行に紐づけた子どもの名前タグを表示するため children を取得する。
+  // react-query は同一キーをデデュープするため TasksPage 等と並行でも安全。
+  const { data: children } = useQuery({ queryKey: ['children'], queryFn: getChildren });
+  const childList = children ?? [];
 
   const [statusFilter, setStatusFilter] = useState<DatedInfoStatusFilter>('all');
 
@@ -95,6 +106,19 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({ items, isLoading, namespa
                   <div className="flex justify-between items-center gap-3">
                     <span className="font-medium text-foreground truncate">{item.title}</span>
                     <div className="flex items-center gap-2 flex-shrink-0">
+                      {/* SOT-1368 follow-up: 紐づけた子どもの名前タグ（子どもごとの色）。未指定/未解決は非表示。 */}
+                      {(() => {
+                        if (!item.child_id) return null;
+                        const child = childList.find((c) => String(c.id) === String(item.child_id));
+                        if (!child) return null;
+                        return (
+                          <span
+                            className={`text-xs px-2 py-1 rounded-full max-w-[6rem] truncate ${getChildColorClasses(item.child_id, childList).chip}`}
+                          >
+                            {child.name}
+                          </span>
+                        );
+                      })()}
                       <span className={`text-xs px-2 py-1 rounded-full ${getStatusDateChipClass(item.status)}`}>
                         {item.event_date ? item.event_date : t('common.noDeadline')}
                       </span>
