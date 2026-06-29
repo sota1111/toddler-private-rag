@@ -83,14 +83,29 @@ class AttachmentRepository(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def create(self, *, info_id: Union[int, str], stored_filename: str, 
-               original_filename: str, mime_type: str, file_size: int, 
-               storage_backend: str, object_key: Optional[str], 
-               ocr_text: Optional[str], ocr_status: str = "pending") -> Any:
+    def create(self, *, info_id: Union[int, str], stored_filename: str,
+               original_filename: str, mime_type: str, file_size: int,
+               storage_backend: str, object_key: Optional[str],
+               ocr_text: Optional[str], ocr_status: str = "pending",
+               language: Optional[str] = None) -> Any:
         pass
 
     @abc.abstractmethod
     def get(self, att_id: Union[int, str]) -> Optional[Any]:
+        pass
+
+    @abc.abstractmethod
+    def get_by_object_key(self, object_key: str) -> Optional[Any]:
+        """SOT-1377: GCS finalize イベントから object_key で添付を逆引きする。"""
+        pass
+
+    @abc.abstractmethod
+    def begin_ocr_if_pending(self, att_id: Union[int, str]) -> bool:
+        """SOT-1377: ocr_status を pending → processing に CAS 遷移する。
+
+        遷移できた(=この呼び出しが OCR を起動する責務を獲得した)場合のみ True。
+        既に processing/done/failed なら False を返し、重複 finalize 配送を吸収する。
+        """
         pass
 
     @abc.abstractmethod
@@ -300,10 +315,11 @@ class SqliteAttachmentRepository(AttachmentRepository):
     def info_exists(self, info_id: Union[int, str]) -> bool:
         return self.db.query(models.NurseryInfo).filter(models.NurseryInfo.id == int(info_id)).first() is not None
 
-    def create(self, *, info_id: Union[int, str], stored_filename: str, 
-               original_filename: str, mime_type: str, file_size: int, 
-               storage_backend: str, object_key: Optional[str], 
-               ocr_text: Optional[str], ocr_status: str = "pending") -> models.Attachment:
+    def create(self, *, info_id: Union[int, str], stored_filename: str,
+               original_filename: str, mime_type: str, file_size: int,
+               storage_backend: str, object_key: Optional[str],
+               ocr_text: Optional[str], ocr_status: str = "pending",
+               language: Optional[str] = None) -> models.Attachment:
         db_attachment = models.Attachment(
             info_id=int(info_id),
             stored_filename=stored_filename,
@@ -313,7 +329,8 @@ class SqliteAttachmentRepository(AttachmentRepository):
             storage_backend=storage_backend,
             object_key=object_key,
             ocr_text=ocr_text,
-            ocr_status=ocr_status
+            ocr_status=ocr_status,
+            language=language,
         )
         self.db.add(db_attachment)
         self.db.commit()
@@ -322,6 +339,28 @@ class SqliteAttachmentRepository(AttachmentRepository):
 
     def get(self, att_id: Union[int, str]) -> Optional[models.Attachment]:
         return self.db.query(models.Attachment).filter(models.Attachment.id == int(att_id)).first()
+
+    def get_by_object_key(self, object_key: str) -> Optional[models.Attachment]:
+        return (
+            self.db.query(models.Attachment)
+            .filter(models.Attachment.object_key == object_key)
+            .order_by(models.Attachment.id.desc())
+            .first()
+        )
+
+    def begin_ocr_if_pending(self, att_id: Union[int, str]) -> bool:
+        # 条件付き UPDATE による CAS: pending の行だけ processing に遷移させ、
+        # 更新行数が 1 のときだけ True（=このプロセスが OCR 起動権を獲得）。
+        updated = (
+            self.db.query(models.Attachment)
+            .filter(
+                models.Attachment.id == int(att_id),
+                models.Attachment.ocr_status == "pending",
+            )
+            .update({models.Attachment.ocr_status: "processing"})
+        )
+        self.db.commit()
+        return updated == 1
 
     def set_ocr_result(self, att_id: Union[int, str], *, ocr_text: Optional[str], ocr_status: str) -> None:
         db_attachment = self.get(att_id)
@@ -388,6 +427,7 @@ class FirestoreAttachment:
     ocr_status: str
     created_at: datetime.datetime
     translations: Optional[dict] = None
+    language: Optional[str] = None
 
 @dataclass
 class FirestoreNurseryInfo:
@@ -468,7 +508,8 @@ def _att_doc_to_obj(doc_id: str, data: dict) -> FirestoreAttachment:
         ocr_text=data.get("ocr_text"),
         ocr_status=data.get("ocr_status", "pending"),
         created_at=data.get("created_at") or datetime.datetime.now(),
-        translations=data.get("translations") or {}
+        translations=data.get("translations") or {},
+        language=data.get("language"),
     )
 
 def _is_registered_data(data: dict) -> bool:
@@ -786,10 +827,11 @@ class FirestoreAttachmentRepository(AttachmentRepository):
     def info_exists(self, info_id: Union[int, str]) -> bool:
         return self.db.collection("nursery_info").document(str(info_id)).get().exists
 
-    def create(self, *, info_id: Union[int, str], stored_filename: str, 
-               original_filename: str, mime_type: str, file_size: int, 
-               storage_backend: str, object_key: Optional[str], 
-               ocr_text: Optional[str], ocr_status: str = "pending") -> FirestoreAttachment:
+    def create(self, *, info_id: Union[int, str], stored_filename: str,
+               original_filename: str, mime_type: str, file_size: int,
+               storage_backend: str, object_key: Optional[str],
+               ocr_text: Optional[str], ocr_status: str = "pending",
+               language: Optional[str] = None) -> FirestoreAttachment:
         now = datetime.datetime.now(datetime.timezone.utc)
         doc_data = {
             "info_id": str(info_id),
@@ -801,6 +843,7 @@ class FirestoreAttachmentRepository(AttachmentRepository):
             "object_key": object_key,
             "ocr_text": ocr_text,
             "ocr_status": ocr_status,
+            "language": language,
             "created_at": now
         }
         _, doc_ref = self.db.collection("attachments").add(doc_data)
@@ -812,6 +855,34 @@ class FirestoreAttachmentRepository(AttachmentRepository):
         if not doc.exists:
             return None
         return _att_doc_to_obj(doc.id, doc.to_dict())
+
+    def get_by_object_key(self, object_key: str) -> Optional[FirestoreAttachment]:
+        docs = list(
+            self.db.collection("attachments")
+            .where("object_key", "==", object_key)
+            .limit(1)
+            .stream()
+        )
+        if not docs:
+            return None
+        return _att_doc_to_obj(docs[0].id, docs[0].to_dict())
+
+    def begin_ocr_if_pending(self, att_id: Union[int, str]) -> bool:
+        from google.cloud import firestore
+
+        doc_ref = self.db.collection("attachments").document(str(att_id))
+
+        @firestore.transactional
+        def _txn(transaction):
+            snap = doc_ref.get(transaction=transaction)
+            if not snap.exists:
+                return False
+            if (snap.to_dict() or {}).get("ocr_status") != "pending":
+                return False
+            transaction.update(doc_ref, {"ocr_status": "processing"})
+            return True
+
+        return _txn(self.db.transaction())
 
     def set_ocr_result(self, att_id: Union[int, str], *, ocr_text: Optional[str], ocr_status: str) -> None:
         doc_ref = self.db.collection("attachments").document(str(att_id))
