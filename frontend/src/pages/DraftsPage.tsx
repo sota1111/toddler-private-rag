@@ -184,7 +184,8 @@ const DraftsPage: React.FC = () => {
 
       {!isLoading && !isError && (!drafts || drafts.length === 0) && (
         <div className="bg-surface border border-border rounded-lg p-8 text-center text-muted-foreground">
-          {t('drafts.empty')}
+          {/* SOT-1380: 文字起こし中(processing)は一覧がまだ空でも進行中だと分かる説明にする。 */}
+          {processingCount > 0 ? t('drafts.emptyProcessing') : t('drafts.empty')}
         </div>
       )}
 
