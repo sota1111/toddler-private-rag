@@ -55,10 +55,10 @@ variable "frontend_service_name" {
   default     = "toddler-private-rag-frontend"
 }
 
-variable "upload_function_name" {
-  description = "gen2 upload Cloud Function name. Matches secret CLOUD_FUNCTION_UPLOAD."
+variable "upload_service_name" {
+  description = "Cloud Run upload-api service name (SOT-1376). Matches secret CLOUD_RUN_SERVICE_UPLOAD."
   type        = string
-  default     = "toddler-private-rag-upload"
+  default     = "upload-api"
 }
 
 variable "gcs_bucket_name" {
@@ -82,7 +82,7 @@ variable "gemini_location" {
 }
 
 # --- Container images. CI builds & pushes these; Terraform ignores image
-# changes (see lifecycle in cloud_run.tf / cloud_function.tf), so these defaults
+# changes (see lifecycle in cloud_run.tf / cloud_run_upload.tf), so these defaults
 # are only used on first create/import. ---
 
 variable "backend_image" {
@@ -97,18 +97,10 @@ variable "frontend_image" {
   default     = ""
 }
 
-# --- Upload Cloud Function source (managed by the gcloud deploy; ignored). ---
-
-variable "function_source_bucket" {
-  description = "GCS bucket holding the gen2 function source zip. Empty = derive gcf-v2-sources-<project_number>-<region>."
+variable "upload_image" {
+  description = "upload-api container image. Overridden by CI pushes (ignored by Terraform)."
   type        = string
   default     = ""
-}
-
-variable "function_source_object" {
-  description = "Object path of the gen2 function source zip. Ignored after import."
-  type        = string
-  default     = "toddler-private-rag-upload/source.zip"
 }
 
 # --- CI deploy identity: Workload Identity Federation + deploy service account. ---
