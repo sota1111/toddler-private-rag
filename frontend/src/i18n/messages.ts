@@ -292,6 +292,8 @@ export const messages: Record<Lang, Messages> = {
     'drafts.working': '処理中…',
     'drafts.confirmDiscard': 'この仮登録を破棄しますか？',
     'drafts.actionFail': '操作に失敗しました。もう一度お試しください。',
+    'drafts.refresh': '更新',
+    'drafts.refreshing': '更新中…',
 
     // ハイブリッド検索 (SOT-1039 / 提案6)
     'search.title': 'ハイブリッド検索',
@@ -637,6 +639,8 @@ export const messages: Record<Lang, Messages> = {
     'drafts.working': 'Working…',
     'drafts.confirmDiscard': 'Discard this draft?',
     'drafts.actionFail': 'The action failed. Please try again.',
+    'drafts.refresh': 'Refresh',
+    'drafts.refreshing': 'Refreshing…',
 
     // hybrid search (SOT-1039 / proposal 6)
     'search.title': 'Hybrid search',
