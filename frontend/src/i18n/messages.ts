@@ -122,6 +122,16 @@ export const messages: Record<Lang, Messages> = {
     'reminder.urgency.soon': 'まもなく',
     'reminder.urgency.upcoming': '予定',
     'reminder.kind.submission': '提出書類',
+    // SOT-1397: 能動リマインドの文言テンプレ（言語設定に追従させるためフロントで再構成）。
+    'reminder.msg.deadline.overdue': '⚠️ 期限切れ: 「{title}」の提出期限を過ぎています（{n}日経過）',
+    'reminder.msg.deadline.today': '本日締切: 「{title}」',
+    'reminder.msg.deadline.future': 'あと{n}日: 「{title}」の提出期限です',
+    'reminder.msg.submission.overdue': '⚠️ 提出期限超過: 「{title}」（{n}日経過）',
+    'reminder.msg.submission.today': '本日提出: 「{title}」',
+    'reminder.msg.submission.future': 'あと{n}日: 「{title}」の提出準備を進めましょう',
+    'reminder.msg.event.today': '本日: {title}',
+    'reminder.msg.event.future': '{n}日後: {title}',
+    'reminder.msg.belongings': '明日の持ち物: {items}（{title}）',
 
     // ask
     'ask.title': '質問する',
@@ -471,6 +481,16 @@ export const messages: Record<Lang, Messages> = {
     'reminder.urgency.soon': 'Soon',
     'reminder.urgency.upcoming': 'Upcoming',
     'reminder.kind.submission': 'Submission',
+    // SOT-1397: proactive reminder message templates (composed on the frontend to follow the language setting).
+    'reminder.msg.deadline.overdue': '⚠️ Overdue: "{title}" submission deadline passed ({n} day(s) ago)',
+    'reminder.msg.deadline.today': 'Due today: "{title}"',
+    'reminder.msg.deadline.future': '{n} day(s) left: "{title}" submission deadline',
+    'reminder.msg.submission.overdue': '⚠️ Submission overdue: "{title}" ({n} day(s) ago)',
+    'reminder.msg.submission.today': 'Submit today: "{title}"',
+    'reminder.msg.submission.future': '{n} day(s) left: prepare to submit "{title}"',
+    'reminder.msg.event.today': 'Today: {title}',
+    'reminder.msg.event.future': 'In {n} day(s): {title}',
+    'reminder.msg.belongings': "Tomorrow's belongings: {items} ({title})",
 
     // ask
     'ask.title': 'Ask a question',
