@@ -83,3 +83,48 @@ def test_options_preflight_204(monkeypatch):
     assert resp.status_code == 204
     assert resp.headers.get("Access-Control-Allow-Origin") == "https://app.example.com"
     assert resp.headers.get("Access-Control-Allow-Credentials") == "true"
+
+
+def _load_main():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("upload_main_under_test", _FUNCTION_SOURCE)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_dispatch_ocr_uses_short_timeout(monkeypatch):
+    """SOT-1377: OCR dispatch はブラウザ応答を長くブロックしない短い read timeout を使う。"""
+    main = _load_main()
+    import requests
+
+    captured = {}
+
+    class _Resp:
+        status_code = 202
+        text = ""
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["timeout"] = timeout
+        return _Resp()
+
+    monkeypatch.setenv("AI_WORKER_URL", "https://backend.example")
+    monkeypatch.setattr(requests, "post", fake_post)
+    assert main._dispatch_ocr("att1", "info1", "ja") is True
+    # (connect, read) のタプルで、read 待ちは短い（以前の 15s 同期待ちではない）。
+    assert isinstance(captured["timeout"], tuple)
+    assert captured["timeout"][1] <= 3.0
+
+
+def test_dispatch_ocr_readtimeout_does_not_block(monkeypatch):
+    """SOT-1377: 応答待ちタイムアウトでも例外を投げずアップロード応答をブロックしない。"""
+    main = _load_main()
+    import requests
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        raise requests.exceptions.ReadTimeout("timed out")
+
+    monkeypatch.setenv("AI_WORKER_URL", "https://backend.example")
+    monkeypatch.setattr(requests, "post", fake_post)
+    assert main._dispatch_ocr("att1", "info1", "ja") is False
