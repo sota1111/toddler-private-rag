@@ -167,8 +167,15 @@ export const uploadAttachmentSmart = async (
     return;
   }
   await putFileToSignedUrl(session, file);
-  // SOT-1378: PUT 成功直後に OCR を明示起動する（仮登録/写真一覧に確実に反映させる）。
-  await finalizeUploadSession(infoId, session.upload_id);
+  // SOT-1378 follow-up: 画像本体を GCS へ PUT し終えた時点で「アップロード完了」(写真は保存済み)。
+  // ここで finalize の応答を await すると、「アップ中」表示が文字起こし・タスク登録の完了まで
+  // 継続してしまう（SOT-1322 の「保存完了＝即 done」不変条件の退行）。finalize は OCR を起動する
+  // ためのトリガーであり、リクエストが backend に届けば OCR は background task として起動するので、
+  // レスポンスを await する必要はない。万一 finalize が届かなくても GCS finalize(Pub/Sub) が backup
+  // として OCR を起動する（二重起動は begin_ocr_if_pending の CAS で冪等に吸収される）。
+  void finalizeUploadSession(infoId, session.upload_id).catch((e) => {
+    console.warn('finalizeUploadSession failed (OCR will still be triggered via GCS finalize)', e);
+  });
 };
 
 export const extractInfoDraft = async (file: File): Promise<InfoExtractDraft> => {
