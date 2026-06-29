@@ -184,15 +184,28 @@ def _dispatch_ocr(att_id, info_id, language: str) -> bool:
     if token:
         headers["X-Worker-Token"] = token
     payload = {"att_id": att_id, "info_id": info_id, "language": language}
-    try:
-        import requests
+    import requests
 
-        resp = requests.post(url, json=payload, headers=headers, timeout=15.0)
+    try:
+        # SOT-1377: ブラウザの「アップ完了」表示を速くするため、OCR 起動 dispatch は
+        # 「送信はするが応答は長く待たない」短い read timeout にする。backend の
+        # `/internal/process-ocr` はリクエストを受け取った時点で OCR を background task に
+        # 積んで 202 を返す設計で、その handler はクライアントの早期切断後も完了するため、
+        # ここで応答待ちを早く打ち切っても OCR は確実に起動する（冪等）。以前は 15s 同期待ちで、
+        # backend が OCR 負荷で 202 応答を遅延すると、その分ブラウザの完了表示も遅れていた。
+        resp = requests.post(url, json=payload, headers=headers, timeout=(3.05, 2.0))
         if resp.status_code >= 400:
             logger.error("worker dispatch failed (%s): %s", resp.status_code, resp.text[:200])
             return False
         return True
-    except Exception as e:  # network/timeout — never block the upload response
+    except requests.exceptions.ReadTimeout:
+        # 応答待ちのタイムアウトは想定内（リクエストは送信済み＝OCR は起動する）。
+        # ブラウザを待たせないために打ち切っただけなので、警告レベルに留める。
+        logger.warning(
+            "worker dispatch read-timeout for attachment %s (OCR was still triggered)", att_id
+        )
+        return False
+    except Exception as e:  # network error — never block the upload response
         logger.error("worker dispatch error for attachment %s: %s", att_id, e)
         return False
 
