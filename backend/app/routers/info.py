@@ -394,6 +394,12 @@ def list_drafts(repo: InfoRepository = Depends(get_info_repository), current_use
     return repo.list_drafts()
 
 
+# 文字起こし中(processing)の件数 (SOT-1380)。"/{id}" より前に宣言してリテラルパスを優先させる。
+@router.get("/drafts/processing-count")
+def count_processing_drafts(repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
+    return {"count": repo.count_processing()}
+
+
 @router.get("/", response_model=List[schemas.NurseryInfoResponse])
 def list_info(
     q: Optional[str] = None,

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getDrafts, finalizeInfo, deleteInfo, updateInfo, getAttachmentFileUrl } from '../api';
+import { getDrafts, finalizeInfo, deleteInfo, updateInfo, getAttachmentFileUrl, getProcessingCount } from '../api';
 import type { NurseryInfo, NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import RegisterMenu from '../components/RegisterMenu';
@@ -16,6 +16,13 @@ const DraftsPage: React.FC = () => {
   const { data: drafts, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['drafts'],
     queryFn: getDrafts,
+  });
+  // SOT-1380: 写真アップ後、OCR(文字起こし)中のレコード(processing)は仮登録一覧にまだ出ない。
+  // その件数を取得し、「文字起こし中」インジケータを表示する。完了すると 0 になり自動的に消える。
+  const { data: processingCount = 0 } = useQuery({
+    queryKey: ['drafts', 'processing-count'],
+    queryFn: getProcessingCount,
+    refetchInterval: 5000,
   });
   const [busyId, setBusyId] = useState<number | string | null>(null);
   // SOT-1341: 「全て本登録する」処理中フラグ（個別 busyId とは別に管理）
@@ -163,6 +170,14 @@ const DraftsPage: React.FC = () => {
           </svg>
         </button>
       </div>
+
+      {/* SOT-1380: 写真の文字起こし中(processing)があることを伝えるインジケータ。完了で自動的に消える。 */}
+      {processingCount > 0 && (
+        <div className="mb-4 flex items-center gap-2 rounded-md border border-accent-border bg-accent-bg px-4 py-3 text-sm text-brand-strong">
+          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-brand" aria-hidden="true" />
+          {t('drafts.processing', { count: processingCount })}
+        </div>
+      )}
 
       {isLoading && <p className="text-sm text-muted-foreground">{t('common.loading')}</p>}
       {isError && <p className="text-sm text-red-600">{t('drafts.loadError')}</p>}
