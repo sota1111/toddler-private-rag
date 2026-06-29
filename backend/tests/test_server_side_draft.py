@@ -106,6 +106,63 @@ def test_processing_record_promoted_to_registered_server_side(monkeypatch):
     assert all(d["id"] != info_id for d in drafts)
 
 
+def test_generated_task_drafts_inherit_child_id(monkeypatch):
+    """SOT-1368 follow-up: 写真OCRから自動生成されるタスクdraftが、親写真の child_id を引き継ぐ。
+
+    写真レコードに紐づけた子ども(child_id)が、別レコードとして生成される「やること」タスクにも
+    伝播することを検証する（タスク一覧で子どもタグが表示されるための前提）。
+    """
+    from app import extraction
+
+    monkeypatch.setattr(ocr, "extract_text", lambda *a, **k: "プール開きのお知らせ")
+    # build_task_drafts を固定タスク1件にし、child_id 伝播のみを検証する。
+    monkeypatch.setattr(
+        extraction,
+        "build_task_drafts",
+        lambda *a, **k: [
+            {
+                "title": "水着を持参",
+                "info_type": "持ち物",
+                "content": "",
+                "items": None,
+                "date": None,
+                "event_date": "2026-07-20",
+            }
+        ],
+    )
+
+    # child_id 付きの processing レコードを作成する。
+    resp = client.post(
+        "/api/info/",
+        json={
+            "title": "",
+            "info_type": "資料",
+            "content": "",
+            "child_id": "7",
+            "registration_state": "processing",
+        },
+    )
+    assert resp.status_code == 200
+    info_id = resp.json()["id"]
+
+    up = _upload(info_id)
+    assert up.status_code == 200
+
+    db = TestingSessionLocal()
+    # 親写真レコード自身は child_id を保持している。
+    parent = db.query(models.NurseryInfo).filter(models.NurseryInfo.id == info_id).first()
+    assert parent.child_id == "7"
+    # 生成されたタスクdraft(別レコード)も同じ child_id を引き継ぐ。
+    drafts = (
+        db.query(models.NurseryInfo)
+        .filter(models.NurseryInfo.registration_state == "draft")
+        .all()
+    )
+    assert len(drafts) >= 1
+    assert all(d.child_id == "7" for d in drafts)
+    db.close()
+
+
 def test_registered_record_not_modified(monkeypatch):
     """通常の手動添付(registered)には enrich/昇格の副作用が無い。"""
     monkeypatch.setattr(ocr, "extract_text", lambda *a, **k: "なにかのテキスト")

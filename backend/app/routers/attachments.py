@@ -108,6 +108,9 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
         today_iso = clock.today().isoformat()
         fallback_title = f"写真から登録（{today_iso}）"
         has_text = bool((safe_text or "").strip())
+        # SOT-1368 follow-up: 親(写真)レコードに紐づけた子ども(child_id)を、
+        # OCRから自動生成する各タスクdraftにも引き継ぐ。未指定(None)は紐付けなし。
+        parent_child_id = getattr(info, "child_id", None)
         detected_dates = getattr(structured, "detected_dates", None) if structured else None
         detected_items = getattr(structured, "detected_items", None) if structured else None
 
@@ -158,6 +161,7 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
                             items=(task["items"] or None),
                             date=(task["date"] or None),
                             event_date=(task.get("event_date") or None),
+                            child_id=parent_child_id,  # SOT-1368: 親写真の子どもを引き継ぐ
                             status="未確認",
                             priority="普通",
                             registration_state="draft",
