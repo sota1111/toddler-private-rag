@@ -155,7 +155,7 @@ const DraftsPage: React.FC = () => {
           disabled={isFetching}
           aria-label={isFetching ? t('drafts.refreshing') : t('drafts.refresh')}
           title={isFetching ? t('drafts.refreshing') : t('drafts.refresh')}
-          className="flex-shrink-0 p-2 text-foreground bg-surface border border-border rounded-md hover:bg-surface-muted disabled:opacity-50"
+          className="flex-shrink-0 p-2 text-foreground bg-surface border border-brand rounded-md hover:bg-surface-muted disabled:opacity-50"
         >
           {/* SOT-1379: 「更新」はテキストではなくアイコン（円形矢印）。取得中は回転。ラベルは aria-label/title が担う。 */}
           <svg
