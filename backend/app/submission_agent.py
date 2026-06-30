@@ -199,8 +199,11 @@ def _doc_has_municipality_download(doc: dict) -> bool:
 
 
 def _municipality_download_url(municipality: str, doc_name: str) -> str:
-    """設定済み市町村と書類名から、公式ダウンロードページに辿り着く検索URLを作る（SOT-1405）。"""
-    terms = [(municipality or "").strip(), (doc_name or "").strip(), "様式", "ダウンロード"]
+    """設定済み市町村と書類名から、公式ダウンロードページに辿り着く検索URLを作る（SOT-1405）。
+
+    検索クエリは「市町村名＋書類名＋様式」（人間指定の再オープン対応）。
+    """
+    terms = [(municipality or "").strip(), (doc_name or "").strip(), "様式"]
     query = " ".join(t for t in terms if t)
     return "https://www.google.com/search?q=" + urllib.parse.quote(query)
 

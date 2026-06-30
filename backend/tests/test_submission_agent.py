@@ -678,6 +678,10 @@ def test_municipality_download_url():
 
     assert urllib.parse.quote("渋谷区") in url
     assert urllib.parse.quote("就労証明書") in url
+    # クエリは「市町村名＋書類名＋様式」（SOT-1405 再オープン対応）。「ダウンロード」は含めない。
+    assert urllib.parse.quote("様式") in url
+    assert urllib.parse.quote("ダウンロード") not in url
+    assert url.endswith(urllib.parse.quote("渋谷区 就労証明書 様式"))
 
 
 def test_download_link_line_requires_municipality():
