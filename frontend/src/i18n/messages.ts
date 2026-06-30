@@ -355,7 +355,6 @@ export const messages: Record<Lang, Messages> = {
     'options.infoType.お知らせ': 'お知らせ',
     'options.infoType.給食': '給食',
     'options.infoType.休園変更': '休園変更',
-    'options.infoType.市町村': '市町村',
     // SOT-1344: 新表記。旧表記キー（対応済み/確認済み）は既存保存データ表示用に残置（後方互換）。
     'options.status.未確認': '未確認',
     'options.status.確認済': '確認済',
@@ -719,7 +718,6 @@ export const messages: Record<Lang, Messages> = {
     'options.infoType.お知らせ': 'Announcement',
     'options.infoType.給食': 'Lunch',
     'options.infoType.休園変更': 'Closure Change',
-    'options.infoType.市町村': 'Municipality',
     // SOT-1344: new labels; legacy keys (対応済み/確認済み) kept for existing stored data.
     'options.status.未確認': 'Unconfirmed',
     'options.status.確認済': 'Confirmed',
