@@ -1,56 +1,36 @@
-# Worker Report — SOT-1401 ダイアログを表示しない機能の削除
+# Worker Report — SOT-1405 (reopen): 登録の選択肢から市町村を削除
 
 ## Fallback Disclosure (Worker Non-Response Policy)
-- Non-responsive worker: **Antigravity CLI** — `scripts/ai/run_antigravity.sh` required interactive
-  OAuth re-authentication and timed out, exiting with non-response code `75`
-  (`WORKER_NONRESPONSE: antigravity (invalid report (missing ## Next Action))`).
-- Codex CLI was also non-responsive earlier (usage-limit cooldown, exit `75`).
-- Per the Worker Non-Response Fallback Policy, Claude Code performed the implementation (Antigravity's
-  role) and verification (Codex's role) directly. All Quality Gates applied unchanged.
+- Codex CLI was NON-RESPONSIVE (usage-limit cooldown; run_codex.sh delegated to Claude).
+- Antigravity CLI was NON-RESPONSIVE (`authentication failed or timed out`; WORKER_NONRESPONSE exit).
+- Per the Worker Non-Response Fallback Policy, Claude Code performed the implementation AND the
+  verification directly. All Quality Gates were applied identically.
 
 ## Summary
-Replaced the browser-native `window.confirm()` confirmations with a custom in-app confirmation modal
-that offers ONLY OK and Cancel. Native `confirm()` dialogs caused the browser to inject a "don't show
-this dialog again / このページでこれ以上ダイアログを生成しない" checkbox on repeated firing — that
-"don't show dialog" option is what SOT-1401 wanted removed. The custom modal has no such option.
+Removed the redundant info_type option "市町村" from the registration form dropdown and the two
+filter dropdowns, and removed the now-unused i18n keys. The municipality is managed on the Settings
+page (SOT-1403), so this option is no longer needed.
 
 ## Changed Files
-- `frontend/src/components/confirmDialogContext.ts` — NEW. `ConfirmContext` + `useConfirm()` hook +
-  `ConfirmFn` type (split out from the component file to satisfy `react-refresh/only-export-components`,
-  mirroring the existing i18n `i18nContextValue.ts` pattern).
-- `frontend/src/components/ConfirmDialog.tsx` — NEW. `ConfirmDialogProvider`: renders a single modal
-  overlay (`role="dialog"`, `aria-modal`) with OK (resolves true) / Cancel (resolves false). Promise-based;
-  Cancel / overlay click resolves false. Uses existing Tailwind tokens (`bg-surface`, `bg-brand`,
-  `hover:bg-brand-strong`, `border-border`).
-- `frontend/src/App.tsx` — mount `ConfirmDialogProvider` inside `<I18nProvider>` (so it has translations),
-  wrapping the rest of the provider stack.
-- `frontend/src/i18n/messages.ts` — added `common.ok` / `common.cancel` to both `ja` ('OK'/'キャンセル')
-  and `en` ('OK'/'Cancel') blocks.
-- `frontend/src/pages/DataDetailPage.tsx` — `handleDelete` now `await confirm(...)` instead of `window.confirm`.
-- `frontend/src/pages/InfoListPage.tsx` — `handleDelete` now async, `await confirm(...)`.
-- `frontend/src/pages/DraftsPage.tsx` — `handleFinalizeAll` / `handleDiscard` now `await confirm(...)`.
-- `frontend/e2e/scenarios.spec.ts` — S5 (delete) and S12 (finalize-all) updated: removed
-  `page.on('dialog', d => d.accept())` and instead click the modal's `OK` button. (`window.alert` error
-  notices in DraftsPage left untouched — out of scope.)
+- `frontend/src/pages/infoFormOptions.ts` — remove "市町村" from shared INFO_TYPES (registration form)
+- `frontend/src/pages/InfoListPage.tsx` — remove "市町村" from filter INFO_TYPES
+- `frontend/src/pages/SearchPage.tsx` — remove "市町村" from filter INFO_TYPES
+- `frontend/src/i18n/messages.ts` — remove `options.infoType.市町村` (ja + en)
 
 ## Commands Run
-- `npm run lint` → 0 errors (after splitting context/hook into a separate module + dropping a
-  ref-during-render).
-- `npm run build` (tsc -b && vite build) → success, 162 modules.
-- `npx playwright test` → 17 passed.
-- `grep -rn "window.confirm" frontend/src` → none (only a comment reference remains).
+- `npm run lint` → exit 0
+- `npm run build` (tsc + vite) → exit 0
+- `npm run e2e` → 17 passed
 
 ## Acceptance Criteria
-- [x] No browser "don't show dialog" option — native `window.confirm` removed app-wide.
-- [x] Confirmations show only OK and Cancel (custom modal).
-- [x] Destructive actions still gated on user confirmation (behavior preserved).
-- [x] lint + build + e2e pass.
+- [x] 登録の選択肢から「市町村」が削除されている
+- [x] フィルタ（一覧・検索）の選択肢からも「市町村」が削除されている
+- [x] 設定画面の市町村機能（SOT-1403）は無変更
+- [x] Lint / Build(TypeCheck) / E2E すべて pass
 
 ## Risks
-- The "don't show dialog" text was browser-injected, not app code; the only reliable removal is moving
-  off `window.confirm` to a custom modal (done).
-- `window.alert(...)` error notices in DraftsPage remain native (single-OK, out of scope for an OK/Cancel
-  requirement). Can be migrated later if desired.
+- 既存に info_type=="市町村" の保存データがある場合、optLabel の raw 値 fallback で表示は維持される
+  （i18n キー削除は非破壊）。
 
 ## Next Action
 READY_FOR_REVIEW
