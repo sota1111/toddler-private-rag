@@ -1,6 +1,7 @@
 import pytest
 import os
 import shutil
+import datetime
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -498,6 +499,90 @@ def test_auto_deadline_investigation_runs_when_flag_true(monkeypatch):
     # 生成された提出準備タスクが draft として永続化される。
     titles = [i.title for i in _all_infos()]
     assert "就労証明書の準備" in titles
+
+
+def test_auto_deadline_investigation_persists_group_fields(monkeypatch):
+    """SOT-1411 回帰: 自動締切調査で生成した提出タスクにも締切グループ情報
+    (deadline_group_id / deadline_offset_days / deadline_base_date) が永続化されること。
+    これが無いと自動生成されたやることリストは基準日変更で付随タスクをずらせない。"""
+    from app import extraction, submission_agent
+    from app.routers import attachments
+
+    info_id = _make_processing_info()
+
+    monkeypatch.setattr(
+        extraction,
+        "build_draft_fields",
+        lambda *a, **k: {
+            "title": "写真から登録",
+            "info_type": "その他",
+            "content": "本文",
+            "items": "",
+            "date": "",
+        },
+    )
+    monkeypatch.setattr(
+        extraction,
+        "build_task_drafts",
+        lambda *a, **k: [
+            {
+                "title": "就労証明書の提出",
+                "info_type": "提出物",
+                "content": "勤務先に依頼",
+                "items": "",
+                "date": "",
+                "event_date": "2026-07-31",
+                "needs_deadline_investigation": True,
+            }
+        ],
+    )
+
+    # 2 手順の提出準備タスク（同一グループ・基準日あり・オフセットあり）を返す。
+    def fake_build_submission(safe_text, detected_dates=None, **kwargs):
+        return [
+            {
+                "title": "就労証明書(1/2) 依頼",
+                "info_type": "提出物",
+                "content": "手順1",
+                "items": "",
+                "date": "",
+                "event_date": "2026-07-20",
+                "due_date": "2026-07-20",
+                "tags": submission_agent.SUBMISSION_TAG,
+                "deadline_group_id": "grp-1411",
+                "deadline_offset_days": 11,
+                "deadline_base_date": "2026-07-31",
+            },
+            {
+                "title": "就労証明書(2/2) 提出",
+                "info_type": "提出物",
+                "content": "手順2",
+                "items": "",
+                "date": "",
+                "event_date": "2026-07-31",
+                "due_date": "2026-07-31",
+                "tags": submission_agent.SUBMISSION_TAG,
+                "deadline_group_id": "grp-1411",
+                "deadline_offset_days": 0,
+                "deadline_base_date": "2026-07-31",
+            },
+        ]
+
+    monkeypatch.setattr(
+        submission_agent, "build_submission_task_drafts", fake_build_submission
+    )
+    monkeypatch.setattr(
+        "app.rag.indexing.index_info_id", lambda *a, **k: None, raising=False
+    )
+
+    attachments._promote_processing_draft(info_id, "OCRテキスト", None, language="ja")
+
+    subs = [i for i in _all_infos() if (i.tags or "") and submission_agent.SUBMISSION_TAG in i.tags]
+    assert len(subs) == 2, [i.title for i in _all_infos()]
+    # 締切グループ情報が永続化されていること（未設定=None ではない）。
+    assert all(i.deadline_group_id == "grp-1411" for i in subs)
+    assert {i.deadline_offset_days for i in subs} == {0, 11}
+    assert all(i.deadline_base_date == datetime.date(2026, 7, 31) for i in subs)
 
 
 def test_auto_deadline_investigation_skipped_when_no_flag(monkeypatch):

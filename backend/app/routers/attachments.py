@@ -212,6 +212,13 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
                                             event_date=(sub.get("event_date") or None),
                                             due_date=(sub.get("due_date") or None),
                                             tags=(sub.get("tags") or None),
+                                            # SOT-1411: 自動締切調査でも手動経路(routers/info.py)と
+                                            # 同じく締切グループ情報を永続化する。これが無いと自動生成
+                                            # されたやることリストはグループID・オフセット・基準日が
+                                            # 未設定になり、基準日変更で付随タスクをずらせない。
+                                            deadline_group_id=sub.get("deadline_group_id"),
+                                            deadline_offset_days=sub.get("deadline_offset_days"),
+                                            deadline_base_date=(sub.get("deadline_base_date") or None),
                                             child_id=parent_child_id,
                                             status="未確認",
                                             priority="普通",
