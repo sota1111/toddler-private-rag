@@ -165,6 +165,10 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
                             status="未確認",
                             priority="普通",
                             registration_state="draft",
+                            # SOT-1407: 締め切り調査が必要なタスクかのフラグを永続化する。
+                            needs_deadline_investigation=bool(
+                                task.get("needs_deadline_investigation")
+                            ),
                         )
                     )
                     cid = getattr(created, "id", None)

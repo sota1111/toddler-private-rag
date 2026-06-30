@@ -46,6 +46,7 @@ export interface NurseryInfo {
   tags?: string
   memo?: string
   registration_state?: string
+  needs_deadline_investigation?: boolean
   created_at: string
   updated_at: string
   attachments?: Attachment[]

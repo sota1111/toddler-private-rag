@@ -326,3 +326,36 @@ def test_build_draft_fields_forwards_language(monkeypatch):
 
     extraction.build_draft_fields("運動会のお知らせ", None, None, language="en")
     assert seen["language"] == "en"
+
+
+# --- SOT-1407: 締め切り調査が必要かのフラグ -----------------------------------
+def test_needs_deadline_investigation_submission_type():
+    # info_type が「提出物」なら常に True。
+    assert extraction.needs_deadline_investigation("提出物", "") is True
+
+
+def test_needs_deadline_investigation_keyword():
+    # 提出書類系キーワード（証明書/提出 等）を含む本文は True。
+    assert extraction.needs_deadline_investigation("お知らせ", "就労証明書の提出") is True
+    assert extraction.needs_deadline_investigation("お知らせ", "Please submit the form") is True
+
+
+def test_needs_deadline_investigation_generic_notice_false():
+    # 提出と無関係なお知らせは False。
+    assert extraction.needs_deadline_investigation("行事", "明日は運動会です") is False
+
+
+def test_task_to_draft_sets_needs_deadline_investigation():
+    task = {"title": "就労証明書の提出", "detail": "勤務先で記入してもらう", "category": "submissions"}
+    draft = extraction._task_to_draft(task, "")
+    assert draft["needs_deadline_investigation"] is True
+
+    task2 = {"title": "運動会", "detail": "5月10日開催", "category": "events"}
+    draft2 = extraction._task_to_draft(task2, "")
+    assert draft2["needs_deadline_investigation"] is False
+
+
+def test_build_draft_fields_includes_needs_deadline_investigation():
+    fields = extraction.build_draft_fields("健康調査票を提出してください", None, None)
+    assert "needs_deadline_investigation" in fields
+    assert fields["needs_deadline_investigation"] is True

@@ -82,6 +82,8 @@ class NurseryInfoBase(BaseModel):
     status: Optional[str] = "未確認"
     # 仮登録(draft) / 本登録(registered)。省略時は本登録。
     registration_state: Optional[str] = "registered"
+    # SOT-1407: 締め切り調査が必要なタスクか（やることリスト作成時に算出）。
+    needs_deadline_investigation: Optional[bool] = False
     priority: Optional[str] = "普通"
     tags: Optional[str] = None
     memo: Optional[str] = None
@@ -104,6 +106,7 @@ class NurseryInfoUpdate(BaseModel):
     child_id: Optional[str] = None
     status: Optional[str] = None
     registration_state: Optional[str] = None
+    needs_deadline_investigation: Optional[bool] = None
     priority: Optional[str] = None
     tags: Optional[str] = None
     memo: Optional[str] = None

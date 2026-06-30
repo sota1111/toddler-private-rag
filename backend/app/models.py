@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Date, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Text, Date, DateTime, ForeignKey, JSON, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
@@ -19,6 +19,9 @@ class NurseryInfo(Base):
     status = Column(String(20), default="未確認")
     # 仮登録(draft) / 本登録(registered) の区分。既存(未設定)データは registered 扱い。
     registration_state = Column(String(20), nullable=False, server_default="registered", default="registered")
+    # SOT-1407: 締め切り調査が必要なタスクか（やることリスト作成時に算出）。
+    # nullable のまま追加（既存行は NULL = 未調査扱いで締め切り調査ボタン非表示）。
+    needs_deadline_investigation = Column(Boolean, nullable=True, default=False)
     priority = Column(String(10), default="普通")
     tags = Column(Text, nullable=True)
     memo = Column(Text, nullable=True)
