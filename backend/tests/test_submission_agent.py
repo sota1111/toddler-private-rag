@@ -832,11 +832,22 @@ def test_step_deadlines_emits_offset_from_base(monkeypatch):
         assert r["offset_days"] == (base - due).days
 
 
-def test_step_deadlines_offset_none_when_due_unknown():
-    """最終期限が不明なら基準日が無いのでオフセットは None。"""
-    steps = [{"name": "申請", "lead_time_days": 3}]
+def test_step_deadlines_offset_anchored_to_last_when_due_unknown():
+    """SOT-1411 再オープン: 最終期限が不明でも、グループ内の最終タスク(末尾)を基準(offset=0)
+    として各タスクにオフセットを記録する（基準日変更時に付随タスクをずらせるようにするため）。"""
+    steps = [
+        {"name": "申請", "lead_time_days": 3},
+        {"name": "受領", "lead_time_days": 2},
+        {"name": "提出", "lead_time_days": 1},
+    ]
     result = submission_agent._step_deadlines("", steps, None)
-    assert result[0]["offset_days"] is None
+    # 末尾(最終タスク)が基準で offset=0、各タスクは末尾日付からの日数差。
+    assert result[-1]["offset_days"] == 0
+    assert all(r["offset_days"] is not None for r in result)
+    last = datetime.date.fromisoformat(result[-1]["due_iso"])
+    for r in result:
+        expected = (last - datetime.date.fromisoformat(r["due_iso"])).days
+        assert r["offset_days"] == expected
 
 
 def test_build_drafts_persists_group_and_offsets(monkeypatch):

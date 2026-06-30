@@ -540,6 +540,16 @@ def _step_deadlines(
         for i in range(n):
             cursor = cursor + datetime.timedelta(days=effective[i])
             dues[i] = cursor.isoformat()
+        # SOT-1411 再オープン対応: 最終提出期限が不明でも、グループ内の最終タスク(末尾)を基準
+        # (offset=0)として各タスクのオフセットを記録する。これが無いと基準日変更時に付随タスクの
+        # ずらし量を計算できず、編集したタスク1件しか動かない（=「他のやることの日付が変わらない」）。
+        if n > 0:
+            try:
+                base_d = datetime.date.fromisoformat(dues[n - 1])
+                for i in range(n):
+                    offsets[i] = (base_d - datetime.date.fromisoformat(dues[i])).days
+            except ValueError:
+                pass
 
     return [
         {"name": s.get("name", ""), "lead_time_days": eff, "due_iso": d, "offset_days": off}
@@ -685,6 +695,10 @@ def build_submission_task_drafts(
         # 手順ごとにタスクを分割し、各手順の締切を後ろ向きに逆算する
         scheduled = _step_deadlines(due_iso, steps, doc.get("lead_time_days"))
         total = len(scheduled)
+        # SOT-1411 再オープン対応: 最終提出期限が判明していればそれを、不明なら前向き累積した
+        # 最終タスク(末尾)の日付をグループの基準日とする。空のままだと基準日変更で付随タスクを
+        # ずらせない。
+        step_base_date = due_iso or (scheduled[-1]["due_iso"] if scheduled else "")
         for i, step in enumerate(scheduled):
             step_due = step.get("due_iso") or ""
             step_name = step.get("name", "")
@@ -708,7 +722,7 @@ def build_submission_task_drafts(
                     "tags": SUBMISSION_TAG,
                     "deadline_group_id": group_id,
                     "deadline_offset_days": step.get("offset_days"),
-                    "deadline_base_date": base_date,
+                    "deadline_base_date": step_base_date,
                     "categories": {"title": title, **category_dict},
                 }
             )

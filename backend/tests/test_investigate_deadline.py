@@ -179,3 +179,75 @@ def test_reschedule_404_for_missing(monkeypatch):
     monkeypatch.setattr("app.routers.info.index_info_id", lambda *a, **k: None)
     resp = client.post("/api/info/999999/reschedule-deadline", json={"base_date": "2026-08-10"})
     assert resp.status_code == 404
+
+
+def test_forward_generated_group_is_reschedulable(monkeypatch):
+    """SOT-1411 再オープン: 最終提出期限が不明な書類（前向き累積で生成）でも、各手順タスクに
+    オフセットと基準日が記録され、基準日変更で付随タスクがまとめてずれること。
+
+    回帰: 修正前は前向き経路の offset が全て None・基準日が空で保存され、基準日変更時に編集した
+    タスク1件しか動かなかった（=「他のやることの日付が変わらない」）。
+    """
+    # 最終提出期限を持たない（due_date が空の）書類を、手順つきで生成させる。
+    def fake_extract(safe_text, detected_dates=None, language="ja", final_due_iso=None):
+        return [
+            {
+                "name": "在籍証明書",
+                "due_date": "",  # 最終提出期限が不明
+                "lead_time_days": None,
+                "steps": [
+                    {"name": "会社へ依頼", "lead_time_days": 3},
+                    {"name": "受領", "lead_time_days": 2},
+                    {"name": "園へ提出", "lead_time_days": 1},
+                ],
+            }
+        ]
+
+    monkeypatch.setattr(submission_agent, "extract_submission_documents", fake_extract)
+
+    drafts = submission_agent.build_submission_task_drafts("在籍証明書", None, language="ja")
+    assert len(drafts) == 3
+
+    # 全タスクにオフセットが記録され（None でない）、最終タスクが基準（offset=0）になっている。
+    offsets = [d["deadline_offset_days"] for d in drafts]
+    assert all(o is not None for o in offsets), offsets
+    assert offsets[-1] == 0
+    # 基準日（グループの最終タスク日付）が空でないこと。
+    base_dates = {d["deadline_base_date"] for d in drafts}
+    assert "" not in base_dates and len(base_dates) == 1
+    # 同一グループ識別子を共有していること。
+    assert len({d["deadline_group_id"] for d in drafts}) == 1
+
+    # 生成された前向きグループを実際に永続化し、基準日変更で付随タスクが一緒にずれることを確認する。
+    monkeypatch.setattr("app.routers.info.index_info_id", lambda *a, **k: None)
+    created = []
+    for d in drafts:
+        created.append(
+            _create(
+                title=d["title"],
+                info_type=d["info_type"],
+                content=d["content"],
+                event_date=d["event_date"],
+                due_date=d["due_date"],
+                deadline_group_id=d["deadline_group_id"],
+                deadline_offset_days=d["deadline_offset_days"],
+                deadline_base_date=d["deadline_base_date"],
+            )
+        )
+
+    resp = client.post(
+        f"/api/info/{created[0]['id']}/reschedule-deadline",
+        json={"base_date": "2026-09-30"},
+    )
+    assert resp.status_code == 200, resp.text
+    # 付随タスク全件（3件）がずれること（修正前は1件しか動かなかった）。
+    assert resp.json()["updated"] == 3
+
+    for d, c in zip(drafts, created):
+        r = client.get(f"/api/info/{c['id']}").json()
+        expected = (
+            __import__("datetime").date(2026, 9, 30)
+            - __import__("datetime").timedelta(days=d["deadline_offset_days"])
+        ).isoformat()
+        assert r["due_date"] == expected and r["event_date"] == expected
+        assert r["deadline_base_date"] == "2026-09-30"
