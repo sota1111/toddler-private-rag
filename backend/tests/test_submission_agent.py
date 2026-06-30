@@ -196,13 +196,16 @@ def test_build_drafts_per_step_backward_chain(monkeypatch):
         assert f"手順 {i + 1}/4" in d["content"]
         assert "所要期間の目安" in d["content"]
         assert "最終提出期限: 2026-07-30" in d["content"]
-    # タイトルは「書類名(何番目/全数)」のみ＝親タスク(書類)の概要を表紙にする（SOT-1420）
-    assert drafts[0]["title"] == "在籍証明書(1/4)"
-    assert drafts[3]["title"] == "在籍証明書(4/4)"
+    # タイトルは「書類名(何番目/全数) + 手順の要約文」を表紙にする（SOT-1420 再オープン）
+    assert drafts[0]["title"].startswith("在籍証明書(1/4)")
+    assert drafts[3]["title"].startswith("在籍証明書(4/4)")
+    # 簡潔な手順名はそのまま要約として併記される
+    assert "テンプレート入手" in drafts[0]["title"]
+    assert "市町村に提出" in drafts[3]["title"]
 
 
-def test_build_drafts_long_step_name_title_not_truncated_midsentence(monkeypatch):
-    """手順名が長文でもタイトルには手順本文を入れず、書類名+番号のみにする（SOT-1420）。"""
+def test_build_drafts_long_step_name_title_summarized_not_truncated_midsentence(monkeypatch):
+    """手順名が長文でもタイトルには簡潔な要約(自然区切り+字数上限)を併記し、文の途中で生のまま切れない（SOT-1420 再オープン）。"""
     monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
     monkeypatch.setattr(
         submission_agent,
@@ -229,12 +232,32 @@ def test_build_drafts_long_step_name_title_not_truncated_midsentence(monkeypatch
 
     drafts = submission_agent.build_submission_task_drafts(SAMPLE, language="ja")
     assert len(drafts) == 2
-    # タイトルは「書類名(何番目/全数)」のみで、手順本文の切り出しを含まない（SOT-1420）
-    assert drafts[1]["title"] == "会社の在籍証明書(2/2)"
+    # タイトルは「書類名(何番目/全数) + 簡潔な手順要約」で、手順本文を生のまま切り出さない（SOT-1420 再オープン）
+    assert drafts[1]["title"].startswith("会社の在籍証明書(2/2)")
+    # 自然な区切りまでで簡潔化されるので、区切り文字や後半の語は含まれない
     assert "、" not in drafts[1]["title"]
     assert "様式" not in drafts[1]["title"]
+    # 長文は字数で丸められ末尾が「…」になる（文の途中で生のまま切れていない）
+    assert drafts[1]["title"].endswith("…")
     # 手順名フルは本文に残るので情報は失われない
     assert "様式を提出し、証明書の記入・発行を依頼する" in drafts[1]["content"]
+
+
+def test_step_subtitle_summarizes_long_step_name():
+    """_step_subtitle は長文手順名を最初の区切り＋字数上限で簡潔化し、末尾に「…」を付ける（SOT-1420）。"""
+    long_name = "自治体のホームページや窓口から就労証明書の様式を入手し、記入して提出する"
+    sub = submission_agent._step_subtitle(long_name)
+    # 最初の区切り「、」より後（記入して提出する）は見出しに含まれない
+    assert "、" not in sub
+    assert "記入して提出" not in sub
+    # 字数上限で丸められ末尾は「…」、元の長文全体は含まれない
+    assert sub.endswith("…")
+    assert sub != long_name
+    assert len(sub) <= 18 + 1  # limit + 「…」
+    # 既に簡潔な手順名はそのまま返る
+    assert submission_agent._step_subtitle("テンプレート入手") == "テンプレート入手"
+    # 空入力は空文字
+    assert submission_agent._step_subtitle("") == ""
 
 
 def test_step_deadlines_forward_when_due_unknown(monkeypatch):
