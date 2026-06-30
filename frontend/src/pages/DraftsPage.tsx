@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDrafts, finalizeInfo, deleteInfo, updateInfo, getAttachmentFileUrl, getProcessingCount } from '../api';
 import type { NurseryInfo, NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
+import { useConfirm } from '../components/confirmDialogContext';
 import RegisterMenu from '../components/RegisterMenu';
 import ScrollableDatePicker from '../components/ScrollableDatePicker';
 import { INFO_TYPES, STATUS_TYPES, PRIORITY_TYPES } from './infoFormOptions';
@@ -12,6 +13,7 @@ import { INFO_TYPES, STATUS_TYPES, PRIORITY_TYPES } from './infoFormOptions';
 // SOT-1216: 各登録項目を表示したうえで、カードごとにインライン編集・保存できる。
 const DraftsPage: React.FC = () => {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const { data: drafts, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['drafts'],
@@ -135,7 +137,7 @@ const DraftsPage: React.FC = () => {
   // SOT-1341: 取得済みの全 draft を順番に本登録する。部分失敗の扱いを明確にするため逐次実行。
   const handleFinalizeAll = async () => {
     if (!drafts || drafts.length === 0) return;
-    if (!window.confirm(t('drafts.confirmFinalizeAll'))) return;
+    if (!(await confirm(t('drafts.confirmFinalizeAll')))) return;
     setBulkBusy(true);
     try {
       for (const d of drafts) {
@@ -151,7 +153,7 @@ const DraftsPage: React.FC = () => {
   };
 
   const handleDiscard = async (id: number | string) => {
-    if (!window.confirm(t('drafts.confirmDiscard'))) return;
+    if (!(await confirm(t('drafts.confirmDiscard')))) return;
     setBusyId(id);
     try {
       await deleteInfo(id);

@@ -11,6 +11,7 @@ import LanguageToggle from './components/LanguageToggle';
 import RoleToggle from './components/RoleToggle';
 import ReminderBanner from './components/ReminderBanner';
 import ScrollToTop from './components/ScrollToTop';
+import { ConfirmDialogProvider } from './components/ConfirmDialog';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -173,6 +174,7 @@ const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <I18nProvider>
+        <ConfirmDialogProvider>
         <SettingsProvider>
         <RoleProvider>
           <AuthProvider>
@@ -211,6 +213,7 @@ const App: React.FC = () => {
           </AuthProvider>
         </RoleProvider>
         </SettingsProvider>
+        </ConfirmDialogProvider>
       </I18nProvider>
     </QueryClientProvider>
   );

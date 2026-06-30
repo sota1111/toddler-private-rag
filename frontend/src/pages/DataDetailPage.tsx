@@ -5,6 +5,7 @@ import { getInfoById, deleteInfo, updateInfo, getAttachmentFileUrl, getAttachmen
 import type { Attachment } from '../types';
 import { STATUS_TYPES } from './infoFormOptions';
 import { useI18n } from '../i18n/useI18n';
+import { useConfirm } from '../components/confirmDialogContext';
 
 // SOT-1325: 写真を大きく表示し、その下に文字起こし(OCR原文)を設定言語で表示する。
 // 画像ごとに独立した文字起こしクエリを持たせるため子コンポーネントに切り出す。
@@ -66,6 +67,7 @@ const AttachmentBlock: React.FC<{ att: Attachment }> = ({ att }) => {
 // id ごとに key 付きで再マウントすることで、別レコードへ遷移したときに状態を確実にリセットする。
 const DataDetail: React.FC<{ id: string }> = ({ id }) => {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -146,9 +148,9 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
     investigateMutation.mutate();
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (deleteMutation.isPending || !item) return;
-    if (window.confirm(t('records.confirmDelete', { title: item.title }))) {
+    if (await confirm(t('records.confirmDelete', { title: item.title }))) {
       setDeleteError(null);
       deleteMutation.mutate();
     }

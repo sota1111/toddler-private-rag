@@ -50,8 +50,6 @@ test.describe('toddler-private-rag シナリオ', () => {
   test('S5: 詳細ページで削除すると元の画面へ戻り対象が消える (SOT-1312)', async ({ page }) => {
     await installApiMocks(page, { authed: true })
     await login(page)
-    // confirm ダイアログを自動承認する
-    page.on('dialog', dialog => dialog.accept())
 
     // SOT-1312: 一覧は廃止。タスク一覧メニュー経由で詳細へ遷移する。
     await page.locator('nav a[href="/tasks"]').first().click()
@@ -60,7 +58,9 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page).toHaveURL(/\/data\/2$/)
     await expect(page.getByRole('heading', { name: '運動会のお知らせ' })).toBeVisible()
 
+    // SOT-1401: window.confirm は廃止。アプリ内の OK/キャンセル確認モーダルで OK を押す。
     await page.getByRole('button', { name: '削除' }).click()
+    await page.getByRole('button', { name: 'OK' }).click()
     // 削除後は遷移元（タスク一覧）へ戻り、対象が消える
     await expect(page).toHaveURL(/\/tasks/)
     await expect(page.getByRole('link', { name: /運動会のお知らせ/ })).toHaveCount(0)
@@ -221,16 +221,15 @@ test.describe('toddler-private-rag シナリオ', () => {
     await installApiMocks(page, { authed: true })
     await login(page)
 
-    // 確認ダイアログは自動承認する
-    page.on('dialog', (d) => d.accept())
-
     await page.locator('nav a[href="/create/auto"]').first().click()
     await expect(page).toHaveURL(/\/create\/auto/)
     await page.locator('a[href="/drafts"]').first().click()
     await expect(page).toHaveURL(/\/drafts/)
     await expect(page.getByRole('heading', { name: '遠足のしおり（仮）' })).toBeVisible()
 
+    // SOT-1401: window.confirm は廃止。アプリ内の OK/キャンセル確認モーダルで OK を押す。
     await page.getByRole('button', { name: '全て本登録する', exact: true }).click()
+    await page.getByRole('button', { name: 'OK' }).click()
 
     // 全件本登録後は仮登録一覧から消え、空表示になる
     await expect(page.getByRole('heading', { name: '遠足のしおり（仮）' })).toHaveCount(0)
