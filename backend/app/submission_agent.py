@@ -275,13 +275,23 @@ def _build_content(doc: dict, language: str) -> str:
     return "\n".join(lines) if lines else (name or "")
 
 
+def _today() -> datetime.date:
+    """本日の日付。テストで monkeypatch できるよう関数に切り出す。"""
+    return datetime.date.today()
+
+
 def _step_deadlines(
     due_iso: str, steps: List[dict], doc_lead: Optional[int]
 ) -> List[dict]:
-    """各手順の所要期間から提出期限を後ろ向きに逆算し、手順ごとの締切(ISO)を付与して返す。
+    """各手順の所要期間から手順ごとの締切(ISO)を付与して返す。
 
     ``steps`` は実行順（最初の手順が先頭、最終提出が末尾）。返り値も実行順で、各要素は
-    ``{name, lead_time_days(有効値), due_iso}``。due_iso が空/不正なら各手順の due_iso="" とする。
+    ``{name, lead_time_days(有効値), due_iso}``。
+
+    - 最終提出期限が判明している場合: 提出期限から各手順の所要日数だけ後ろ向きに逆算する。
+    - 最終提出期限が不明（空/不正）な場合: 本日起点で各手順の所要日数を前向きに累積し、各手順に
+      具体的な締切を設定する（やることリストに日付が登録されるようにするため。SOT-1399 再オープン対応）。
+
     常に never-throw。
     """
     n = len(steps)
@@ -308,6 +318,12 @@ def _step_deadlines(
         # 末尾(最終提出)から先頭へ、各手順の所要日数だけ遡って締切を決める
         for i in range(n - 1, -1, -1):
             cursor = cursor - datetime.timedelta(days=effective[i])
+            dues[i] = cursor.isoformat()
+    else:
+        # 最終期限が不明なときは本日起点で前向きに累積し、各手順に具体日付を割り当てる
+        cursor = _today()
+        for i in range(n):
+            cursor = cursor + datetime.timedelta(days=effective[i])
             dues[i] = cursor.isoformat()
 
     return [
