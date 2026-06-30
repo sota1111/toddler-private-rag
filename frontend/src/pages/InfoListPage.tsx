@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getInfoList, getAttachmentFileUrl, deleteInfo } from '../api';
 import { useI18n } from '../i18n/useI18n';
+import { useConfirm } from '../components/confirmDialogContext';
 
 const INFO_TYPES = ["すべて", "資料", "掲示", "行事", "持ち物", "提出物", "お知らせ", "給食", "休園変更"];
 // SOT-1355: ステータスを3つに統一（すべて / 未確認 / 未対応 / 対応済）。`確認済` は選択肢から削除。
@@ -9,6 +10,7 @@ const STATUS_TYPES = ["すべて", "未確認", "未対応", "対応済"];
 
 const InfoListPage: React.FC = () => {
   const { t } = useI18n();
+  const confirm = useConfirm();
   // 表示専用ラベル: フィルタ値・保存値（日本語）は変えず、表示テキストのみ翻訳する
   const optLabel = (group: string, value: string) => {
     const key = `options.${group}.${value}`;
@@ -53,10 +55,10 @@ const InfoListPage: React.FC = () => {
     },
   });
 
-  const handleDelete = (e: React.MouseEvent, id: number | string, title: string) => {
+  const handleDelete = async (e: React.MouseEvent, id: number | string, title: string) => {
     e.stopPropagation();
     if (deleteMutation.isPending) return;
-    if (window.confirm(t('list.confirmDelete', { title }))) {
+    if (await confirm(t('list.confirmDelete', { title }))) {
       deleteMutation.mutate(id);
     }
   };
