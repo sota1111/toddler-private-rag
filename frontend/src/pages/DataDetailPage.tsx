@@ -118,6 +118,12 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
 
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
+  // SOT-1415: 詳細画面の編集モード。日付(event_date)・内容(content)・タイトルを変更できる。
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
   // SOT-1411: 締切基準日の入力値。null のあいだは保存済みの基準日を表示する。
   const [baseDateInput, setBaseDateInput] = useState<string | null>(null);
   const [rescheduleMessage, setRescheduleMessage] = useState<string | null>(null);
@@ -147,6 +153,43 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
     if (!item || next === item.status || statusMutation.isPending) return;
     setStatusError(null);
     statusMutation.mutate(next);
+  };
+
+  // SOT-1415: 編集モードで変更したタイトル・内容・日付を保存する。
+  // 既存の更新API (PUT /info/{id}) をそのまま再利用する（バックエンド変更なし）。
+  const editMutation = useMutation({
+    mutationFn: () =>
+      updateInfo(id, { title: editTitle, content: editContent, event_date: editDate }),
+    onSuccess: () => {
+      setEditError(null);
+      setIsEditing(false);
+      queryClient.invalidateQueries({ queryKey: ['info-detail', id] });
+      queryClient.invalidateQueries({ queryKey: ['info'] });
+      queryClient.invalidateQueries({ queryKey: ['tomorrow'] });
+      queryClient.invalidateQueries({ queryKey: ['weekly'] });
+      queryClient.invalidateQueries({ queryKey: ['pending'] });
+    },
+    onError: () => setEditError(t('records.saveError')),
+  });
+
+  const handleStartEdit = () => {
+    if (!item) return;
+    setEditTitle(item.title ?? '');
+    setEditContent(item.content ?? '');
+    setEditDate(item.event_date ?? '');
+    setEditError(null);
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setEditError(null);
+    setIsEditing(false);
+  };
+
+  const handleSaveEdit = () => {
+    if (editMutation.isPending) return;
+    setEditError(null);
+    editMutation.mutate();
   };
 
   const deleteMutation = useMutation({
@@ -266,17 +309,40 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
       <div className="bg-surface rounded-lg shadow-sm border border-border overflow-hidden">
         <div className="p-4 sm:p-6">
           <div className={`flex items-start gap-3 mb-4 ${hasPhoto ? 'justify-end' : 'justify-between'}`}>
-            {!hasPhoto && (
+            {/* SOT-1415: 編集モードではタイトルを入力欄にする。 */}
+            {!hasPhoto && !isEditing && (
               <h1 className="text-2xl font-bold text-foreground break-words">{item.title}</h1>
             )}
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={deleteMutation.isPending}
-              className="text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1 rounded-md disabled:text-muted-foreground disabled:hover:bg-transparent transition-colors flex-shrink-0"
-            >
-              {deleteMutation.isPending ? t('records.deleting') : t('records.delete')}
-            </button>
+            {!hasPhoto && isEditing && (
+              <input
+                type="text"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                disabled={editMutation.isPending}
+                aria-label={t('tasks.fieldTitle')}
+                className="flex-1 text-2xl font-bold text-foreground border border-border rounded-md shadow-sm focus:ring-brand focus:border-brand p-2 disabled:opacity-60"
+              />
+            )}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {/* SOT-1415: 詳細画面の「編集」ボタン。非写真タスクレコードのみ表示する。 */}
+              {!hasPhoto && !isEditing && (
+                <button
+                  type="button"
+                  onClick={handleStartEdit}
+                  className="text-sm font-medium text-brand-strong hover:bg-surface-muted px-3 py-1 rounded-md transition-colors"
+                >
+                  {t('records.edit')}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleteMutation.isPending || isEditing}
+                className="text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1 rounded-md disabled:text-muted-foreground disabled:hover:bg-transparent transition-colors"
+              >
+                {deleteMutation.isPending ? t('records.deleting') : t('records.delete')}
+              </button>
+            </div>
           </div>
 
           {deleteError && (
@@ -312,11 +378,30 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
 
           {/* SOT-1313: タスク等の詳細を確認できるよう、日付・ステータス・内容を値があるときのみ表示する。
               SOT-1331: 写真ありレコードはこれらを出さず、写真＋文字起こしのみにする。 */}
-          {!hasPhoto && item.event_date && (
+          {!hasPhoto && !isEditing && item.event_date && (
             <div className="mb-3">
               <span className="inline-flex items-center gap-1 text-sm font-medium bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full">
                 📅 {t('records.eventDate')}: {item.event_date}
               </span>
+            </div>
+          )}
+
+          {/* SOT-1415: 編集モードでは日付(event_date)を変更できる（空にして日付なしにもできる）。 */}
+          {!hasPhoto && isEditing && (
+            <div className="mb-3">
+              <div className="flex items-center gap-2">
+                <label htmlFor="edit-event-date" className="text-sm font-medium text-foreground">
+                  {t('records.eventDate')}
+                </label>
+                <input
+                  id="edit-event-date"
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  disabled={editMutation.isPending}
+                  className="border border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2 disabled:opacity-60"
+                />
+              </div>
             </div>
           )}
 
@@ -386,10 +471,56 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
             </div>
           )}
 
-          {!hasPhoto && item.content && (
+          {!hasPhoto && !isEditing && item.content && (
             <div className="mb-4">
               <h2 className="text-sm font-semibold text-muted-foreground mb-1">{t('records.content')}</h2>
               <LinkifiedText text={item.content} className="whitespace-pre-wrap break-words text-foreground" />
+            </div>
+          )}
+
+          {/* SOT-1415: 編集モードでは内容(content)をテキストエリアで変更できる。 */}
+          {!hasPhoto && isEditing && (
+            <div className="mb-4">
+              <label htmlFor="edit-content" className="block text-sm font-semibold text-muted-foreground mb-1">
+                {t('records.content')}
+              </label>
+              <textarea
+                id="edit-content"
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                disabled={editMutation.isPending}
+                rows={4}
+                className="w-full rounded-md border border-border bg-surface px-3 py-2 text-foreground focus:ring-brand focus:border-brand disabled:opacity-60"
+              />
+            </div>
+          )}
+
+          {/* SOT-1415: 編集モードの保存／キャンセル。 */}
+          {!hasPhoto && isEditing && (
+            <div className="mb-4">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  disabled={editMutation.isPending}
+                  className="text-sm font-medium text-brand-strong border border-accent-border bg-accent-bg hover:opacity-90 px-4 py-1.5 rounded-md disabled:opacity-60 transition-colors"
+                >
+                  {t('records.save')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  disabled={editMutation.isPending}
+                  className="text-sm font-medium text-muted-foreground hover:bg-surface-muted px-4 py-1.5 rounded-md disabled:opacity-60 transition-colors"
+                >
+                  {t('records.cancel')}
+                </button>
+              </div>
+              {editError && (
+                <div className="mt-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                  {editError}
+                </div>
+              )}
             </div>
           )}
 
