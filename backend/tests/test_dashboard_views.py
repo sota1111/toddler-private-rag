@@ -74,3 +74,42 @@ def test_pending_spans_all_categories():
     titles = {i["title"] for i in client.get("/api/info/pending").json()}
     assert {"pending-doc", "pending-submission"} <= titles
     assert "done-item" not in titles
+
+
+def test_weekly_and_next_week_use_calendar_week_boundaries(monkeypatch):
+    """SOT-1424: 今週/来週の予定はカレンダー週（月曜始まり）境界で集計する。
+
+    本日起点のローリング窓だと、カレンダー上「来週」でも本日から7日以内の予定は
+    「今週」枠に入り「来週」枠が空白になっていた。来週の予定が「来週」枠に出ること、
+    今週末までの予定が「今週」枠に出ることを検証する。
+    """
+    import datetime as _dt
+
+    # 固定日を水曜にして週境界を決定的にする。
+    fixed_today = _dt.date(2026, 7, 1)  # Wednesday
+    assert fixed_today.weekday() == 2
+    monkeypatch.setattr(clock, "today", lambda: fixed_today)
+
+    this_week_end = fixed_today + _dt.timedelta(days=(6 - fixed_today.weekday()))  # Sunday 2026-07-05
+    next_monday = this_week_end + _dt.timedelta(days=1)                            # Monday 2026-07-06
+    next_sunday = next_monday + _dt.timedelta(days=6)                              # Sunday 2026-07-12
+    week_after_next = next_sunday + _dt.timedelta(days=1)                          # Monday 2026-07-13
+
+    _create(title="this-week", info_type="行事", event_date=this_week_end.isoformat())
+    # カレンダー上「来週」だが本日から5日後＝旧ローリング窓では「今週」に吸われていた予定。
+    _create(title="next-week-mon", info_type="行事", event_date=next_monday.isoformat())
+    _create(title="next-week-sun", info_type="行事", event_date=next_sunday.isoformat())
+    _create(title="week-after-next", info_type="行事", event_date=week_after_next.isoformat())
+
+    weekly_titles = {i["title"] for i in client.get("/api/info/weekly").json()}
+    next_week_titles = {i["title"] for i in client.get("/api/info/next-week").json()}
+
+    # 今週枠: 今週末までの行事のみ。来週以降は含まない。
+    assert "this-week" in weekly_titles
+    assert "next-week-mon" not in weekly_titles
+    assert "next-week-sun" not in weekly_titles
+
+    # 来週枠: 翌カレンダー週(月〜日)の行事が表示される（空白にならない）。
+    assert {"next-week-mon", "next-week-sun"} <= next_week_titles
+    assert "this-week" not in next_week_titles
+    assert "week-after-next" not in next_week_titles
