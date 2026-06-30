@@ -65,7 +65,11 @@ def test_extract_documents_happy(monkeypatch):
             {"name": "就労証明書", "due_date": "2026-05-10"},
         ],
     )
-    monkeypatch.setattr(ai_client, "generate_grounded", lambda prompt, **k: _enrich_json())
+    monkeypatch.setattr(
+        ai_client,
+        "generate_grounded_with_sources",
+        lambda prompt, **k: (_enrich_json(), []),
+    )
 
     docs = submission_agent.extract_submission_documents(SAMPLE, language="ja")
     assert len(docs) == 2
@@ -104,13 +108,16 @@ def test_llm_extract_documents_parsing(monkeypatch):
 
 def test_grounded_enrich_handles_empty(monkeypatch):
     """grounding が空文字を返しても例外なく既定値を返す。"""
-    monkeypatch.setattr(ai_client, "generate_grounded", lambda prompt, **k: "")
+    monkeypatch.setattr(
+        ai_client, "generate_grounded_with_sources", lambda prompt, **k: ("", [])
+    )
     info = submission_agent._grounded_enrich("就労証明書", "ja")
     assert info == {
         "steps": [],
         "needs_company_issuance": None,
         "lead_time_days": None,
         "source": "",
+        "sources": [],
     }
 
 
@@ -124,7 +131,9 @@ def test_build_drafts_backward_calc(monkeypatch):
         lambda text, language: [{"name": "就労証明書", "due_date": "2026-05-10"}],
     )
     monkeypatch.setattr(
-        ai_client, "generate_grounded", lambda prompt, **k: _enrich_json(lead=7)
+        ai_client,
+        "generate_grounded_with_sources",
+        lambda prompt, **k: (_enrich_json(lead=7), []),
     )
 
     drafts = submission_agent.build_submission_task_drafts(SAMPLE, language="ja")
@@ -169,7 +178,9 @@ def test_build_drafts_per_step_backward_chain(monkeypatch):
             "source": "https://example.go.jp",
         }
     )
-    monkeypatch.setattr(ai_client, "generate_grounded", lambda prompt, **k: enrich)
+    monkeypatch.setattr(
+        ai_client, "generate_grounded_with_sources", lambda prompt, **k: (enrich, [])
+    )
 
     drafts = submission_agent.build_submission_task_drafts(SAMPLE, language="ja")
     assert len(drafts) == 4
@@ -225,7 +236,9 @@ def test_build_drafts_long_step_name_title_not_truncated_midsentence(monkeypatch
             "source": "",
         }
     )
-    monkeypatch.setattr(ai_client, "generate_grounded", lambda prompt, **k: enrich)
+    monkeypatch.setattr(
+        ai_client, "generate_grounded_with_sources", lambda prompt, **k: (enrich, [])
+    )
 
     drafts = submission_agent.build_submission_task_drafts(SAMPLE, language="ja")
     assert len(drafts) == 2
@@ -281,7 +294,9 @@ def test_build_drafts_forward_schedule_when_no_due(monkeypatch):
             "source": "https://example.go.jp",
         }
     )
-    monkeypatch.setattr(ai_client, "generate_grounded", lambda prompt, **k: enrich)
+    monkeypatch.setattr(
+        ai_client, "generate_grounded_with_sources", lambda prompt, **k: (enrich, [])
+    )
 
     # SAMPLE_NO_DATES は日付を含まないため、アンカーが無く前向きフォールバックになる。
     drafts = submission_agent.build_submission_task_drafts(SAMPLE_NO_DATES, language="ja")
@@ -327,7 +342,9 @@ def test_build_drafts_backward_from_text_date_when_doc_due_empty(monkeypatch):
             "source": "https://example.go.jp",
         }
     )
-    monkeypatch.setattr(ai_client, "generate_grounded", lambda prompt, **k: enrich)
+    monkeypatch.setattr(
+        ai_client, "generate_grounded_with_sources", lambda prompt, **k: (enrich, [])
+    )
 
     text = "入園のしおり\n在籍証明書を2026-07-31までにご提出ください。\n面談は2026-07-15。\n"
     drafts = submission_agent.build_submission_task_drafts(text, language="ja")
@@ -374,7 +391,9 @@ def test_build_drafts_explicit_final_due_takes_priority(monkeypatch):
             "source": "https://example.go.jp",
         }
     )
-    monkeypatch.setattr(ai_client, "generate_grounded", lambda prompt, **k: enrich)
+    monkeypatch.setattr(
+        ai_client, "generate_grounded_with_sources", lambda prompt, **k: (enrich, [])
+    )
 
     # 本文には別の日付(7/15)しか無い。タスクの期限 7/31 を明示的に渡す。
     text = "入園のしおり\n面談は2026-07-15。\n"
@@ -403,9 +422,12 @@ def test_build_drafts_default_buffer_when_lead_unknown(monkeypatch):
     )
     monkeypatch.setattr(
         ai_client,
-        "generate_grounded",
-        lambda prompt, **k: json.dumps(
-            {"steps": [], "needs_company_issuance": None, "lead_time_days": None, "source": ""}
+        "generate_grounded_with_sources",
+        lambda prompt, **k: (
+            json.dumps(
+                {"steps": [], "needs_company_issuance": None, "lead_time_days": None, "source": ""}
+            ),
+            [],
         ),
     )
     drafts = submission_agent.build_submission_task_drafts(SAMPLE, language="ja")
@@ -423,7 +445,9 @@ def test_build_drafts_no_due_date_gives_empty_event(monkeypatch):
         "_llm_extract_documents",
         lambda text, language: [{"name": "口座振替依頼書", "due_date": ""}],
     )
-    monkeypatch.setattr(ai_client, "generate_grounded", lambda prompt, **k: "")
+    monkeypatch.setattr(
+        ai_client, "generate_grounded_with_sources", lambda prompt, **k: ("", [])
+    )
     # 手順も日付も無い書類は従来どおり日付が空（SAMPLE_NO_DATES でアンカー無し）。
     drafts = submission_agent.build_submission_task_drafts(SAMPLE_NO_DATES, language="ja")
     assert drafts[0]["due_date"] == ""
@@ -440,6 +464,139 @@ def test_detect_deadline_iso():
     )
     assert submission_agent._detect_deadline_iso("") == ""
     assert submission_agent._detect_deadline_iso("日付の無い本文です。") == ""
+
+
+# --- 根拠となる出典リンク (SOT-1404) ------------------------------------------------
+
+def test_grounded_enrich_collects_grounding_sources(monkeypatch):
+    """grounding メタデータ由来の実出典URLが doc の sources に入る（LLM source より優先）。"""
+    grounding = [
+        {"title": "横浜市 就労証明書", "url": "https://city.example.go.jp/form"},
+        {"title": "", "url": "https://mhlw.example.go.jp/guide"},
+    ]
+    monkeypatch.setattr(
+        ai_client,
+        "generate_grounded_with_sources",
+        lambda prompt, **k: (_enrich_json(source="就労証明書 案内"), grounding),
+    )
+    info = submission_agent._grounded_enrich("就労証明書", "ja")
+    assert info["sources"] == grounding
+    # LLM 自己申告の source 文字列も従来どおり保持される
+    assert info["source"] == "就労証明書 案内"
+
+
+def test_grounded_enrich_falls_back_to_llm_url_when_no_grounding(monkeypatch):
+    """grounding が空でも、LLM の source が http(s) URL ならフォールバックで sources に入れる。"""
+    monkeypatch.setattr(
+        ai_client,
+        "generate_grounded_with_sources",
+        lambda prompt, **k: (_enrich_json(source="https://example.go.jp"), []),
+    )
+    info = submission_agent._grounded_enrich("就労証明書", "ja")
+    assert info["sources"] == [
+        {"title": "https://example.go.jp", "url": "https://example.go.jp"}
+    ]
+
+
+def test_grounded_enrich_non_url_source_has_no_links(monkeypatch):
+    """URL でない単なる名称の source は根拠リンク扱いしない（sources は空）。"""
+    monkeypatch.setattr(
+        ai_client,
+        "generate_grounded_with_sources",
+        lambda prompt, **k: (_enrich_json(source="市区町村の窓口"), []),
+    )
+    info = submission_agent._grounded_enrich("就労証明書", "ja")
+    assert info["sources"] == []
+    assert info["source"] == "市区町村の窓口"
+
+
+def test_build_drafts_content_includes_source_links(monkeypatch):
+    """各手順タスク本文に「根拠リンク」と grounding 由来の実URLが出る。"""
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
+    monkeypatch.setattr(
+        submission_agent,
+        "_llm_extract_documents",
+        lambda text, language: [{"name": "就労証明書", "due_date": "2026-05-10"}],
+    )
+    grounding = [{"title": "横浜市 案内", "url": "https://city.example.go.jp/form"}]
+    monkeypatch.setattr(
+        ai_client,
+        "generate_grounded_with_sources",
+        lambda prompt, **k: (_enrich_json(lead=7), grounding),
+    )
+    drafts = submission_agent.build_submission_task_drafts(SAMPLE, language="ja")
+    assert drafts
+    for d in drafts:
+        assert "根拠リンク:" in d["content"]
+        assert "https://city.example.go.jp/form" in d["content"]
+        # grounding がある時は LLM 自己申告の単一「出典:」行は出さない
+        assert "出典:" not in d["content"]
+
+
+def test_build_drafts_content_source_line_when_no_links(monkeypatch):
+    """grounding も URL も無い時は従来どおり「出典:」行（LLM source）を出す（後方互換）。"""
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
+    monkeypatch.setattr(
+        submission_agent,
+        "_llm_extract_documents",
+        lambda text, language: [{"name": "就労証明書", "due_date": "2026-05-10"}],
+    )
+    monkeypatch.setattr(
+        ai_client,
+        "generate_grounded_with_sources",
+        lambda prompt, **k: (_enrich_json(lead=7, source="市区町村の窓口"), []),
+    )
+    drafts = submission_agent.build_submission_task_drafts(SAMPLE, language="ja")
+    assert drafts
+    assert "出典: 市区町村の窓口" in drafts[0]["content"]
+    assert "根拠リンク:" not in drafts[0]["content"]
+
+
+def test_extract_grounding_sources_from_response():
+    """ai_client._extract_grounding_sources が grounding_metadata から実URLを取り出す。"""
+    from app import ai_client as ac
+
+    class _Web:
+        def __init__(self, uri, title):
+            self.uri = uri
+            self.title = title
+
+    class _Chunk:
+        def __init__(self, web):
+            self.web = web
+
+    class _Meta:
+        def __init__(self, chunks):
+            self.grounding_chunks = chunks
+
+    class _Cand:
+        def __init__(self, meta):
+            self.grounding_metadata = meta
+
+    class _Resp:
+        def __init__(self, candidates):
+            self.candidates = candidates
+
+    resp = _Resp(
+        [
+            _Cand(
+                _Meta(
+                    [
+                        _Chunk(_Web("https://a.example.go.jp", "A")),
+                        _Chunk(_Web("https://a.example.go.jp", "dup")),  # 重複は除外
+                        _Chunk(_Web("", "no-url")),  # url 空は除外
+                        _Chunk(_Web("https://b.example.go.jp", "")),
+                    ]
+                )
+            )
+        ]
+    )
+    assert ac._extract_grounding_sources(resp) == [
+        {"title": "A", "url": "https://a.example.go.jp"},
+        {"title": "", "url": "https://b.example.go.jp"},
+    ]
+    # 形が違う応答でも例外を出さず空リスト
+    assert ac._extract_grounding_sources(object()) == []
 
 
 def test_build_drafts_unavailable_returns_empty(monkeypatch):

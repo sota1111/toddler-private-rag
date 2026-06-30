@@ -147,14 +147,51 @@ def _grounded_config(max_output_tokens: int):
         return None
 
 
-def generate_grounded(prompt: str, *, max_output_tokens: int = 2048) -> str:
-    """Generate text using Google Search grounding, degrading gracefully (SOT-1316).
+def _extract_grounding_sources(response) -> list:
+    """Pull real source links out of a grounded response's grounding metadata (SOT-1404).
 
-    Tries a grounded request first (Vertex AI Google Search tool). On ANY failure —
-    grounding unavailable, SDK mismatch, quota, etc. — it falls back to a plain
-    (non-grounded) request, and if that also fails it returns ``""``. Never raises,
-    mirroring ``extraction.translate_text`` so the agent works (degraded) without
-    live grounding.
+    Returns ``[{"title": str, "url": str}, ...]`` collected from
+    ``response.candidates[0].grounding_metadata.grounding_chunks[*].web.{uri,title}``.
+    These are the actual web sources Google Search grounding used — verifiable evidence
+    links ("根拠となる出典リンク"), unlike the model-asserted ``source`` string.
+
+    Fully defensive: any SDK shape mismatch / missing attribute is swallowed and yields
+    an empty list. Skips entries without a URL, de-duplicates by URL, preserves order.
+    Never raises.
+    """
+    sources: list = []
+    try:
+        candidates = getattr(response, "candidates", None) or []
+        seen = set()
+        for cand in candidates:
+            meta = getattr(cand, "grounding_metadata", None)
+            chunks = getattr(meta, "grounding_chunks", None) or []
+            for chunk in chunks:
+                web = getattr(chunk, "web", None)
+                if web is None:
+                    continue
+                url = (getattr(web, "uri", "") or "").strip()
+                if not url or url in seen:
+                    continue
+                seen.add(url)
+                title = (getattr(web, "title", "") or "").strip()
+                sources.append({"title": title, "url": url})
+    except Exception as e:  # noqa: BLE001 - grounding metadata best-effort
+        logger.warning("grounding source extraction failed: %s", e)
+        return []
+    return sources
+
+
+def generate_grounded_with_sources(
+    prompt: str, *, max_output_tokens: int = 2048
+) -> tuple:
+    """Like ``generate_grounded`` but also returns the real grounding source links.
+
+    Returns ``(text, sources)`` where ``sources`` is
+    ``[{"title": str, "url": str}, ...]`` taken from the grounded response's grounding
+    metadata (SOT-1404). When the request degrades to the non-grounded fallback, or no
+    grounding metadata is present, ``sources`` is ``[]``. Never raises; mirrors
+    ``generate_grounded``'s graceful degradation.
     """
     # 1) grounded attempt
     try:
@@ -170,11 +207,11 @@ def generate_grounded(prompt: str, *, max_output_tokens: int = 2048) -> str:
             response = with_retry(_gen)
             text = (getattr(response, "text", "") or "").strip()
             if text:
-                return text
+                return text, _extract_grounding_sources(response)
     except Exception as e:  # noqa: BLE001 - grounding best-effort
         logger.warning("generate_grounded: grounded request failed, falling back: %s", e)
 
-    # 2) non-grounded fallback (LLM known-knowledge)
+    # 2) non-grounded fallback (LLM known-knowledge) — no grounding sources available
     try:
         client = get_genai_client()
         model = get_model_name()
@@ -188,10 +225,26 @@ def generate_grounded(prompt: str, *, max_output_tokens: int = 2048) -> str:
             return client.models.generate_content(model=model, contents=prompt)
 
         response = with_retry(_gen_plain)
-        return (getattr(response, "text", "") or "").strip()
+        return (getattr(response, "text", "") or "").strip(), []
     except Exception as e:  # noqa: BLE001 - graceful degradation
         logger.warning("generate_grounded: fallback request failed, returning empty: %s", e)
-        return ""
+        return "", []
+
+
+def generate_grounded(prompt: str, *, max_output_tokens: int = 2048) -> str:
+    """Generate text using Google Search grounding, degrading gracefully (SOT-1316).
+
+    Backward-compatible thin wrapper over ``generate_grounded_with_sources`` that returns
+    only the text. Tries a grounded request first (Vertex AI Google Search tool). On ANY
+    failure — grounding unavailable, SDK mismatch, quota, etc. — it falls back to a plain
+    (non-grounded) request, and if that also fails it returns ``""``. Never raises,
+    mirroring ``extraction.translate_text`` so the agent works (degraded) without
+    live grounding.
+    """
+    text, _sources = generate_grounded_with_sources(
+        prompt, max_output_tokens=max_output_tokens
+    )
+    return text
 
 
 def with_retry(fn: Callable[[], T], *, attempts: int = 3, base_delay: float = 1.0) -> T:

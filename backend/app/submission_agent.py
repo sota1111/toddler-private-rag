@@ -102,6 +102,41 @@ def _normalize_steps(raw_steps) -> List[dict]:
     return steps
 
 
+def _normalize_sources(raw_sources) -> List[dict]:
+    """grounding の出典を ``[{"title": str, "url": str}]`` に正規化する（SOT-1404）。
+
+    url を持たない要素は除外し、url で重複排除する。順序は維持。常に never-throw。
+    """
+    items = raw_sources if isinstance(raw_sources, list) else []
+    sources: List[dict] = []
+    seen = set()
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url", "") or "").strip()
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        title = str(item.get("title", "") or "").strip()
+        sources.append({"title": title, "url": url})
+    return sources
+
+
+def _format_source_links(sources: List[dict], ja: bool) -> List[str]:
+    """根拠リンクセクションの本文行を返す（SOT-1404）。出典が空なら空リスト。"""
+    if not sources:
+        return []
+    lines = ["根拠リンク:" if ja else "Source links:"]
+    for s in sources:
+        title = (s.get("title") or "").strip()
+        url = (s.get("url") or "").strip()
+        if not url:
+            continue
+        label = f"{title}: {url}" if title else url
+        lines.append(f"・{label}" if ja else f"- {label}")
+    return lines
+
+
 def _step_subtitle(step_name: str, limit: int = 18) -> str:
     """手順名から簡潔なサブタイトル（タイトル用）を作る。
 
@@ -199,7 +234,9 @@ def _grounded_enrich(name: str, language: str) -> dict:
         f"Write each step name in {language_name}. Do not fabricate; use null/empty when unknown.\n\n"
         "# Output (JSON object only)"
     )
-    raw = ai_client.generate_grounded(prompt, max_output_tokens=1024)
+    raw, grounding_sources = ai_client.generate_grounded_with_sources(
+        prompt, max_output_tokens=1024
+    )
 
     steps: List[dict] = []
     needs_company: Optional[bool] = None
@@ -218,11 +255,18 @@ def _grounded_enrich(name: str, language: str) -> dict:
     except Exception as e:  # noqa: BLE001 - grounding/parse best-effort
         logger.warning("submission enrich parse failed for %s: %s", name, e)
 
+    # 根拠となる出典リンク（SOT-1404）: 実 grounding の出典を最優先で採用する。
+    # grounding メタデータが無くても、LLM 自己申告の source が http(s) URL ならフォールバックで使う。
+    sources = _normalize_sources(grounding_sources)
+    if not sources and source.startswith(("http://", "https://")):
+        sources = [{"title": source, "url": source}]
+
     return {
         "steps": steps,
         "needs_company_issuance": needs_company,
         "lead_time_days": lead_days,
         "source": source,
+        "sources": sources,
     }
 
 
@@ -277,6 +321,7 @@ def extract_submission_documents(
                 "needs_company_issuance": None,
                 "lead_time_days": None,
                 "source": "",
+                "sources": [],
             }
         enriched.append(
             {
@@ -286,6 +331,7 @@ def extract_submission_documents(
                 "needs_company_issuance": info["needs_company_issuance"],
                 "lead_time_days": info["lead_time_days"],
                 "source": info["source"],
+                "sources": info.get("sources") or [],
             }
         )
     return enriched
@@ -336,9 +382,15 @@ def _build_content(doc: dict, language: str) -> str:
     if due:
         lines.append(f"提出期限: {due}" if ja else f"Submission deadline: {due}")
 
-    source = doc.get("source")
-    if source:
-        lines.append(f"出典: {source}" if ja else f"Source: {source}")
+    # 根拠となる出典リンク（SOT-1404）: grounding 由来の実URLがあればリンク一覧を出し、
+    # 無ければ従来どおり LLM 自己申告の単一「出典」行を出す。
+    source_lines = _format_source_links(doc.get("sources") or [], ja)
+    if source_lines:
+        lines.extend(source_lines)
+    else:
+        source = doc.get("source")
+        if source:
+            lines.append(f"出典: {source}" if ja else f"Source: {source}")
 
     return "\n".join(lines) if lines else (name or "")
 
@@ -432,9 +484,14 @@ def _build_step_content(
     if due:
         lines.append(f"最終提出期限: {due}" if ja else f"Final submission deadline: {due}")
 
-    source = doc.get("source")
-    if source:
-        lines.append(f"出典: {source}" if ja else f"Source: {source}")
+    # 根拠となる出典リンク（SOT-1404）: 各手順タスクにも grounding 由来の根拠リンクを表示する。
+    source_lines = _format_source_links(doc.get("sources") or [], ja)
+    if source_lines:
+        lines.extend(source_lines)
+    else:
+        source = doc.get("source")
+        if source:
+            lines.append(f"出典: {source}" if ja else f"Source: {source}")
 
     return "\n".join(lines) if lines else (step_name or name or "")
 
