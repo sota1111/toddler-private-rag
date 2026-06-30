@@ -311,7 +311,7 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
                 <button
                   type="button"
                   onClick={handleStartEdit}
-                  className="text-sm font-medium text-brand-strong hover:bg-surface-muted px-3 py-1 rounded-md transition-colors"
+                  className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-3 py-1 rounded-md transition-colors"
                 >
                   {t('records.edit')}
                 </button>
