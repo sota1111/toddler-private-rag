@@ -5,7 +5,7 @@ import logging
 import os
 import tempfile
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File, Body
 from fastapi.responses import StreamingResponse
 from typing import List, Optional, Union
 from .. import schemas, storage, ocr, tagging, extraction, reminders, clock, submission_agent
@@ -447,6 +447,7 @@ def finalize_info(id: Union[int, str], background_tasks: BackgroundTasks, repo: 
 @router.post("/{id}/investigate-deadline")
 def investigate_deadline(
     id: Union[int, str],
+    payload: Optional[schemas.InvestigateDeadlineRequest] = Body(default=None),
     repo: InfoRepository = Depends(get_info_repository),
     current_user: str = Depends(get_current_user),
 ):
@@ -477,10 +478,18 @@ def investigate_deadline(
             final_due_iso = value.isoformat() if hasattr(value, "isoformat") else str(value)
             break
 
+    # 登録/設定値の市町村（SOT-1405）。市区町村窓口/公式HPから様式をDLする手順がある場合、
+    # その市町村のダウンロードページ検索リンクを生成タスク本文へ付与するために渡す。
+    municipality = (payload.municipality if payload else None) or None
+
     created_ids: List = []
     try:
         sub_drafts = submission_agent.build_submission_task_drafts(
-            safe_text, None, language="ja", final_due_iso=final_due_iso
+            safe_text,
+            None,
+            language="ja",
+            final_due_iso=final_due_iso,
+            municipality=municipality,
         )
         for sub in sub_drafts:
             try:

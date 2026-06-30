@@ -15,6 +15,7 @@ import datetime
 import json
 import logging
 import re
+import urllib.parse
 from typing import List, Optional
 
 from . import ai_client, extraction
@@ -135,6 +136,42 @@ def _format_source_links(sources: List[dict], ja: bool) -> List[str]:
         label = f"{title}: {url}" if title else url
         lines.append(f"・{label}" if ja else f"- {label}")
     return lines
+
+
+# 「お住まいの市区町村の窓口/公式ホームページから様式をダウンロード」型の手順を検出するための語（SOT-1405）。
+_MUNI_LOCATION_KEYWORDS = ("市区町村", "市町村", "自治体", "窓口", "公式ホームページ", "ホームページ")
+_MUNI_GET_KEYWORDS = ("ダウンロード", "様式", "取得", "入手")
+
+
+def _is_municipality_download_step(text: str) -> bool:
+    """手順テキストが『市区町村の窓口/公式HPから様式をダウンロード』型かを判定する（SOT-1405）。
+
+    市区町村/窓口/公式HP 等の場所語と、ダウンロード/様式/取得/入手 等の取得語の両方を含むときに
+    True。常に never-throw。
+    """
+    if not text:
+        return False
+    has_location = any(k in text for k in _MUNI_LOCATION_KEYWORDS)
+    has_get = any(k in text for k in _MUNI_GET_KEYWORDS) or "download" in text.lower()
+    return has_location and has_get
+
+
+def _municipality_download_url(municipality: str, doc_name: str) -> str:
+    """設定済み市町村と書類名から、公式ダウンロードページに辿り着く検索URLを作る（SOT-1405）。"""
+    terms = [(municipality or "").strip(), (doc_name or "").strip(), "様式", "ダウンロード"]
+    query = " ".join(t for t in terms if t)
+    return "https://www.google.com/search?q=" + urllib.parse.quote(query)
+
+
+def _download_link_line(
+    municipality: Optional[str], doc_name: str, ja: bool
+) -> Optional[str]:
+    """市町村が設定されていれば『ダウンロードページ: <url>』行を返す。未設定なら None（SOT-1405）。"""
+    muni = (municipality or "").strip()
+    if not muni:
+        return None
+    url = _municipality_download_url(muni, doc_name)
+    return f"ダウンロードページ: {url}" if ja else f"Download page: {url}"
 
 
 def _step_subtitle(step_name: str, limit: int = 18) -> str:
@@ -352,7 +389,9 @@ def _prep_start_iso(due_iso: str, lead_days: Optional[int]) -> str:
     return start.isoformat()
 
 
-def _build_content(doc: dict, language: str) -> str:
+def _build_content(
+    doc: dict, language: str, municipality: Optional[str] = None
+) -> str:
     """書類の手順/会社発行要否/所要期間/提出期限/出典を読みやすい本文にまとめる。"""
     ja = language != "en"
     lines: List[str] = []
@@ -363,10 +402,18 @@ def _build_content(doc: dict, language: str) -> str:
     steps = doc.get("steps") or []
     if steps:
         lines.append("【手順】" if ja else "Steps:")
+        muni_download = False
         for s in steps:
             label = s.get("name", "") if isinstance(s, dict) else str(s)
             if label:
                 lines.append(f"・{label}" if ja else f"- {label}")
+                if _is_municipality_download_step(label):
+                    muni_download = True
+        # 市区町村の窓口/公式HPから様式をDLする手順がある場合、設定済み市町村のDLページリンクを1行付与（SOT-1405）。
+        if muni_download:
+            link = _download_link_line(municipality, name, ja)
+            if link:
+                lines.append(link)
 
     nci = doc.get("needs_company_issuance")
     if nci is True:
@@ -453,7 +500,12 @@ def _step_deadlines(
 
 
 def _build_step_content(
-    doc: dict, step: dict, idx: int, total: int, language: str
+    doc: dict,
+    step: dict,
+    idx: int,
+    total: int,
+    language: str,
+    municipality: Optional[str] = None,
 ) -> str:
     """1手順ぶんのタスク本文。手順位置・平均所要日数の注意事項・手順締切・最終提出期限などを含む。"""
     ja = language != "en"
@@ -465,6 +517,11 @@ def _build_step_content(
     step_name = step.get("name", "")
     if step_name:
         lines.append(f"・{step_name}" if ja else f"- {step_name}")
+        # 市区町村の窓口/公式HPから様式をDLする手順なら、設定済み市町村のDLページリンクを付与（SOT-1405）。
+        if _is_municipality_download_step(step_name):
+            link = _download_link_line(municipality, name, ja)
+            if link:
+                lines.append(link)
 
     lead = step.get("lead_time_days")
     if isinstance(lead, int):
@@ -501,6 +558,7 @@ def build_submission_task_drafts(
     detected_dates: Optional[List[str]] = None,
     language: str = "ja",
     final_due_iso: Optional[str] = None,
+    municipality: Optional[str] = None,
 ) -> List[dict]:
     """提出書類ごとの準備タスク draft（build_task_drafts と同形 + due_date/tags）を返す。
 
@@ -511,6 +569,10 @@ def build_submission_task_drafts(
 
     ``final_due_iso`` は締切調査の実行対象タスクに設定済みの期限（最優先の逆算アンカー。
     SOT-1399 4回目の再オープン対応）。
+
+    ``municipality`` は登録/設定値の市町村（SOT-1405）。市区町村の窓口/公式ホームページから様式を
+    ダウンロードする手順がある場合に、その市町村のダウンロードページ検索リンクを本文へ付与する。
+    未設定（空/None）のときはリンクを付与しない。
     """
     try:
         docs = extract_submission_documents(
@@ -534,7 +596,7 @@ def build_submission_task_drafts(
             # 手順情報が無い書類は従来どおり 1 タスク（後方互換）
             prep_iso = _prep_start_iso(due_iso, doc.get("lead_time_days"))
             title = (f"{name}{suffix}")[:40]
-            content = _build_content(doc, language)
+            content = _build_content(doc, language, municipality)
             drafts.append(
                 {
                     "title": title,
@@ -561,7 +623,9 @@ def build_submission_task_drafts(
             prefix = f"{name}({i + 1}/{total})"
             subtitle = _step_subtitle(step_name)
             title = (f"{prefix} {subtitle}".rstrip())[:40]
-            content = _build_step_content(doc, step, i + 1, total, language)
+            content = _build_step_content(
+                doc, step, i + 1, total, language, municipality
+            )
             drafts.append(
                 {
                     "title": title,

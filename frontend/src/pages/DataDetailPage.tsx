@@ -6,6 +6,7 @@ import type { Attachment } from '../types';
 import { STATUS_TYPES } from './infoFormOptions';
 import { useI18n } from '../i18n/useI18n';
 import { useConfirm } from '../components/confirmDialogContext';
+import { useSettings } from '../settings/useSettings';
 
 // SOT-1404: 本文中の http(s) URL（締切調査の「根拠となる出典リンク」など）をクリック可能な
 // リンクに変換して表示する。URL 以外のテキストはそのまま（改行は whitespace-pre-wrap で維持）。
@@ -105,6 +106,8 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
   const confirm = useConfirm();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  // SOT-1405: 締切調査に設定の市町村を渡す（DLページリンク生成に使う）。
+  const { municipality } = useSettings();
 
   // 種別/ステータスのラベルは保存値（日本語）のまま、表示は設定言語に合わせて翻訳する。
   const optLabel = (group: string, value: string) => {
@@ -158,7 +161,7 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
   const [investigateMessage, setInvestigateMessage] = useState<string | null>(null);
   const [investigateError, setInvestigateError] = useState<string | null>(null);
   const investigateMutation = useMutation({
-    mutationFn: () => investigateDeadline(id),
+    mutationFn: () => investigateDeadline(id, municipality),
     onSuccess: (res) => {
       setInvestigateError(null);
       setInvestigateMessage(
