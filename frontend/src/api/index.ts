@@ -85,10 +85,15 @@ export const finalizeInfo = async (id: number | string): Promise<NurseryInfo> =>
 
 // 締め切り調査 (SOT-1369): 選択した項目に対し提出書類先回りエージェントを手動起動し、
 // 提出準備タスク(draft)を生成する。
+// SOT-1405: 設定の市町村を渡し、市区町村窓口/公式HPから様式をDLする手順に
+// ダウンロードページリンクを付与できるようにする。
 export const investigateDeadline = async (
   id: number | string,
+  municipality?: string,
 ): Promise<{ created: number; ids: (number | string)[] }> => {
-  const response = await api.post(`/info/${id}/investigate-deadline`);
+  const response = await api.post(`/info/${id}/investigate-deadline`, {
+    municipality: municipality ?? '',
+  });
   return response.data;
 };
 

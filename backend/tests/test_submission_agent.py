@@ -655,3 +655,92 @@ def test_reminders_non_submission_stays_deadline():
     out = reminders.build_reminders([normal], today=today, horizon_days=7)
     assert len(out) == 1
     assert out[0]["kind"] == "deadline"
+
+
+# --- 市町村ダウンロードページリンク (SOT-1405) -------------------------------------
+
+def test_is_municipality_download_step():
+    """市区町村の窓口/公式HPから様式をDLする型の手順を検出する。"""
+    assert submission_agent._is_municipality_download_step(
+        "お住まいの市区町村の窓口または公式ホームページから就労証明書の指定様式をダウンロード・取得する"
+    )
+    assert submission_agent._is_municipality_download_step("市町村の公式ホームページから様式を取得")
+    # 場所語のみ / 取得語のみ / 無関係は False
+    assert not submission_agent._is_municipality_download_step("勤務先に証明書の発行を依頼する")
+    assert not submission_agent._is_municipality_download_step("市区町村に書類を提出する")
+    assert not submission_agent._is_municipality_download_step("")
+
+
+def test_municipality_download_url():
+    url = submission_agent._municipality_download_url("渋谷区", "就労証明書")
+    assert url.startswith("https://www.google.com/search?q=")
+    import urllib.parse
+
+    assert urllib.parse.quote("渋谷区") in url
+    assert urllib.parse.quote("就労証明書") in url
+
+
+def test_download_link_line_requires_municipality():
+    assert submission_agent._download_link_line("", "就労証明書", True) is None
+    assert submission_agent._download_link_line(None, "就労証明書", True) is None
+    line = submission_agent._download_link_line("渋谷区", "就労証明書", True)
+    assert line is not None and line.startswith("ダウンロードページ: https://")
+
+
+def _enrich_with_download_step():
+    return json.dumps(
+        {
+            "steps": [
+                {
+                    "name": "お住まいの市区町村の窓口または公式ホームページから指定様式をダウンロード・取得する",
+                    "lead_time_days": 1,
+                },
+                {"name": "記入して市町村に提出する", "lead_time_days": 3},
+            ],
+            "needs_company_issuance": False,
+            "lead_time_days": None,
+            "source": "https://example.go.jp",
+        }
+    )
+
+
+def test_build_drafts_adds_download_link_when_municipality_set(monkeypatch):
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
+    monkeypatch.setattr(
+        submission_agent,
+        "_llm_extract_documents",
+        lambda text, language: [{"name": "就労証明書", "due_date": "2026-05-10"}],
+    )
+    monkeypatch.setattr(
+        ai_client,
+        "generate_grounded_with_sources",
+        lambda prompt, **k: (_enrich_with_download_step(), []),
+    )
+
+    drafts = submission_agent.build_submission_task_drafts(
+        SAMPLE, language="ja", municipality="渋谷区"
+    )
+    # DLステップのタスク本文にダウンロードページリンクが入る
+    dl_drafts = [d for d in drafts if "ダウンロードページ" in d["content"]]
+    assert len(dl_drafts) == 1
+    assert "https://www.google.com/search?q=" in dl_drafts[0]["content"]
+    import urllib.parse
+
+    assert urllib.parse.quote("渋谷区") in dl_drafts[0]["content"]
+
+
+def test_build_drafts_no_link_without_municipality(monkeypatch):
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
+    monkeypatch.setattr(
+        submission_agent,
+        "_llm_extract_documents",
+        lambda text, language: [{"name": "就労証明書", "due_date": "2026-05-10"}],
+    )
+    monkeypatch.setattr(
+        ai_client,
+        "generate_grounded_with_sources",
+        lambda prompt, **k: (_enrich_with_download_step(), []),
+    )
+
+    drafts = submission_agent.build_submission_task_drafts(SAMPLE, language="ja")
+    assert all("ダウンロードページ" not in d["content"] for d in drafts)

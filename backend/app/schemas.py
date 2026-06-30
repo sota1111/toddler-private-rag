@@ -121,6 +121,13 @@ class NurseryInfoResponse(NurseryInfoBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# 締切調査（提出書類先回りエージェント）の手動起動リクエスト（SOT-1405）。
+# municipality は登録/設定値の市町村。市区町村窓口/公式HPから様式をDLする手順がある場合、
+# その市町村のダウンロードページ検索リンクを生成タスク本文へ付与するために使う。
+class InvestigateDeadlineRequest(BaseModel):
+    municipality: Optional[str] = None
+
+
 # --- RAG (ベクトル検索＋LLM回答生成) ---
 
 class RagQuery(BaseModel):
