@@ -14,6 +14,7 @@ from app.main import app
 from app.database import Base, get_db
 from app.routers.auth import get_current_user
 from app import database, submission_agent
+from app.repository import SqliteInfoRepository
 
 SQLALCHEMY_DATABASE_URL = "sqlite://"
 engine = create_engine(
@@ -73,3 +74,34 @@ def test_investigate_includes_title_in_safe_text(monkeypatch):
     # SOT-1406: タイトルが調査対象テキストの先頭に含まれていること。
     assert "就労証明書の提出" in captured["safe_text"]
     assert captured["safe_text"].startswith("就労証明書の提出")
+
+
+def test_investigate_excludes_attachment_ocr(monkeypatch):
+    """SOT-1406 再オープン: 添付写真のOCR原文は調査対象テキストに含めない。"""
+    captured = {}
+
+    def fake_drafts(safe_text, detected_dates=None, **kwargs):
+        captured["safe_text"] = safe_text
+        return []
+
+    monkeypatch.setattr(submission_agent, "build_submission_task_drafts", fake_drafts)
+
+    # 添付写真のOCRが存在しても調査対象には混ざらないことを検証する。
+    class _FakeAttachment:
+        ocr_text = "添付写真のOCR原文 2026-12-31 提出書類"
+
+    monkeypatch.setattr(
+        SqliteInfoRepository,
+        "list_attachments_for_info",
+        lambda self, id: [_FakeAttachment()],
+    )
+
+    info = _create(title="就労証明書の提出", content="メモ")
+
+    resp = client.post(f"/api/info/{info['id']}/investigate-deadline")
+    assert resp.status_code == 200, resp.text
+
+    # 添付OCRは除外、タイトル/本文は含まれること。
+    assert "添付写真のOCR原文" not in captured["safe_text"]
+    assert "就労証明書の提出" in captured["safe_text"]
+    assert "メモ" in captured["safe_text"]

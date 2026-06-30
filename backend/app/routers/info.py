@@ -455,9 +455,10 @@ def investigate_deadline(
     if db_info is None:
         raise HTTPException(status_code=404, detail="Info not found")
 
-    # 調査対象テキストを集める: タイトル + 本文 + 添付写真のOCR原文。
+    # 調査対象テキストを集める: タイトル + 本文。
     # 手動追加タスクは書類名がタイトルに入り本文が空/簡素なことがあるため、タイトルを
     # 先頭に含める（SOT-1406: タイトルを含めないと抽出LLMが空入力で書類0件になる）。
+    # 添付写真のOCRは調査対象から除外する（SOT-1406 再オープン要求）。
     parts: List[str] = []
     title = getattr(db_info, "title", None)
     if title:
@@ -465,13 +466,6 @@ def investigate_deadline(
     content = getattr(db_info, "content", None)
     if content:
         parts.append(content)
-    try:
-        for att in repo.list_attachments_for_info(id):
-            ocr_text = getattr(att, "ocr_text", None)
-            if ocr_text:
-                parts.append(ocr_text)
-    except Exception:
-        logger.warning("Failed to gather attachment OCR text for info %s", id)
     safe_text = "\n".join(p for p in parts if p)
 
     # 調査対象タスクに既に設定されている期限を最終提出期限の逆算アンカーとして渡す
