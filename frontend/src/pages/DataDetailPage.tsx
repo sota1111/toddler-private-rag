@@ -458,7 +458,7 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
                   value={item.status}
                   onChange={handleStatusChange}
                   disabled={statusMutation.isPending}
-                  className="border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2 border disabled:opacity-60"
+                  className="border-accent-border bg-accent-bg text-brand-strong rounded-md shadow-sm focus:ring-brand focus:border-brand text-sm p-2 border disabled:opacity-60"
                 >
                   {STATUS_TYPES.map((v) => <option key={v} value={v}>{optLabel('status', v)}</option>)}
                 </select>
