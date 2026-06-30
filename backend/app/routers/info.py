@@ -455,8 +455,13 @@ def investigate_deadline(
     if db_info is None:
         raise HTTPException(status_code=404, detail="Info not found")
 
-    # 調査対象テキストを集める: 本文 + 添付写真のOCR原文。
+    # 調査対象テキストを集める: タイトル + 本文 + 添付写真のOCR原文。
+    # 手動追加タスクは書類名がタイトルに入り本文が空/簡素なことがあるため、タイトルを
+    # 先頭に含める（SOT-1406: タイトルを含めないと抽出LLMが空入力で書類0件になる）。
     parts: List[str] = []
+    title = getattr(db_info, "title", None)
+    if title:
+        parts.append(title)
     content = getattr(db_info, "content", None)
     if content:
         parts.append(content)
