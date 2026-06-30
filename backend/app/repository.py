@@ -12,6 +12,26 @@ from . import models, schemas, database, clock
 
 logger = logging.getLogger(__name__)
 
+
+def _calendar_week_bounds(today: datetime.date) -> Tuple[datetime.date, datetime.date, datetime.date]:
+    """カレンダー週（月曜始まり）の境界を返す (SOT-1424)。
+
+    掲示板の「今週/来週の予定」を本日起点のローリング窓ではなくカレンダー週で集計するための共通ヘルパ。
+    ローリング窓だと、カレンダー上「来週」の予定でも本日から7日以内なら「今週」枠に入り、
+    「来週」枠が空白になる不具合があった。
+
+    返り値:
+    - this_week_end : 本日が属する週の日曜（今週末）
+    - next_week_start: 翌週の月曜
+    - next_week_end  : 翌週の日曜
+    ``weekday()`` は 月=0 .. 日=6。
+    """
+    this_week_end = today + datetime.timedelta(days=(6 - today.weekday()))
+    next_week_start = this_week_end + datetime.timedelta(days=1)
+    next_week_end = next_week_start + datetime.timedelta(days=6)
+    return this_week_end, next_week_start, next_week_end
+
+
 # --- Interfaces ---
 
 class InfoRepository(abc.ABC):
@@ -231,24 +251,26 @@ class SqliteInfoRepository(InfoRepository):
         ).all()
 
     def list_weekly(self) -> List[models.NurseryInfo]:
+        # 今週の予定 (SOT-1424): 本日から今週末(日曜)までのカレンダー週の行事。
         today = clock.today()
-        next_week = today + datetime.timedelta(days=7)
+        this_week_end, _, _ = _calendar_week_bounds(today)
         return self.db.query(models.NurseryInfo).filter(
             _sqlite_registered_only(),
             models.NurseryInfo.info_type == "行事",
             models.NurseryInfo.event_date >= today,
-            models.NurseryInfo.event_date <= next_week
+            models.NurseryInfo.event_date <= this_week_end
         ).order_by(models.NurseryInfo.event_date.asc()).all()
 
     def list_next_week(self) -> List[models.NurseryInfo]:
-        # 来週の予定 (SOT-1296): 今週 weekly[today..+7] と重複しない翌7日間の行事。
+        # 来週の予定 (SOT-1296 / SOT-1424): 翌カレンダー週(月〜日)の行事。
+        # 本日起点のローリング窓だと、カレンダー上「来週」でも本日から7日以内の予定は
+        # 「今週」枠に入り「来週」枠が空白になっていた。カレンダー週境界に揃える。
         today = clock.today()
-        next_week_start = today + datetime.timedelta(days=7)
-        next_week_end = today + datetime.timedelta(days=14)
+        _, next_week_start, next_week_end = _calendar_week_bounds(today)
         return self.db.query(models.NurseryInfo).filter(
             _sqlite_registered_only(),
             models.NurseryInfo.info_type == "行事",
-            models.NurseryInfo.event_date > next_week_start,
+            models.NurseryInfo.event_date >= next_week_start,
             models.NurseryInfo.event_date <= next_week_end
         ).order_by(models.NurseryInfo.event_date.asc()).all()
 
@@ -697,9 +719,11 @@ class FirestoreInfoRepository(InfoRepository):
         return results
 
     def list_weekly(self) -> List[FirestoreNurseryInfo]:
+        # 今週の予定 (SOT-1424): 本日から今週末(日曜)までのカレンダー週の行事。
         today = clock.today()
+        this_week_end, _, _ = _calendar_week_bounds(today)
         today_str = _from_date(today)
-        next_week_str = _from_date(today + datetime.timedelta(days=7))
+        week_end_str = _from_date(this_week_end)
 
         # SOT-1285: 等価条件(info_type)と範囲条件(event_date >= / <=)を別フィールドで
         # 組み合わせると Firestore は複合インデックスを要求し、未作成だとクエリが失敗して
@@ -715,7 +739,7 @@ class FirestoreInfoRepository(InfoRepository):
             if not _is_registered_data(data):  # 仮登録は除外 (SOT-1113)
                 continue
             event_date = data.get("event_date")
-            if not event_date or not (today_str <= event_date <= next_week_str):
+            if not event_date or not (today_str <= event_date <= week_end_str):
                 continue
             att_refs = self.db.collection("attachments").where("info_id", "==", doc.id).stream()
             attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
@@ -724,10 +748,13 @@ class FirestoreInfoRepository(InfoRepository):
         return results
 
     def list_next_week(self) -> List[FirestoreNurseryInfo]:
-        # 来週の予定 (SOT-1296): 今週 weekly[today..+7] と重複しない翌7日間の行事。
+        # 来週の予定 (SOT-1296 / SOT-1424): 翌カレンダー週(月〜日)の行事。
+        # 本日起点のローリング窓だと、カレンダー上「来週」でも本日から7日以内の予定は
+        # 「今週」枠に入り「来週」枠が空白になっていた。カレンダー週境界に揃える。
         today = clock.today()
-        next_week_start_str = _from_date(today + datetime.timedelta(days=7))
-        next_week_end_str = _from_date(today + datetime.timedelta(days=14))
+        _, next_week_start, next_week_end = _calendar_week_bounds(today)
+        next_week_start_str = _from_date(next_week_start)
+        next_week_end_str = _from_date(next_week_end)
 
         # SOT-1285 の教訓: 等価条件(info_type)のみで取得し、event_date の範囲は
         # アプリ側でフィルタする(複合インデックス未作成による読み込み固着を回避)。
@@ -742,7 +769,7 @@ class FirestoreInfoRepository(InfoRepository):
             if not _is_registered_data(data):  # 仮登録は除外 (SOT-1113)
                 continue
             event_date = data.get("event_date")
-            if not event_date or not (next_week_start_str < event_date <= next_week_end_str):
+            if not event_date or not (next_week_start_str <= event_date <= next_week_end_str):
                 continue
             att_refs = self.db.collection("attachments").where("info_id", "==", doc.id).stream()
             attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
