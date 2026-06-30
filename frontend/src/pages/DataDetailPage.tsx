@@ -356,8 +356,9 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
 
           {/* SOT-1411: 締切調査由来タスクのうち、グループの基準（アンカー＝元タスク/親, offset 0）だけが
               締切の基準日(最終提出期限)を変更できる。基準日を変えると同じグループの子タスクが保存済み
-              オフセットで一緒にずれる。子タスク(offset > 0)には基準日変更UIを出さない（再オープン対応）。 */}
-          {!hasPhoto && item.deadline_group_id && item.deadline_offset_days === 0 && (
+              オフセットで一緒にずれる。子タスク(offset > 0)には基準日変更UIを出さない（再オープン対応）。
+              基準日変更UIは編集画面(編集モード)のときだけ表示する（再オープン対応: isEditing ゲート）。 */}
+          {!hasPhoto && isEditing && item.deadline_group_id && item.deadline_offset_days === 0 && (
             <div className="mb-4">
               <div className="flex flex-wrap items-center gap-2">
                 <label htmlFor="reschedule-base-date" className="text-sm font-medium text-foreground">
