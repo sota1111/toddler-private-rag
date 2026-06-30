@@ -254,27 +254,30 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
             </div>
           )}
 
-          {/* SOT-1369: 締め切り調査を手動トリガするボタン。写真あり/なし両方で表示する。 */}
-          <div className="mb-4">
-            <button
-              type="button"
-              onClick={handleInvestigate}
-              disabled={investigateMutation.isPending}
-              className="text-sm font-medium text-brand-strong border border-accent-border bg-accent-bg hover:opacity-90 px-3 py-1.5 rounded-md disabled:opacity-60 transition-colors"
-            >
-              {investigateMutation.isPending ? t('records.investigating') : t('records.investigate')}
-            </button>
-            {investigateMessage && (
-              <div className="mt-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">
-                {investigateMessage}
-              </div>
-            )}
-            {investigateError && (
-              <div className="mt-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-                {investigateError}
-              </div>
-            )}
-          </div>
+          {/* SOT-1369: 締め切り調査を手動トリガするボタン。写真あり/なし両方で表示する。
+              SOT-1407: 期限の調査が必要なタスク(needs_deadline_investigation=true)のみ表示する。 */}
+          {item.needs_deadline_investigation && (
+            <div className="mb-4">
+              <button
+                type="button"
+                onClick={handleInvestigate}
+                disabled={investigateMutation.isPending}
+                className="text-sm font-medium text-brand-strong border border-accent-border bg-accent-bg hover:opacity-90 px-3 py-1.5 rounded-md disabled:opacity-60 transition-colors"
+              >
+                {investigateMutation.isPending ? t('records.investigating') : t('records.investigate')}
+              </button>
+              {investigateMessage && (
+                <div className="mt-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">
+                  {investigateMessage}
+                </div>
+              )}
+              {investigateError && (
+                <div className="mt-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                  {investigateError}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* SOT-1313: タスク等の詳細を確認できるよう、日付・ステータス・内容を値があるときのみ表示する。
               SOT-1331: 写真ありレコードはこれらを出さず、写真＋文字起こしのみにする。 */}

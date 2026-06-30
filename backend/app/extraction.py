@@ -408,6 +408,25 @@ def guess_info_type(text: str, has_items: bool) -> str:
     return "お知らせ"
 
 
+# SOT-1407: 締め切り調査(提出書類の期限調査)が必要そうなタスクかを判定するヒューリスティック。
+_DEADLINE_INVESTIGATION_KEYWORDS = (
+    "提出", "証明書", "申請", "書類", "届", "様式", "記入", "捺印", "押印",
+    "submit", "submission", "certificate", "application", "form",
+)
+
+
+def needs_deadline_investigation(info_type: str, text: str) -> bool:
+    """このタスクが締め切り調査(提出書類の準備)を要するかを推定する (SOT-1407)。
+
+    info_type が「提出物」、または本文/タイトルに提出書類系のキーワードが含まれるとき True。
+    """
+    if info_type == "提出物":
+        return True
+    blob = text or ""
+    lowered = blob.lower()
+    return any((kw in blob) or (kw in lowered) for kw in _DEADLINE_INVESTIGATION_KEYWORDS)
+
+
 def draft_title(text: str) -> str:
     """安全テキストの先頭の非空行をタイトルにする（最大40文字）。"""
     for line in (text or "").splitlines():
@@ -473,12 +492,17 @@ def build_draft_fields(
     # （title 抽出と categories キーは /info/extract の互換のため維持する。）
     category_dict = {k: enriched.get(k, []) for k in ALL_CONTENT_KEYS}
 
+    final_info_type = info_type if info_type in INFO_TYPES else "資料"
     result = {
         "title": title,
-        "info_type": info_type if info_type in INFO_TYPES else "資料",
+        "info_type": final_info_type,
         "content": content_text,
         "items": items,
         "date": date_iso or "",
+        # SOT-1407: 締め切り調査が必要なタスクか（タイトル+本文から推定）。
+        "needs_deadline_investigation": needs_deadline_investigation(
+            final_info_type, f"{title}\n{content_text}"
+        ),
         "categories": {"title": title, **category_dict},
     }
     _LLM_RESULT_CACHE.set(cache_key, dict(result))
@@ -647,6 +671,10 @@ def _task_to_draft(task: dict, safe_text: str) -> dict:
         "items": items,
         "date": "",
         "event_date": event_iso,
+        # SOT-1407: 締め切り調査が必要なタスクか（タイトル+本文から推定）。
+        "needs_deadline_investigation": needs_deadline_investigation(
+            info_type, f"{title}\n{content}"
+        ),
         "categories": {"title": title, **category_dict},
     }
 
@@ -659,6 +687,7 @@ def _single_task_fallback(
     """タスク分割ができない場合の後方互換 draft（従来の単一 draft に event_date キーを補う）。"""
     fields = build_draft_fields(safe_text, detected_dates, detected_items)
     fields.setdefault("event_date", "")
+    fields.setdefault("needs_deadline_investigation", False)
     return fields
 
 

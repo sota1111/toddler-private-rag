@@ -457,6 +457,8 @@ class FirestoreNurseryInfo:
     updated_at: datetime.datetime
     registration_state: str = "registered"
     child_id: Optional[str] = None
+    # SOT-1407: 締め切り調査が必要なタスクか。
+    needs_deadline_investigation: bool = False
     attachments: List[FirestoreAttachment] = field(default_factory=list)
 
 # Firestore helper functions
@@ -500,6 +502,7 @@ def _info_doc_to_obj(doc_id: str, data: dict, attachments: List[FirestoreAttachm
         memo=data.get("memo"),
         registration_state=data.get("registration_state") or "registered",
         child_id=data.get("child_id"),
+        needs_deadline_investigation=bool(data.get("needs_deadline_investigation")),
         created_at=data.get("created_at") or datetime.datetime.now(),
         updated_at=data.get("updated_at") or datetime.datetime.now(),
         attachments=attachments or []
