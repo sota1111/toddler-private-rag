@@ -25,6 +25,8 @@ export const messages: Record<Lang, Messages> = {
     'settings.subtitle': '言語・標準時間を設定できます。',
     'settings.language': '言語',
     'settings.timezone': '標準時間（タイムゾーン）',
+    'settings.municipality': '市町村',
+    'settings.municipalityPlaceholder': '例: 渋谷区',
     // 子どもの登録・管理 (SOT-1368)
     'settings.childrenTitle': 'お子さまの登録',
     'settings.childrenDescription': '複数のお子さまを登録できます。写真アップやリスト追加のときに、紐づけるお子さまを選べます。',
@@ -387,6 +389,8 @@ export const messages: Record<Lang, Messages> = {
     'settings.subtitle': 'Configure language and standard time.',
     'settings.language': 'Language',
     'settings.timezone': 'Standard time (timezone)',
+    'settings.municipality': 'Municipality',
+    'settings.municipalityPlaceholder': 'e.g. Shibuya',
     // Children registration / management (SOT-1368)
     'settings.childrenTitle': 'Children',
     'settings.childrenDescription': 'Register multiple children. You can choose which child to link when uploading a photo or adding a task.',

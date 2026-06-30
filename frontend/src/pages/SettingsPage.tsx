@@ -12,7 +12,7 @@ import { deleteAllData, getChildren, createChild, deleteChild } from '../api';
 // SOT-1375: 旧「子どもの名前」欄は削除（お子さまの登録 SOT-1368 に統合）。
 const SettingsPage: React.FC = () => {
   const { t, lang, setLang } = useI18n();
-  const { timezone, setTimezone } = useSettings();
+  const { timezone, setTimezone, municipality, setMunicipality } = useSettings();
 
   const [confirming, setConfirming] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
@@ -111,6 +111,21 @@ const SettingsPage: React.FC = () => {
               </option>
             ))}
           </select>
+        </div>
+
+        {/* 市町村 (SOT-1403) */}
+        <div>
+          <label className="block text-sm font-semibold text-foreground mb-2">
+            {t('settings.municipality')}
+          </label>
+          <input
+            type="text"
+            aria-label={t('settings.municipality')}
+            value={municipality}
+            onChange={(e) => setMunicipality(e.target.value)}
+            placeholder={t('settings.municipalityPlaceholder')}
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40"
+          />
         </div>
       </div>
 
