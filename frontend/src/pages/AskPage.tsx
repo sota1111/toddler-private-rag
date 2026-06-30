@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { askInfo, askInfoStream } from '../api';
 import type { RagAnswer } from '../types';
@@ -25,6 +25,7 @@ const AskPage: React.FC = () => {
   const [result, setResult] = useState<RagAnswer | null>(() => readSaved()?.result ?? null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // query / result が変わるたびに sessionStorage へ保存する（error / isLoading は一時状態なので保存しない）。
   useEffect(() => {
@@ -75,10 +76,11 @@ const AskPage: React.FC = () => {
     void runQuery(query);
   };
 
-  // サンプル質問チップ（SOT-1020 / 提案1）。タップで入力欄を埋めてそのまま送信する。
+  // サンプル質問チップ（SOT-1020 / 提案1）。SOT-1413: タップしても自動送信はせず、
+  // 入力欄に質問文を埋めて編集可能な状態にするだけにする（フォーカスを当てる）。
   const handleSample = (sample: string) => {
     setQuery(sample);
-    void runQuery(sample);
+    textareaRef.current?.focus();
   };
 
   const SAMPLE_KEYS = ['ask.sample1', 'ask.sample2', 'ask.sample3'];
@@ -97,6 +99,7 @@ const AskPage: React.FC = () => {
           {t('ask.label')}
         </label>
         <textarea
+          ref={textareaRef}
           id="ask-query"
           rows={3}
           className="w-full border border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2"
