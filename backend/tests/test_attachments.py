@@ -579,10 +579,19 @@ def test_auto_deadline_investigation_persists_group_fields(monkeypatch):
 
     subs = [i for i in _all_infos() if (i.tags or "") and submission_agent.SUBMISSION_TAG in i.tags]
     assert len(subs) == 2, [i.title for i in _all_infos()]
-    # 締切グループ情報が永続化されていること（未設定=None ではない）。
-    assert all(i.deadline_group_id == "grp-1411" for i in subs)
+    # SOT-1411 再オープン: 付随タスク(子)は1つのアンカーグループに束ねられ、基準日(元タスクの期限
+    # 2026-07-31)を基準にオフセットが再計算される。group_id は per-doc 値ではなく統一された値。
+    gids = {i.deadline_group_id for i in subs}
+    assert len(gids) == 1 and next(iter(gids)), gids
+    gid = next(iter(gids))
     assert {i.deadline_offset_days for i in subs} == {0, 11}
     assert all(i.deadline_base_date == datetime.date(2026, 7, 31) for i in subs)
+
+    # 元タスク(親=締切調査の実行対象)が同じグループのアンカー(offset 0)になっていること。
+    source = next(i for i in _all_infos() if i.title == "就労証明書の提出")
+    assert source.deadline_group_id == gid
+    assert source.deadline_offset_days == 0
+    assert source.deadline_base_date == datetime.date(2026, 7, 31)
 
 
 def test_auto_deadline_investigation_skipped_when_no_flag(monkeypatch):

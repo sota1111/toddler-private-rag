@@ -885,3 +885,43 @@ def test_build_drafts_persists_group_and_offsets(monkeypatch):
     for d in drafts:
         due = datetime.date.fromisoformat(d["due_date"])
         assert d["deadline_offset_days"] == (base - due).days
+
+
+# --- SOT-1411 再オープン: assign_anchor_group -----------------------------------------
+
+def test_assign_anchor_group_unifies_group_and_offsets():
+    """assign_anchor_group は全 draft を1グループに束ね、基準日からのオフセットを再計算する。"""
+    drafts = [
+        {"title": "a", "due_date": "2026-07-22", "deadline_group_id": "x",
+         "deadline_offset_days": 999, "deadline_base_date": "old"},
+        {"title": "b", "due_date": "2026-07-28", "deadline_group_id": "y",
+         "deadline_offset_days": None, "deadline_base_date": ""},
+        {"title": "c", "due_date": "", "deadline_group_id": "z",
+         "deadline_offset_days": 1, "deadline_base_date": "old"},
+    ]
+
+    gid = submission_agent.assign_anchor_group(drafts, "2026-07-30")
+
+    assert gid
+    # 全件が同一グループ・同一基準日になる
+    assert {d["deadline_group_id"] for d in drafts} == {gid}
+    assert {d["deadline_base_date"] for d in drafts} == {"2026-07-30"}
+    # オフセット = 基準日 - 各タスク締切（due_date が空のものは None）
+    assert drafts[0]["deadline_offset_days"] == 8
+    assert drafts[1]["deadline_offset_days"] == 2
+    assert drafts[2]["deadline_offset_days"] is None
+
+
+def test_assign_anchor_group_noop_when_base_empty():
+    """基準日が空のときは drafts を変更せず "" を返す（グループ化しない）。"""
+    drafts = [
+        {"title": "a", "due_date": "2026-07-22", "deadline_group_id": "x",
+         "deadline_offset_days": 5, "deadline_base_date": "keep"},
+    ]
+    before = [dict(d) for d in drafts]
+
+    assert submission_agent.assign_anchor_group(drafts, "") == ""
+    assert drafts == before
+    # 不正な基準日でも安全に "" を返す
+    assert submission_agent.assign_anchor_group(drafts, "not-a-date") == ""
+    assert drafts == before

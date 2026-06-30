@@ -200,6 +200,16 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
                                 # は参照不可。自動実行ではダウンロードリンクを付与しない。
                                 municipality=None,
                             )
+                            # SOT-1411 再オープン対応: 生成した付随タスク(子)を1グループに束ね、
+                            # 基準日(最終提出期限)を基準にオフセットを再計算する。group_id が返れば
+                            # 後段で元タスク(親=cid)を同グループのアンカー(offset 0)として加える。
+                            group_id = (
+                                submission_agent.assign_anchor_group(
+                                    sub_drafts, final_due_iso
+                                )
+                                if (final_due_iso and sub_drafts)
+                                else ""
+                            )
                             for sub in sub_drafts:
                                 try:
                                     created_sub = info_repo.create(
@@ -231,6 +241,22 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
                                 except Exception as e:  # 1件の失敗で全体を止めない
                                     logger.warning(
                                         f"Failed to create submission draft for info {info_id}: {e}"
+                                    )
+                            # SOT-1411 再オープン対応: 元タスク(親=cid)を締切グループのアンカー
+                            # (基準日=offset 0)として加える。親の基準日変更で子タスクが一括でずれる。
+                            if group_id and cid is not None:
+                                try:
+                                    info_repo.update(
+                                        cid,
+                                        schemas.NurseryInfoUpdate(
+                                            deadline_group_id=group_id,
+                                            deadline_offset_days=0,
+                                            deadline_base_date=final_due_iso,
+                                        ),
+                                    )
+                                except Exception as e:
+                                    logger.warning(
+                                        f"Failed to anchor source task {cid} to deadline group: {e}"
                                     )
                         except Exception as e:  # 自動締切調査の失敗は無視(best-effort)
                             logger.warning(

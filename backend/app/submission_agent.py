@@ -727,3 +727,37 @@ def build_submission_task_drafts(
                 }
             )
     return drafts
+
+
+def assign_anchor_group(drafts: List[dict], base_iso: str) -> str:
+    """1回の締切調査で生成した全 draft を、base_iso(最終提出期限)を基準とする単一の締切グループに
+    まとめ直すヘルパー(SOT-1411 再オープン対応)。
+
+    build_submission_task_drafts は書類ごとに別グループ(別 group_id・別 base_date)を付けるが、
+    締切調査の呼び出し元(手動: routers/info.py / 自動: routers/attachments.py)はこのヘルパーで
+    全 draft を1グループに束ね、各 draft の deadline_offset_days を「基準日(base_iso)から何日手前か」
+    = (base_iso - due_date).days で再計算する。これにより締切調査の元タスク(親)を同じグループの
+    アンカー(offset 0)として加え、基準日変更で子タスクを一括でずらせるようにする。
+
+    生成した group_id を返す。base_iso が空(最終提出期限なし)のときは drafts を変更せず "" を返す。
+    常に never-throw。
+    """
+    if not base_iso:
+        return ""
+    try:
+        base_d = datetime.date.fromisoformat(base_iso)
+    except (TypeError, ValueError):
+        return ""
+    group_id = uuid.uuid4().hex
+    for d in drafts:
+        d["deadline_group_id"] = group_id
+        d["deadline_base_date"] = base_iso
+        offset_days: Optional[int] = None
+        due = d.get("due_date") or ""
+        if due:
+            try:
+                offset_days = (base_d - datetime.date.fromisoformat(due)).days
+            except (TypeError, ValueError):
+                offset_days = None
+        d["deadline_offset_days"] = offset_days
+    return group_id
