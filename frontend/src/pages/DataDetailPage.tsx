@@ -7,6 +7,41 @@ import { STATUS_TYPES } from './infoFormOptions';
 import { useI18n } from '../i18n/useI18n';
 import { useConfirm } from '../components/confirmDialogContext';
 
+// SOT-1404: 本文中の http(s) URL（締切調査の「根拠となる出典リンク」など）をクリック可能な
+// リンクに変換して表示する。URL 以外のテキストはそのまま（改行は whitespace-pre-wrap で維持）。
+const URL_SPLIT_REGEX = /(https?:\/\/[^\s]+)/g;
+const URL_TEST_REGEX = /^https?:\/\/[^\s]+$/;
+
+const LinkifiedText: React.FC<{ text: string; className?: string }> = ({ text, className }) => {
+  const parts = text.split(URL_SPLIT_REGEX);
+  return (
+    <p className={className}>
+      {parts.map((part, i) => {
+        if (URL_TEST_REGEX.test(part)) {
+          // 末尾の句読点はリンクに含めない（日本語本文対策）。
+          const match = part.match(/^(.*?)([、。）)]*)$/s);
+          const url = match ? match[1] : part;
+          const trail = match ? match[2] : '';
+          return (
+            <React.Fragment key={i}>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline break-all"
+              >
+                {url}
+              </a>
+              {trail}
+            </React.Fragment>
+          );
+        }
+        return <React.Fragment key={i}>{part}</React.Fragment>;
+      })}
+    </p>
+  );
+};
+
 // SOT-1325: 写真を大きく表示し、その下に文字起こし(OCR原文)を設定言語で表示する。
 // 画像ごとに独立した文字起こしクエリを持たせるため子コンポーネントに切り出す。
 const AttachmentBlock: React.FC<{ att: Attachment }> = ({ att }) => {
@@ -53,7 +88,7 @@ const AttachmentBlock: React.FC<{ att: Attachment }> = ({ att }) => {
         {isLoading ? (
           <p className="text-sm text-muted-foreground">{t('records.transcriptionLoading')}</p>
         ) : text.trim() ? (
-          <p className="whitespace-pre-wrap break-words text-foreground">{text}</p>
+          <LinkifiedText text={text} className="whitespace-pre-wrap break-words text-foreground" />
         ) : (
           <p className="text-sm text-muted-foreground">{t('records.transcriptionEmpty')}</p>
         )}
@@ -277,7 +312,7 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
           {!hasPhoto && item.content && (
             <div className="mb-4">
               <h2 className="text-sm font-semibold text-muted-foreground mb-1">{t('records.content')}</h2>
-              <p className="whitespace-pre-wrap break-words text-foreground">{item.content}</p>
+              <LinkifiedText text={item.content} className="whitespace-pre-wrap break-words text-foreground" />
             </div>
           )}
 
