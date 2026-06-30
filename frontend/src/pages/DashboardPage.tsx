@@ -165,6 +165,12 @@ const DashboardPage: React.FC = () => {
   const weeklyQuery = useQuery({ queryKey: ['weekly'], queryFn: getWeekly });
   const nextWeekQuery = useQuery({ queryKey: ['nextWeek'], queryFn: getNextWeek });
 
+  // SOT-1423: 写真本体レコード（添付あり・登録一覧用）は掲示板に出さず、やることリストの中身
+  // （分解タスク=添付なし）のみ表示する。写真本体は event_date=None だが date/info_type を持つため
+  // 「今日やること」「明日の持ち物」に漏れていた。SOT-1408（TasksPage）と同じ添付有無の判定で除外する。
+  const tasksOnly = (items?: NurseryInfo[]): NurseryInfo[] =>
+    (items ?? []).filter((it) => (it.attachments?.length ?? 0) === 0);
+
   return (
     <div className="w-full lg:max-w-6xl lg:mx-auto">
       <ProactiveReminders />
@@ -172,7 +178,7 @@ const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-[1.125rem]">
         <DashboardSection
           title={t('dashboard.today')}
-          items={todayQuery.data || []}
+          items={tasksOnly(todayQuery.data)}
           isLoading={todayQuery.isLoading}
           emoji="📝"
           accentClass="bg-amber-50 text-amber-700"
@@ -191,7 +197,7 @@ const DashboardPage: React.FC = () => {
 
         <DashboardSection
           title={t('dashboard.tomorrow')}
-          items={tomorrowQuery.data || []}
+          items={tasksOnly(tomorrowQuery.data)}
           isLoading={tomorrowQuery.isLoading}
           emoji="🎒"
           accentClass="bg-sky-50 text-sky-700"
@@ -205,7 +211,7 @@ const DashboardPage: React.FC = () => {
 
         <DashboardSection
           title={t('dashboard.weekly')}
-          items={weeklyQuery.data || []}
+          items={tasksOnly(weeklyQuery.data)}
           isLoading={weeklyQuery.isLoading}
           emoji="📅"
           accentClass="bg-emerald-50 text-emerald-700"
@@ -221,7 +227,7 @@ const DashboardPage: React.FC = () => {
 
         <DashboardSection
           title={t('dashboard.nextWeek')}
-          items={nextWeekQuery.data || []}
+          items={tasksOnly(nextWeekQuery.data)}
           isLoading={nextWeekQuery.isLoading}
           emoji="🗓️"
           accentClass="bg-indigo-50 text-indigo-700"
