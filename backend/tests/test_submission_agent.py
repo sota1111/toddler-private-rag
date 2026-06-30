@@ -37,7 +37,10 @@ class _FakeClient:
 def _enrich_json(lead=7, needs=True, source="https://example.go.jp"):
     return json.dumps(
         {
-            "steps": ["役所で申請する", "記入して提出する"],
+            "steps": [
+                {"name": "役所で申請する", "lead_time_days": 2},
+                {"name": "記入して提出する", "lead_time_days": 5},
+            ],
             "needs_company_issuance": needs,
             "lead_time_days": lead,
             "source": source,
@@ -65,7 +68,10 @@ def test_extract_documents_happy(monkeypatch):
     assert health["name"] == "健康調査票"
     # 5月1日 → 当年 ISO に正規化
     assert health["due_date"].endswith("-05-01")
-    assert health["steps"] == ["役所で申請する", "記入して提出する"]
+    assert health["steps"] == [
+        {"name": "役所で申請する", "lead_time_days": 2},
+        {"name": "記入して提出する", "lead_time_days": 5},
+    ]
     assert health["needs_company_issuance"] is True
     assert health["lead_time_days"] == 7
     assert health["source"] == "https://example.go.jp"
@@ -117,18 +123,62 @@ def test_build_drafts_backward_calc(monkeypatch):
     )
 
     drafts = submission_agent.build_submission_task_drafts(SAMPLE, language="ja")
-    assert len(drafts) == 1
-    d = drafts[0]
-    assert d["info_type"] == "提出物"
-    assert d["tags"] == submission_agent.SUBMISSION_TAG
-    assert d["due_date"] == "2026-05-10"
-    # 逆算: 提出期限 - 所要期間(7日)
-    expected = (datetime.date(2026, 5, 10) - datetime.timedelta(days=7)).isoformat()
-    assert d["event_date"] == expected
-    assert "就労証明書" in d["title"]
-    assert "手順" in d["content"]
-    # build_task_drafts と同形のキー集合 + due_date/tags
-    assert set(d["categories"].keys()) == {"title", *extraction_keys()}
+    # 手順ごとに分割: 2 手順 → 2 タスク
+    assert len(drafts) == 2
+    for d in drafts:
+        assert d["info_type"] == "提出物"
+        assert d["tags"] == submission_agent.SUBMISSION_TAG
+        assert "就労証明書" in d["title"]
+        # build_task_drafts と同形のキー集合 + due_date/tags
+        assert set(d["categories"].keys()) == {"title", *extraction_keys()}
+    # 後ろ向き逆算: 記入して提出(5日)=5/5, 役所で申請(2日)=5/3（実行順で返る）
+    assert drafts[0]["due_date"] == "2026-05-03"
+    assert drafts[0]["event_date"] == "2026-05-03"
+    assert drafts[1]["due_date"] == "2026-05-05"
+    # 各タスク本文に手順位置と所要期間の目安（平均日数の注意事項）が入る
+    assert "手順 1/2" in drafts[0]["content"]
+    assert "所要期間の目安" in drafts[0]["content"]
+
+
+def test_build_drafts_per_step_backward_chain(monkeypatch):
+    """Issue 例: 期限 7/30、4 手順を後ろ向きに逆算して手順ごとに分割する。"""
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
+    monkeypatch.setattr(
+        submission_agent,
+        "_llm_extract_documents",
+        lambda text, language: [{"name": "在籍証明書", "due_date": "2026-07-30"}],
+    )
+    enrich = json.dumps(
+        {
+            "steps": [
+                {"name": "テンプレート入手", "lead_time_days": 3},
+                {"name": "証明書発行", "lead_time_days": 14},
+                {"name": "誤り確認", "lead_time_days": 1},
+                {"name": "市町村に提出", "lead_time_days": 3},
+            ],
+            "needs_company_issuance": True,
+            "lead_time_days": None,
+            "source": "https://example.go.jp",
+        }
+    )
+    monkeypatch.setattr(ai_client, "generate_grounded", lambda prompt, **k: enrich)
+
+    drafts = submission_agent.build_submission_task_drafts(SAMPLE, language="ja")
+    assert len(drafts) == 4
+    # 実行順 + 後ろ向き逆算の締切（テンプレ3/発行14/確認1/提出3 を 7/30 から逆算）
+    assert [d["due_date"] for d in drafts] == [
+        "2026-07-09",
+        "2026-07-12",
+        "2026-07-26",
+        "2026-07-27",
+    ]
+    for i, d in enumerate(drafts):
+        assert d["event_date"] == d["due_date"]
+        assert f"手順 {i + 1}/4" in d["content"]
+        assert "所要期間の目安" in d["content"]
+        assert "最終提出期限: 2026-07-30" in d["content"]
+    assert "テンプレート入手" in drafts[0]["title"]
+    assert "市町村に提出" in drafts[3]["title"]
 
 
 def test_build_drafts_default_buffer_when_lead_unknown(monkeypatch):
