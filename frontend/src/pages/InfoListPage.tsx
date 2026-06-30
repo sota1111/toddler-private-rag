@@ -4,7 +4,7 @@ import { getInfoList, getAttachmentFileUrl, deleteInfo } from '../api';
 import { useI18n } from '../i18n/useI18n';
 import { useConfirm } from '../components/confirmDialogContext';
 
-const INFO_TYPES = ["すべて", "資料", "掲示", "行事", "持ち物", "提出物", "お知らせ", "給食", "休園変更", "市町村"];
+const INFO_TYPES = ["すべて", "資料", "掲示", "行事", "持ち物", "提出物", "お知らせ", "給食", "休園変更"];
 // SOT-1355: ステータスを3つに統一（すべて / 未確認 / 未対応 / 対応済）。`確認済` は選択肢から削除。
 const STATUS_TYPES = ["すべて", "未確認", "未対応", "対応済"];
 
