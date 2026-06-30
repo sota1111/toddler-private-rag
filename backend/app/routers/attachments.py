@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse, Response
 import os
 import logging
 from typing import Optional, Union
-from .. import schemas, storage, ocr, extraction, clock
+from .. import schemas, storage, ocr, extraction, clock, submission_agent
 from ..concurrency import run_parallel
 from ..timing import time_block
 from ..privacy import redact_pii
@@ -174,14 +174,70 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
                     cid = getattr(created, "id", None)
                     if cid is not None:
                         extra_ids.append(cid)
+
+                    # SOT-1410: 要調査フラグ(needs_deadline_investigation)が true のタスクは、
+                    # 締切調査(提出書類エージェント)を自動実行し、結果の準備タスクdraftを永続化する。
+                    # 手動の「締め切り調査」ボタン(POST /info/{id}/investigate-deadline)と同じ生成を、
+                    # HTTPリクエストではなくパイプライン内の task dict から駆動する。best-effort:
+                    # 失敗してもタスク作成・registered昇格を止めない。
+                    if task.get("needs_deadline_investigation"):
+                        try:
+                            invest_text = "\n".join(
+                                p
+                                for p in [task.get("title"), task.get("content")]
+                                if p
+                            )
+                            # 逆算アンカー: タスク自身の締切(event_date優先, 次にdate)。
+                            final_due_iso = (
+                                task.get("event_date") or task.get("date") or None
+                            )
+                            sub_drafts = submission_agent.build_submission_task_drafts(
+                                invest_text,
+                                None,
+                                language=language,
+                                final_due_iso=final_due_iso,
+                                # 市町村はfrontend localStorageのみ(SOT-1405)でパイプラインから
+                                # は参照不可。自動実行ではダウンロードリンクを付与しない。
+                                municipality=None,
+                            )
+                            for sub in sub_drafts:
+                                try:
+                                    created_sub = info_repo.create(
+                                        schemas.NurseryInfoCreate(
+                                            title=sub["title"],
+                                            info_type=sub["info_type"],
+                                            content=sub["content"],
+                                            items=(sub["items"] or None),
+                                            date=(sub["date"] or None),
+                                            event_date=(sub.get("event_date") or None),
+                                            due_date=(sub.get("due_date") or None),
+                                            tags=(sub.get("tags") or None),
+                                            child_id=parent_child_id,
+                                            status="未確認",
+                                            priority="普通",
+                                            registration_state="draft",
+                                        )
+                                    )
+                                    scid = getattr(created_sub, "id", None)
+                                    if scid is not None:
+                                        extra_ids.append(scid)
+                                except Exception as e:  # 1件の失敗で全体を止めない
+                                    logger.warning(
+                                        f"Failed to create submission draft for info {info_id}: {e}"
+                                    )
+                        except Exception as e:  # 自動締切調査の失敗は無視(best-effort)
+                            logger.warning(
+                                f"Auto deadline investigation failed for info {info_id}: {e}"
+                            )
                 except Exception as e:  # 1タスクの失敗で全体を止めない
                     logger.warning(
                         f"Failed to create task draft for info {info_id}: {e}"
                     )
 
-            # SOT-1369: 提出書類先回りエージェント(SOT-1316)の自動起動はここから撤去した。
-            # 締め切り調査は、一覧から項目を選んで「締め切り調査」ボタンを押したときに
-            # POST /info/{id}/investigate-deadline 経由で手動トリガするよう変更した。
+            # SOT-1369で自動起動を撤去し手動ボタンのみとしたが、SOT-1410で締切調査の自動実行を
+            # 再導入した。トリガはタスクごとの needs_deadline_investigation フラグ(上のループ内)で
+            # ゲートする。手動の「締め切り調査」ボタン(POST /info/{id}/investigate-deadline)は
+            # 再実行用にそのまま残す。
         except Exception as e:  # graceful degradation: 必ず元レコードを登録(registered)へ昇格させる
             logger.warning(
                 f"Enrich failed for info {info_id}, promoting with fallback title: {e}"
