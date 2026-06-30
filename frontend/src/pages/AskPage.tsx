@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { askInfo, askInfoStream } from '../api';
 import type { RagAnswer } from '../types';
 import { useI18n } from '../i18n/useI18n';
+import MarkdownText from '../components/MarkdownText';
 
 // SOT-1286: 出典リンクで遷移→ブラウザ戻るで再マウントしても質問と回答が消えないよう、
 // query と result を sessionStorage に保存・復元する。
@@ -158,7 +159,7 @@ const AskPage: React.FC = () => {
         <div className="space-y-6">
           <div className="bg-surface rounded-lg shadow-sm border border-border p-5">
             <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2">{t('ask.answer')}</h2>
-            <p className="text-foreground whitespace-pre-wrap leading-relaxed break-words">{result.answer}</p>
+            <MarkdownText text={result.answer} className="text-foreground" />
           </div>
 
           <div className="bg-surface rounded-lg shadow-sm border border-border p-5">
