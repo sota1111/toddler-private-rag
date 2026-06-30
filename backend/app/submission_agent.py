@@ -220,30 +220,6 @@ def _download_link_line(
     return f"ダウンロードページ: {url}" if ja else f"Download page: {url}"
 
 
-def _step_subtitle(step_name: str, limit: int = 18) -> str:
-    """手順名から簡潔なサブタイトル（タイトル用）を作る。
-
-    grounding LLM の手順名は時に長い動作文（例: 「勤務先（会社の人事や総務担当部署）に様式を
-    提出し、証明書の記入・発行を依頼する」）になり、そのままタイトルに使うと文の途中で切れて
-    読めない（SOT-1402 再オープン）。最初の自然な区切り（、。・/改行）までを見出しとして採用し、
-    なお長い場合は字数で丸めて末尾に「…」を付ける。手順名フルは本文側に残るため情報は失われない。
-    既に簡潔な手順名（例「テンプレート入手」）はそのまま返す。
-    """
-    s = (step_name or "").strip()
-    if not s:
-        return ""
-    # 複数動作を区切る最初の区切りまでを採用（先頭の一手順だけを見出しにする）
-    for sep in ("、", "。", "\n", "・"):
-        idx = s.find(sep)
-        if idx > 0:
-            s = s[:idx]
-            break
-    s = s.strip()
-    if len(s) > limit:
-        s = s[:limit].rstrip() + "…"
-    return s
-
-
 def _llm_extract_documents(safe_text: str, language: str) -> List[dict]:
     """提出が必要な書類とその提出期限のみを抽出する LLM ステップ。失敗時は例外。"""
     client = ai_client.get_genai_client()
@@ -701,12 +677,9 @@ def build_submission_task_drafts(
         step_base_date = due_iso or (scheduled[-1]["due_iso"] if scheduled else "")
         for i, step in enumerate(scheduled):
             step_due = step.get("due_iso") or ""
-            step_name = step.get("name", "")
-            # ステップ番号（何番目/全何ステップ）+ 簡潔なサブタイトルをタイトルに付ける
-            # （例: 在籍証明書(1/5) サブタイトル）。手順名が長文でも途中切れせず読める見出しにする。
-            prefix = f"{name}({i + 1}/{total})"
-            subtitle = _step_subtitle(step_name)
-            title = (f"{prefix} {subtitle}".rstrip())[:40]
+            # SOT-1420: 子タスクのタイトル(表紙)は手順本文の切り出しではなく、親タスク(書類)の概要 =
+            # 書類名 + 何番目/全何ステップ にする。手順の詳細本文は content 側(_build_step_content)に残る。
+            title = (f"{name}({i + 1}/{total})")[:40]
             content = _build_step_content(
                 doc, step, i + 1, total, language, municipality
             )

@@ -196,26 +196,13 @@ def test_build_drafts_per_step_backward_chain(monkeypatch):
         assert f"手順 {i + 1}/4" in d["content"]
         assert "所要期間の目安" in d["content"]
         assert "最終提出期限: 2026-07-30" in d["content"]
-    # タイトルに「書類名(何番目/全数) 手順名」が入る（Issue 例: 在籍証明書(1/5) サブタイトル）
-    assert drafts[0]["title"] == "在籍証明書(1/4) テンプレート入手"
-    assert drafts[3]["title"] == "在籍証明書(4/4) 市町村に提出"
-
-
-def test_step_subtitle_shortens_long_step_name():
-    """長い動作文の手順名は最初の区切りまで＋字数上限で簡潔な見出しにする（SOT-1402 再オープン）。"""
-    # 既に簡潔な手順名はそのまま
-    assert submission_agent._step_subtitle("テンプレート入手") == "テンプレート入手"
-    # 「、」区切りの先頭句だけを採用し、長ければ末尾に「…」
-    sub = submission_agent._step_subtitle(
-        "勤務先（会社の人事や総務担当部署）に様式を提出し、証明書の記入・発行を依頼する"
-    )
-    assert sub.endswith("…")
-    assert "、" not in sub
-    assert len(sub) <= 19  # limit(18) + ellipsis
+    # タイトルは「書類名(何番目/全数)」のみ＝親タスク(書類)の概要を表紙にする（SOT-1420）
+    assert drafts[0]["title"] == "在籍証明書(1/4)"
+    assert drafts[3]["title"] == "在籍証明書(4/4)"
 
 
 def test_build_drafts_long_step_name_title_not_truncated_midsentence(monkeypatch):
-    """手順名が長文でもタイトルは途中切れの本文ではなく簡潔なサブタイトルになる（SOT-1402 再オープン）。"""
+    """手順名が長文でもタイトルには手順本文を入れず、書類名+番号のみにする（SOT-1420）。"""
     monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
     monkeypatch.setattr(
         submission_agent,
@@ -242,9 +229,10 @@ def test_build_drafts_long_step_name_title_not_truncated_midsentence(monkeypatch
 
     drafts = submission_agent.build_submission_task_drafts(SAMPLE, language="ja")
     assert len(drafts) == 2
-    # サブタイトルは長文の途中切れにならない（「、」で切れた本文ではない）
-    assert drafts[1]["title"].startswith("会社の在籍証明書(2/2) ")
+    # タイトルは「書類名(何番目/全数)」のみで、手順本文の切り出しを含まない（SOT-1420）
+    assert drafts[1]["title"] == "会社の在籍証明書(2/2)"
     assert "、" not in drafts[1]["title"]
+    assert "様式" not in drafts[1]["title"]
     # 手順名フルは本文に残るので情報は失われない
     assert "様式を提出し、証明書の記入・発行を依頼する" in drafts[1]["content"]
 
