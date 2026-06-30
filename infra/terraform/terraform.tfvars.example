@@ -51,6 +51,13 @@ orphan_purge_schedule = "0 3 * * *"
 # the gitignored terraform.tfvars only. Managed out-of-band (like other secrets).
 worker_invoke_token = ""
 
+# --- SOT-1400: Cloud Monitoring alerting ---
+# Email for Cloud Run alert notifications. Empty = alert policies exist but no
+# email channel is attached. Thresholds have sensible defaults; override if noisy.
+alert_notification_email       = "" # e.g. ops@example.com
+# cloud_run_5xx_threshold        = 0.1  # 5xx requests/sec (aligned)
+# cloud_run_latency_threshold_ms = 2000 # p99 latency (ms)
+
 # Container images are built & pushed by CI and ignored by Terraform; normally
 # leave these unset.
 # backend_image  = ""

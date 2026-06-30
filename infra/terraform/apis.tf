@@ -18,6 +18,7 @@ locals {
     "sts.googleapis.com",
     "cloudscheduler.googleapis.com", # SOT-1366 item B: orphan-cleanup scheduler.
     "pubsub.googleapis.com",         # SOT-1377: GCS direct upload finalize events.
+    "monitoring.googleapis.com",     # SOT-1400: Cloud Monitoring alert policies.
   ]
 }
 

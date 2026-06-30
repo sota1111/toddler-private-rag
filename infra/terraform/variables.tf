@@ -157,3 +157,23 @@ variable "gcs_finalize_topic" {
   type        = string
   default     = "toddler-gcs-finalize"
 }
+
+# --- SOT-1400: Cloud Monitoring alerting. ---
+
+variable "alert_notification_email" {
+  description = "Email address for Cloud Monitoring alert notifications. Empty = no email channel is created (alert policies still exist, just without a notification channel)."
+  type        = string
+  default     = ""
+}
+
+variable "cloud_run_5xx_threshold" {
+  description = "SOT-1400: 5xx response rate (requests/second, aligned) above which the high-error-rate alert fires."
+  type        = number
+  default     = 0.1
+}
+
+variable "cloud_run_latency_threshold_ms" {
+  description = "SOT-1400: p99 request latency (milliseconds) above which the high-latency alert fires."
+  type        = number
+  default     = 2000
+}

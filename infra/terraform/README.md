@@ -204,3 +204,6 @@ SOT-1377 also adds a `cors` block to `google_storage_bucket.attachments` and a
 ## Notes
 - This config was validated for structure only; `terraform validate` / `plan` against
   the real project must be run by a human with GCP credentials.
+- SOT-1400: `monitoring.tf` adds Cloud Monitoring alert policies (Cloud Run 5xx rate,
+  p99 latency) and an optional email notification channel (`alert_notification_email`).
+  Rollback procedure for a bad Cloud Run deploy: see `docs/runbook-rollback.md`.
