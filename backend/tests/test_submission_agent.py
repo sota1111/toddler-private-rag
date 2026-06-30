@@ -136,6 +136,9 @@ def test_build_drafts_backward_calc(monkeypatch):
         assert "就労証明書" in d["title"]
         # build_task_drafts と同形のキー集合 + due_date/tags
         assert set(d["categories"].keys()) == {"title", *extraction_keys()}
+    # タイトルに何番目/全何ステップが入る（例: 就労証明書(1/2) ...）
+    assert drafts[0]["title"].startswith("就労証明書(1/2)")
+    assert drafts[1]["title"].startswith("就労証明書(2/2)")
     # 後ろ向き逆算: 記入して提出(5日)=5/5, 役所で申請(2日)=5/3（実行順で返る）
     assert drafts[0]["due_date"] == "2026-05-03"
     assert drafts[0]["event_date"] == "2026-05-03"
@@ -182,8 +185,9 @@ def test_build_drafts_per_step_backward_chain(monkeypatch):
         assert f"手順 {i + 1}/4" in d["content"]
         assert "所要期間の目安" in d["content"]
         assert "最終提出期限: 2026-07-30" in d["content"]
-    assert "テンプレート入手" in drafts[0]["title"]
-    assert "市町村に提出" in drafts[3]["title"]
+    # タイトルに「書類名(何番目/全数) 手順名」が入る（Issue 例: 在籍証明書(1/5) サブタイトル）
+    assert drafts[0]["title"] == "在籍証明書(1/4) テンプレート入手"
+    assert drafts[3]["title"] == "在籍証明書(4/4) 市町村に提出"
 
 
 def test_step_deadlines_forward_when_due_unknown(monkeypatch):
