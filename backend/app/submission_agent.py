@@ -457,7 +457,10 @@ def build_submission_task_drafts(
         total = len(scheduled)
         for i, step in enumerate(scheduled):
             step_due = step.get("due_iso") or ""
-            title = (f"{name}: {step.get('name', '')}")[:40]
+            step_name = step.get("name", "")
+            # ステップ番号（何番目/全何ステップ）をタイトルに付ける（例: 在籍証明書(1/5) サブタイトル）
+            prefix = f"{name}({i + 1}/{total})"
+            title = (f"{prefix} {step_name}".rstrip())[:40]
             content = _build_step_content(doc, step, i + 1, total, language)
             drafts.append(
                 {
