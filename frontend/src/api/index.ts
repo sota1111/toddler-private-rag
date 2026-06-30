@@ -97,6 +97,18 @@ export const investigateDeadline = async (
   return response.data;
 };
 
+// SOT-1411: 締切調査タスクの基準日(最終提出期限)を変更し、同じ締切調査グループの付随タスクを
+// 保存済みオフセットでまとめてずらす。
+export const rescheduleDeadline = async (
+  id: number | string,
+  baseDate: string,
+): Promise<{ updated: number; ids: (number | string)[] }> => {
+  const response = await api.post(`/info/${id}/reschedule-deadline`, {
+    base_date: baseDate,
+  });
+  return response.data;
+};
+
 export const uploadAttachment = async (
   infoId: number | string,
   file: File,

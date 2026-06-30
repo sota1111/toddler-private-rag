@@ -66,6 +66,12 @@ class InfoRepository(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def list_by_deadline_group(self, group_id: str) -> List[Any]:
+        """SOT-1411: 同じ deadline_group_id を持つ締切調査タスク群（付随タスク）を返す。
+        group_id が falsy のときは空リスト。"""
+        pass
+
+    @abc.abstractmethod
     def list_attachments_for_info(self, id: Union[int, str]) -> List[Any]:
         pass
 
@@ -287,6 +293,13 @@ class SqliteInfoRepository(InfoRepository):
         self.db.refresh(db_info)
         return db_info
 
+    def list_by_deadline_group(self, group_id: str) -> List[models.NurseryInfo]:
+        if not group_id:
+            return []
+        return self.db.query(models.NurseryInfo).filter(
+            models.NurseryInfo.deadline_group_id == group_id
+        ).all()
+
     def list_attachments_for_info(self, id: Union[int, str]) -> List[models.Attachment]:
         db_info = self.get(id)
         if not db_info:
@@ -459,6 +472,10 @@ class FirestoreNurseryInfo:
     child_id: Optional[str] = None
     # SOT-1407: 締め切り調査が必要なタスクか。
     needs_deadline_investigation: bool = False
+    # SOT-1411: 締切調査タスク群のグループ識別子・基準日からの日数オフセット・基準日。
+    deadline_group_id: Optional[str] = None
+    deadline_offset_days: Optional[int] = None
+    deadline_base_date: Optional[datetime.date] = None
     attachments: List[FirestoreAttachment] = field(default_factory=list)
 
 # Firestore helper functions
@@ -503,6 +520,9 @@ def _info_doc_to_obj(doc_id: str, data: dict, attachments: List[FirestoreAttachm
         registration_state=data.get("registration_state") or "registered",
         child_id=data.get("child_id"),
         needs_deadline_investigation=bool(data.get("needs_deadline_investigation")),
+        deadline_group_id=data.get("deadline_group_id"),
+        deadline_offset_days=data.get("deadline_offset_days"),
+        deadline_base_date=_to_date(data.get("deadline_base_date")),
         created_at=data.get("created_at") or datetime.datetime.now(),
         updated_at=data.get("updated_at") or datetime.datetime.now(),
         attachments=attachments or []
@@ -572,6 +592,7 @@ class FirestoreInfoRepository(InfoRepository):
         doc_data["date"] = _from_date(doc_data.get("date"))
         doc_data["event_date"] = _from_date(doc_data.get("event_date"))
         doc_data["due_date"] = _from_date(doc_data.get("due_date"))
+        doc_data["deadline_base_date"] = _from_date(doc_data.get("deadline_base_date"))
         doc_data["tags"] = _tags_str_to_array(doc_data.get("tags"))
         doc_data["created_at"] = now
         doc_data["updated_at"] = now
@@ -790,6 +811,8 @@ class FirestoreInfoRepository(InfoRepository):
             update_data["event_date"] = _from_date(update_data["event_date"])
         if "due_date" in update_data:
             update_data["due_date"] = _from_date(update_data["due_date"])
+        if "deadline_base_date" in update_data:
+            update_data["deadline_base_date"] = _from_date(update_data["deadline_base_date"])
         if "tags" in update_data:
             update_data["tags"] = _tags_str_to_array(update_data["tags"])
         
@@ -797,6 +820,14 @@ class FirestoreInfoRepository(InfoRepository):
         
         doc_ref.update(update_data)
         return self.get(id)
+
+    def list_by_deadline_group(self, group_id: str) -> List[FirestoreNurseryInfo]:
+        if not group_id:
+            return []
+        docs = self.db.collection("nursery_info").where(
+            "deadline_group_id", "==", group_id
+        ).stream()
+        return [_info_doc_to_obj(doc.id, doc.to_dict()) for doc in docs]
 
     def list_attachments_for_info(self, id: Union[int, str]) -> List[FirestoreAttachment]:
         att_refs = self.db.collection("attachments").where("info_id", "==", str(id)).stream()

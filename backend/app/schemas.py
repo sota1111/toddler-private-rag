@@ -84,12 +84,16 @@ class NurseryInfoBase(BaseModel):
     registration_state: Optional[str] = "registered"
     # SOT-1407: 締め切り調査が必要なタスクか（やることリスト作成時に算出）。
     needs_deadline_investigation: Optional[bool] = False
+    # SOT-1411: 締切調査が生成した手順タスク群のグループ識別子・基準日からの日数オフセット・基準日。
+    deadline_group_id: Optional[str] = None
+    deadline_offset_days: Optional[int] = None
+    deadline_base_date: Optional[datetime.date] = None
     priority: Optional[str] = "普通"
     tags: Optional[str] = None
     memo: Optional[str] = None
 
     _normalize_dates = field_validator(
-        "date", "event_date", "due_date", mode="before"
+        "date", "event_date", "due_date", "deadline_base_date", mode="before"
     )(_empty_str_to_none)
 
 class NurseryInfoCreate(NurseryInfoBase):
@@ -107,12 +111,16 @@ class NurseryInfoUpdate(BaseModel):
     status: Optional[str] = None
     registration_state: Optional[str] = None
     needs_deadline_investigation: Optional[bool] = None
+    # SOT-1411
+    deadline_group_id: Optional[str] = None
+    deadline_offset_days: Optional[int] = None
+    deadline_base_date: Optional[datetime.date] = None
     priority: Optional[str] = None
     tags: Optional[str] = None
     memo: Optional[str] = None
 
     _normalize_dates = field_validator(
-        "date", "event_date", "due_date", mode="before"
+        "date", "event_date", "due_date", "deadline_base_date", mode="before"
     )(_empty_str_to_none)
 
 class NurseryInfoResponse(NurseryInfoBase):
@@ -129,6 +137,15 @@ class NurseryInfoResponse(NurseryInfoBase):
 # その市町村のダウンロードページ検索リンクを生成タスク本文へ付与するために使う。
 class InvestigateDeadlineRequest(BaseModel):
     municipality: Optional[str] = None
+
+
+# SOT-1411: 締切調査タスクの基準日(最終提出期限)変更リクエスト。基準日を変えると、同じ
+# deadline_group_id を持つ付随タスクを、各タスクの deadline_offset_days(基準日から何日手前か)を
+# 使ってまとめて再計算(ずらし)する。
+class RescheduleDeadlineRequest(BaseModel):
+    base_date: datetime.date
+
+    _normalize_dates = field_validator("base_date", mode="before")(_empty_str_to_none)
 
 
 # --- RAG (ベクトル検索＋LLM回答生成) ---

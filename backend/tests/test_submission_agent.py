@@ -810,3 +810,67 @@ def test_build_drafts_adds_link_for_concise_download_step(monkeypatch):
     assert len(dl_drafts) == 1
     assert "ダウンロードする" in dl_drafts[0]["content"]
     assert "https://www.google.com/search?q=" in dl_drafts[0]["content"]
+
+
+# --- SOT-1411: 締切オフセット + グループ識別子の永続化 --------------------------------
+
+def test_step_deadlines_emits_offset_from_base(monkeypatch):
+    """基準日が判明しているとき、各手順に基準日からの日数オフセットが付く。"""
+    monkeypatch.setattr(submission_agent, "_today", lambda: datetime.date(2026, 7, 1))
+    steps = [
+        {"name": "申請", "lead_time_days": 3},
+        {"name": "提出", "lead_time_days": 5},
+    ]
+    result = submission_agent._step_deadlines("2026-07-30", steps, None)
+    # 提出(末尾)=7/30-5=7/25 → offset 5、申請=7/25-3=7/22 → offset 8
+    assert [r["due_iso"] for r in result] == ["2026-07-22", "2026-07-25"]
+    assert [r["offset_days"] for r in result] == [8, 5]
+    # オフセットは「基準日 - 手順締切」の日数に一致する
+    base = datetime.date(2026, 7, 30)
+    for r in result:
+        due = datetime.date.fromisoformat(r["due_iso"])
+        assert r["offset_days"] == (base - due).days
+
+
+def test_step_deadlines_offset_none_when_due_unknown():
+    """最終期限が不明なら基準日が無いのでオフセットは None。"""
+    steps = [{"name": "申請", "lead_time_days": 3}]
+    result = submission_agent._step_deadlines("", steps, None)
+    assert result[0]["offset_days"] is None
+
+
+def test_build_drafts_persists_group_and_offsets(monkeypatch):
+    """build_submission_task_drafts が全手順タスクに共通の group_id と、各 offset / base_date を付ける。"""
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
+    monkeypatch.setattr(
+        submission_agent,
+        "_llm_extract_documents",
+        lambda text, language: [{"name": "在籍証明書", "due_date": "2026-07-30"}],
+    )
+    enrich = json.dumps(
+        {
+            "steps": [
+                {"name": "テンプレート入手", "lead_time_days": 3},
+                {"name": "市町村に提出", "lead_time_days": 3},
+            ],
+            "needs_company_issuance": True,
+            "lead_time_days": None,
+            "source": "https://example.go.jp",
+        }
+    )
+    monkeypatch.setattr(
+        ai_client, "generate_grounded_with_sources", lambda prompt, **k: (enrich, [])
+    )
+
+    drafts = submission_agent.build_submission_task_drafts(SAMPLE, language="ja")
+    assert len(drafts) == 2
+    # 全手順タスクが同一グループに属する
+    gids = {d["deadline_group_id"] for d in drafts}
+    assert len(gids) == 1 and next(iter(gids))
+    # 基準日(最終提出期限)が各タスクに記録される
+    assert all(d["deadline_base_date"] == "2026-07-30" for d in drafts)
+    # オフセットは「基準日 - 各タスク締切」の日数に一致する
+    base = datetime.date(2026, 7, 30)
+    for d in drafts:
+        due = datetime.date.fromisoformat(d["due_date"])
+        assert d["deadline_offset_days"] == (base - due).days

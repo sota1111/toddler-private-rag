@@ -22,6 +22,12 @@ class NurseryInfo(Base):
     # SOT-1407: 締め切り調査が必要なタスクか（やることリスト作成時に算出）。
     # nullable のまま追加（既存行は NULL = 未調査扱いで締め切り調査ボタン非表示）。
     needs_deadline_investigation = Column(Boolean, nullable=True, default=False)
+    # SOT-1411: 締切調査が生成した手順タスク群をまとめるグループ識別子と、基準日(最終提出期限)からの
+    # 日数オフセットを永続化する。基準日を変更したとき同グループの付随タスクをオフセット分だけ
+    # まとめてずらす。全て nullable（既存行・締切調査由来でないタスクは NULL = ずらし対象外）。
+    deadline_group_id = Column(String(64), nullable=True)
+    deadline_offset_days = Column(Integer, nullable=True)
+    deadline_base_date = Column(Date, nullable=True)
     priority = Column(String(10), default="普通")
     tags = Column(Text, nullable=True)
     memo = Column(Text, nullable=True)

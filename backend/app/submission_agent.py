@@ -16,6 +16,7 @@ import json
 import logging
 import re
 import urllib.parse
+import uuid
 from typing import List, Optional
 
 from . import ai_client, extraction
@@ -523,12 +524,16 @@ def _step_deadlines(
             due = None
 
     dues: List[str] = [""] * n
+    # SOT-1411: 基準日(最終提出期限)から各手順締切まで「何日手前か」のオフセット。基準日が判明する
+    # ときのみ意味を持つ（前向き累積時は基準日が無いので None）。基準日変更時の付随タスクずらしに使う。
+    offsets: List[Optional[int]] = [None] * n
     if due is not None:
         cursor = due
         # 末尾(最終提出)から先頭へ、各手順の所要日数だけ遡って締切を決める
         for i in range(n - 1, -1, -1):
             cursor = cursor - datetime.timedelta(days=effective[i])
             dues[i] = cursor.isoformat()
+            offsets[i] = (due - cursor).days
     else:
         # 最終期限が不明なときは本日起点で前向きに累積し、各手順に具体日付を割り当てる
         cursor = _today()
@@ -537,8 +542,8 @@ def _step_deadlines(
             dues[i] = cursor.isoformat()
 
     return [
-        {"name": s.get("name", ""), "lead_time_days": eff, "due_iso": d}
-        for s, eff, d in zip(steps, effective, dues)
+        {"name": s.get("name", ""), "lead_time_days": eff, "due_iso": d, "offset_days": off}
+        for s, eff, d, off in zip(steps, effective, dues, offsets)
     ]
 
 
@@ -639,12 +644,26 @@ def build_submission_task_drafts(
         due_iso = doc.get("due_date") or ""
         steps = doc.get("steps") or []
         category_dict = {k: [] for k in extraction.ALL_CONTENT_KEYS}
+        # SOT-1411: 1書類ぶんの手順タスク群をまとめるグループ識別子。基準日(最終提出期限=due_iso)を
+        # 変更したとき、このグループの付随タスクを保存済みオフセットでまとめてずらす。
+        group_id = uuid.uuid4().hex
+        base_date = due_iso or ""
 
         if not steps:
             # 手順情報が無い書類は従来どおり 1 タスク（後方互換）
             prep_iso = _prep_start_iso(due_iso, doc.get("lead_time_days"))
             title = (f"{name}{suffix}")[:40]
             content = _build_content(doc, language, municipality)
+            # 基準日が判明していれば「準備開始日が基準日から何日手前か」をオフセットとして記録する。
+            offset_days = None
+            if due_iso and prep_iso:
+                try:
+                    offset_days = (
+                        datetime.date.fromisoformat(due_iso)
+                        - datetime.date.fromisoformat(prep_iso)
+                    ).days
+                except ValueError:
+                    offset_days = None
             drafts.append(
                 {
                     "title": title,
@@ -655,6 +674,9 @@ def build_submission_task_drafts(
                     "event_date": prep_iso,
                     "due_date": due_iso,
                     "tags": SUBMISSION_TAG,
+                    "deadline_group_id": group_id,
+                    "deadline_offset_days": offset_days,
+                    "deadline_base_date": base_date,
                     "categories": {"title": title, **category_dict},
                 }
             )
@@ -684,6 +706,9 @@ def build_submission_task_drafts(
                     "event_date": step_due,
                     "due_date": step_due,
                     "tags": SUBMISSION_TAG,
+                    "deadline_group_id": group_id,
+                    "deadline_offset_days": step.get("offset_days"),
+                    "deadline_base_date": base_date,
                     "categories": {"title": title, **category_dict},
                 }
             )
