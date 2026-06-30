@@ -66,6 +66,16 @@ const DraftsPage: React.FC = () => {
   };
 
   const refreshAll = async () => {
+    // SOT-1409: refreshAll は本登録(finalize)/破棄(discard)/編集保存など、既に表示済みの
+    // 仮登録を操作したときだけ呼ばれる。これらの時点で文字起こし(OCR)は完了しているため、
+    // 写真アップ直後の90秒ウィンドウ(recentUpload)を解除し、保存済みのアップロード時刻も消す。
+    // これをしないと本登録で一覧が空に戻った後も空表示に「写真を文字起こし中です…」が残る。
+    setRecentUpload(false);
+    try {
+      sessionStorage.removeItem('tpr.lastPhotoUploadAt');
+    } catch {
+      /* ignore */
+    }
     // 仮登録の変化は通常の一覧/ダッシュボードにも影響するため広く無効化する
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['drafts'] }),
