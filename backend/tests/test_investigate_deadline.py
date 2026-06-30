@@ -105,3 +105,77 @@ def test_investigate_excludes_attachment_ocr(monkeypatch):
     assert "添付写真のOCR原文" not in captured["safe_text"]
     assert "就労証明書の提出" in captured["safe_text"]
     assert "メモ" in captured["safe_text"]
+
+
+# --- SOT-1411: 基準日変更で付随タスクを一括ずらし ------------------------------------
+
+def _create_grouped(group_id, offset, base_date, due):
+    """締切調査グループに属するタスクを作る（offset/base_date/due を直接指定）。"""
+    return _create(
+        title=f"task-{offset}",
+        info_type="提出物",
+        content="c",
+        due_date=due,
+        event_date=due,
+        deadline_group_id=group_id,
+        deadline_offset_days=offset,
+        deadline_base_date=base_date,
+    )
+
+
+def test_reschedule_shifts_sibling_tasks(monkeypatch):
+    """基準日を変更すると、同じグループの付随タスクが各オフセット分だけまとめてずれる。"""
+    monkeypatch.setattr("app.routers.info.index_info_id", lambda *a, **k: None)
+
+    g = "grp-1411"
+    base = "2026-07-30"
+    t0 = _create_grouped(g, 8, base, "2026-07-22")  # 基準日-8
+    t1 = _create_grouped(g, 5, base, "2026-07-25")  # 基準日-5
+    t2 = _create_grouped(g, 0, base, "2026-07-30")  # 基準日当日
+
+    # t1 の基準日を 8/10 に変更（同グループの t0/t1/t2 が一緒にずれる）。
+    resp = client.post(
+        f"/api/info/{t1['id']}/reschedule-deadline", json={"base_date": "2026-08-10"}
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["updated"] == 3
+
+    def _due(info_id):
+        r = client.get(f"/api/info/{info_id}")
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    d0, d1, d2 = _due(t0["id"]), _due(t1["id"]), _due(t2["id"])
+    # 新基準日 8/10 - 各オフセット
+    assert d0["due_date"] == "2026-08-02" and d0["event_date"] == "2026-08-02"
+    assert d1["due_date"] == "2026-08-05" and d1["event_date"] == "2026-08-05"
+    assert d2["due_date"] == "2026-08-10" and d2["event_date"] == "2026-08-10"
+    # 基準日も更新される
+    assert d0["deadline_base_date"] == "2026-08-10"
+    assert d2["deadline_base_date"] == "2026-08-10"
+
+
+def test_reschedule_is_idempotent(monkeypatch):
+    """同じ基準日で2回呼んでも結果は変わらない（常に新基準日 - オフセットで再計算）。"""
+    monkeypatch.setattr("app.routers.info.index_info_id", lambda *a, **k: None)
+
+    g = "grp-idem"
+    base = "2026-07-30"
+    t0 = _create_grouped(g, 8, base, "2026-07-22")
+
+    for _ in range(2):
+        resp = client.post(
+            f"/api/info/{t0['id']}/reschedule-deadline", json={"base_date": "2026-08-10"}
+        )
+        assert resp.status_code == 200, resp.text
+
+    r = client.get(f"/api/info/{t0['id']}").json()
+    assert r["due_date"] == "2026-08-02"
+    assert r["event_date"] == "2026-08-02"
+    assert r["deadline_base_date"] == "2026-08-10"
+
+
+def test_reschedule_404_for_missing(monkeypatch):
+    monkeypatch.setattr("app.routers.info.index_info_id", lambda *a, **k: None)
+    resp = client.post("/api/info/999999/reschedule-deadline", json={"base_date": "2026-08-10"})
+    assert resp.status_code == 404

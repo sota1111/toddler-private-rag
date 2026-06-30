@@ -502,6 +502,11 @@ def investigate_deadline(
                         event_date=(sub.get("event_date") or None),
                         due_date=(sub.get("due_date") or None),
                         tags=(sub.get("tags") or None),
+                        # SOT-1411: 締切調査グループ識別子・基準日からの日数オフセット・基準日を
+                        # 永続化し、基準日変更時に同グループの付随タスクをまとめてずらせるようにする。
+                        deadline_group_id=sub.get("deadline_group_id"),
+                        deadline_offset_days=sub.get("deadline_offset_days"),
+                        deadline_base_date=(sub.get("deadline_base_date") or None),
                         # SOT-1368 follow-up: 親レコードに紐づけた子どもを引き継ぐ。
                         child_id=getattr(db_info, "child_id", None),
                         status="未確認",
@@ -518,6 +523,67 @@ def investigate_deadline(
         logger.warning("Submission agent failed for info %s: %s", id, e)
 
     return {"created": len(created_ids), "ids": created_ids}
+
+
+# SOT-1411: 締切調査タスクの基準日(最終提出期限)を変更し、同じ締切調査グループの付随タスクを
+# 各タスクの deadline_offset_days(基準日から何日手前か)に基づいてまとめて再計算(ずらし)する。
+# 基準日からオフセット分だけ手前の日付を各付随タスクの event_date/due_date に再設定する。
+# 常に「新基準日 − オフセット」で計算するため、複数回呼んでも結果は同じ（冪等）。
+@router.post("/{id}/reschedule-deadline")
+def reschedule_deadline(
+    id: Union[int, str],
+    payload: schemas.RescheduleDeadlineRequest,
+    background_tasks: BackgroundTasks,
+    repo: InfoRepository = Depends(get_info_repository),
+    current_user: str = Depends(get_current_user),
+):
+    db_info = repo.get(id)
+    if db_info is None:
+        raise HTTPException(status_code=404, detail="Info not found")
+
+    new_base = payload.base_date  # datetime.date
+
+    def _shifted_date(offset_days) -> Optional[datetime.date]:
+        if offset_days is None:
+            return None
+        try:
+            return new_base - datetime.timedelta(days=int(offset_days))
+        except (TypeError, ValueError):
+            return None
+
+    group_id = getattr(db_info, "deadline_group_id", None)
+    # 対象タスク群を集める。グループが無い締切調査由来でないタスクでも、対象タスク単体は基準日へ更新する。
+    if group_id:
+        targets = repo.list_by_deadline_group(group_id)
+        if not targets:
+            targets = [db_info]
+    else:
+        targets = [db_info]
+
+    updated_ids: List = []
+    for task in targets:
+        tid = getattr(task, "id", None)
+        if tid is None:
+            continue
+        offset_days = getattr(task, "deadline_offset_days", None)
+        update_fields = {"deadline_base_date": new_base}
+        shifted = _shifted_date(offset_days)
+        if shifted is not None:
+            # オフセットが分かるタスクは新基準日から手前にずらす。
+            update_fields["event_date"] = shifted
+            update_fields["due_date"] = shifted
+        elif tid == getattr(db_info, "id", None):
+            # 対象タスク自身でオフセット不明なら、基準日そのものを締切に据える。
+            update_fields["event_date"] = new_base
+            update_fields["due_date"] = new_base
+        try:
+            repo.update(tid, schemas.NurseryInfoUpdate(**update_fields))
+            updated_ids.append(tid)
+            background_tasks.add_task(index_info_id, tid)
+        except Exception as e:  # 1件の失敗で全体を止めない
+            logger.warning("Failed to reschedule task %s in group %s: %s", tid, group_id, e)
+
+    return {"updated": len(updated_ids), "ids": updated_ids}
 
 
 @router.delete("")
