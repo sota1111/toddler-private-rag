@@ -113,3 +113,29 @@ def test_weekly_and_next_week_use_calendar_week_boundaries(monkeypatch):
     assert {"next-week-mon", "next-week-sun"} <= next_week_titles
     assert "this-week" not in next_week_titles
     assert "week-after-next" not in next_week_titles
+
+
+def test_weekly_and_next_week_include_non_event_types(monkeypatch):
+    """SOT-1424 (2nd run): 今週/来週の予定は行事に限らず event_date を持つ全種別を表示する。
+
+    写真OCRから分割された持ち物/提出物等のタスクも event_date を持つ。これらを行事だけに
+    絞ると「予定」枠から落ち、「一部の予定は載るが一部は載らない」状態になっていた。
+    今日/明日の枠と同じく種別を問わず日付で集計されることを検証する。
+    """
+    import datetime as _dt
+
+    fixed_today = _dt.date(2026, 7, 1)  # Wednesday
+    monkeypatch.setattr(clock, "today", lambda: fixed_today)
+
+    this_week_end = fixed_today + _dt.timedelta(days=(6 - fixed_today.weekday()))  # Sun 2026-07-05
+    next_monday = this_week_end + _dt.timedelta(days=1)                            # Mon 2026-07-06
+
+    # 行事以外（持ち物/提出物）でも event_date を持つ予定は枠に出る。
+    _create(title="belonging-this-week", info_type="持ち物", event_date=this_week_end.isoformat())
+    _create(title="submission-next-week", info_type="提出物", event_date=next_monday.isoformat())
+
+    weekly_titles = {i["title"] for i in client.get("/api/info/weekly").json()}
+    next_week_titles = {i["title"] for i in client.get("/api/info/next-week").json()}
+
+    assert "belonging-this-week" in weekly_titles
+    assert "submission-next-week" in next_week_titles

@@ -251,25 +251,27 @@ class SqliteInfoRepository(InfoRepository):
         ).all()
 
     def list_weekly(self) -> List[models.NurseryInfo]:
-        # 今週の予定 (SOT-1424): 本日から今週末(日曜)までのカレンダー週の行事。
+        # 今週の予定 (SOT-1424): 本日から今週末(日曜)までのカレンダー週に event_date を持つ予定。
+        # 種別(info_type)で絞らない: 行事だけに限定すると、写真OCRから分割された
+        # 持ち物/提出物等のタスク(event_date を持つ)が「予定」枠から落ち、「一部は載るが
+        # 一部は載らない」状態になっていた。今日/明日の枠と同じく種別を問わず日付で集計する。
         today = clock.today()
         this_week_end, _, _ = _calendar_week_bounds(today)
         return self.db.query(models.NurseryInfo).filter(
             _sqlite_registered_only(),
-            models.NurseryInfo.info_type == "行事",
             models.NurseryInfo.event_date >= today,
             models.NurseryInfo.event_date <= this_week_end
         ).order_by(models.NurseryInfo.event_date.asc()).all()
 
     def list_next_week(self) -> List[models.NurseryInfo]:
-        # 来週の予定 (SOT-1296 / SOT-1424): 翌カレンダー週(月〜日)の行事。
+        # 来週の予定 (SOT-1296 / SOT-1424): 翌カレンダー週(月〜日)に event_date を持つ予定。
         # 本日起点のローリング窓だと、カレンダー上「来週」でも本日から7日以内の予定は
         # 「今週」枠に入り「来週」枠が空白になっていた。カレンダー週境界に揃える。
+        # また種別(info_type)では絞らない(list_weekly と同じ理由)。
         today = clock.today()
         _, next_week_start, next_week_end = _calendar_week_bounds(today)
         return self.db.query(models.NurseryInfo).filter(
             _sqlite_registered_only(),
-            models.NurseryInfo.info_type == "行事",
             models.NurseryInfo.event_date >= next_week_start,
             models.NurseryInfo.event_date <= next_week_end
         ).order_by(models.NurseryInfo.event_date.asc()).all()
@@ -719,19 +721,19 @@ class FirestoreInfoRepository(InfoRepository):
         return results
 
     def list_weekly(self) -> List[FirestoreNurseryInfo]:
-        # 今週の予定 (SOT-1424): 本日から今週末(日曜)までのカレンダー週の行事。
+        # 今週の予定 (SOT-1424): 本日から今週末(日曜)までのカレンダー週に event_date を持つ予定。
+        # 種別(info_type)で絞らない: 行事だけに限定すると、写真OCRから分割された
+        # 持ち物/提出物等のタスク(event_date を持つ)が「予定」枠から落ちていた。
         today = clock.today()
         this_week_end, _, _ = _calendar_week_bounds(today)
         today_str = _from_date(today)
         week_end_str = _from_date(this_week_end)
 
-        # SOT-1285: 等価条件(info_type)と範囲条件(event_date >= / <=)を別フィールドで
-        # 組み合わせると Firestore は複合インデックスを要求し、未作成だとクエリが失敗して
-        # 「今週の予定」欄が読み込み中のまま固まる。等価条件のみで取得し、event_date の範囲は
-        # アプリ側でフィルタする(event_date は ISO 文字列 YYYY-MM-DD なので辞書順=日付順)。
-        docs = self.db.collection("nursery_info") \
-            .where("info_type", "==", "行事") \
-            .stream()
+        # SOT-1285 の教訓: 範囲条件(event_date)を Firestore 側に投げると複合インデックスや
+        # 単一インデックスを要求し、未作成だと「予定」欄が読み込み中のまま固まる。
+        # 全 nursery_info を取得し event_date の範囲はアプリ側でフィルタする
+        # (event_date は ISO 文字列 YYYY-MM-DD なので辞書順=日付順)。
+        docs = self.db.collection("nursery_info").stream()
 
         results = []
         for doc in docs:
@@ -748,20 +750,19 @@ class FirestoreInfoRepository(InfoRepository):
         return results
 
     def list_next_week(self) -> List[FirestoreNurseryInfo]:
-        # 来週の予定 (SOT-1296 / SOT-1424): 翌カレンダー週(月〜日)の行事。
+        # 来週の予定 (SOT-1296 / SOT-1424): 翌カレンダー週(月〜日)に event_date を持つ予定。
         # 本日起点のローリング窓だと、カレンダー上「来週」でも本日から7日以内の予定は
         # 「今週」枠に入り「来週」枠が空白になっていた。カレンダー週境界に揃える。
+        # また種別(info_type)では絞らない(list_weekly と同じ理由)。
         today = clock.today()
         _, next_week_start, next_week_end = _calendar_week_bounds(today)
         next_week_start_str = _from_date(next_week_start)
         next_week_end_str = _from_date(next_week_end)
 
-        # SOT-1285 の教訓: 等価条件(info_type)のみで取得し、event_date の範囲は
-        # アプリ側でフィルタする(複合インデックス未作成による読み込み固着を回避)。
+        # SOT-1285 の教訓: 範囲条件(event_date)は Firestore に投げず、全件取得後に
+        # アプリ側でフィルタする(インデックス未作成による読み込み固着を回避)。
         # event_date は ISO 文字列 YYYY-MM-DD なので辞書順=日付順。
-        docs = self.db.collection("nursery_info") \
-            .where("info_type", "==", "行事") \
-            .stream()
+        docs = self.db.collection("nursery_info").stream()
 
         results = []
         for doc in docs:
