@@ -468,9 +468,20 @@ def investigate_deadline(
         logger.warning("Failed to gather attachment OCR text for info %s", id)
     safe_text = "\n".join(p for p in parts if p)
 
+    # 調査対象タスクに既に設定されている期限を最終提出期限の逆算アンカーとして渡す
+    # （優先順: due_date → event_date → date。SOT-1399 4回目の再オープン対応）。
+    final_due_iso = None
+    for attr in ("due_date", "event_date", "date"):
+        value = getattr(db_info, attr, None)
+        if value:
+            final_due_iso = value.isoformat() if hasattr(value, "isoformat") else str(value)
+            break
+
     created_ids: List = []
     try:
-        sub_drafts = submission_agent.build_submission_task_drafts(safe_text, None, language="ja")
+        sub_drafts = submission_agent.build_submission_task_drafts(
+            safe_text, None, language="ja", final_due_iso=final_due_iso
+        )
         for sub in sub_drafts:
             try:
                 created = repo.create(

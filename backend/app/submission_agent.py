@@ -206,12 +206,17 @@ def extract_submission_documents(
     safe_text: str,
     detected_dates: Optional[List[str]] = None,
     language: str = "ja",
+    final_due_iso: Optional[str] = None,
 ) -> List[dict]:
     """提出書類を抽出し、grounding で公式情報を付与した dict のリストを返す。
 
     返り値 dict: ``{name, due_date(ISO or ""), steps(list[{name, lead_time_days}]),
     needs_company_issuance(bool|None), lead_time_days(int|None), source(str)}``.
     safe_text が空、または AI クライアント不可のときは空リスト。常に never-throw。
+
+    ``final_due_iso`` が与えられた場合（締切調査の実行対象タスクに既に設定されている期限。
+    SOT-1399 4回目の再オープン対応）は、それを最終提出期限の逆算アンカーとして**最優先**で
+    採用する（LLM 抽出の書類別締切や本文検出より優先）。
     """
     safe_text = safe_text or ""
     if not safe_text.strip() or not ai_client.gemini_available():
@@ -223,6 +228,8 @@ def extract_submission_documents(
         logger.warning("submission document extraction failed: %s", e)
         return []
 
+    # タスク自身に設定済みの最終期限（最優先アンカー）。
+    explicit_due_iso = extraction.normalize_date(final_due_iso) if final_due_iso else ""
     # LLM が書類に締切を紐づけられなかったときの逆算アンカー（本文の最も遅い日付）。
     fallback_due_iso = _detect_deadline_iso(safe_text)
 
@@ -231,8 +238,12 @@ def extract_submission_documents(
         name = doc.get("name", "")
         if not name:
             continue
-        # 書類固有の締切が無ければ本文から拾った最終締切で逆算する（前向き累積に落とさない）。
-        due_iso = extraction.normalize_date(doc.get("due_date")) or fallback_due_iso
+        # 優先順: タスク設定日付 ＞ LLM抽出の書類別締切 ＞ 本文の最終締切（前向き累積に落とさない）。
+        due_iso = (
+            explicit_due_iso
+            or extraction.normalize_date(doc.get("due_date"))
+            or fallback_due_iso
+        )
         try:
             info = _grounded_enrich(name, language)
         except Exception as e:  # noqa: BLE001 - never let one doc break the batch
@@ -408,6 +419,7 @@ def build_submission_task_drafts(
     safe_text: str,
     detected_dates: Optional[List[str]] = None,
     language: str = "ja",
+    final_due_iso: Optional[str] = None,
 ) -> List[dict]:
     """提出書類ごとの準備タスク draft（build_task_drafts と同形 + due_date/tags）を返す。
 
@@ -415,9 +427,14 @@ def build_submission_task_drafts(
     逆算して各タスクの締切(event_date/due_date)を設定する。手順情報が無い書類は従来どおり
     1タスク（event_date=準備開始日）。tags に番兵 ``SUBMISSION_TAG`` を付ける（SOT-1339 の
     リマインド分類用）。常に never-throw。
+
+    ``final_due_iso`` は締切調査の実行対象タスクに設定済みの期限（最優先の逆算アンカー。
+    SOT-1399 4回目の再オープン対応）。
     """
     try:
-        docs = extract_submission_documents(safe_text, detected_dates, language)
+        docs = extract_submission_documents(
+            safe_text, detected_dates, language, final_due_iso
+        )
     except Exception as e:  # noqa: BLE001 - graceful degradation
         logger.warning("build_submission_task_drafts failed: %s", e)
         return []
