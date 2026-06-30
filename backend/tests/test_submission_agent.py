@@ -181,6 +181,68 @@ def test_build_drafts_per_step_backward_chain(monkeypatch):
     assert "市町村に提出" in drafts[3]["title"]
 
 
+def test_step_deadlines_forward_when_due_unknown(monkeypatch):
+    """最終期限が不明な場合、本日起点で各手順の所要日数を前向きに累積して締切を割り当てる。"""
+    monkeypatch.setattr(
+        submission_agent, "_today", lambda: datetime.date(2026, 6, 30)
+    )
+    steps = [
+        {"name": "テンプレート入手", "lead_time_days": 3},
+        {"name": "証明書発行", "lead_time_days": 14},
+        {"name": "誤り確認", "lead_time_days": 1},
+        {"name": "市町村に提出", "lead_time_days": 3},
+    ]
+    result = submission_agent._step_deadlines("", steps, None)
+    # 本日 6/30 起点で前向き累積: +3, +14, +1, +3
+    assert [r["due_iso"] for r in result] == [
+        "2026-07-03",
+        "2026-07-17",
+        "2026-07-18",
+        "2026-07-21",
+    ]
+
+
+def test_build_drafts_forward_schedule_when_no_due(monkeypatch):
+    """手順つき書類で最終期限が無くても、各 draft に本日起点の前向き締切が登録される。"""
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
+    monkeypatch.setattr(
+        submission_agent, "_today", lambda: datetime.date(2026, 6, 30)
+    )
+    monkeypatch.setattr(
+        submission_agent,
+        "_llm_extract_documents",
+        lambda text, language: [{"name": "在籍証明書", "due_date": ""}],
+    )
+    enrich = json.dumps(
+        {
+            "steps": [
+                {"name": "テンプレート入手", "lead_time_days": 3},
+                {"name": "証明書発行", "lead_time_days": 14},
+                {"name": "誤り確認", "lead_time_days": 1},
+                {"name": "市町村に提出", "lead_time_days": 3},
+            ],
+            "needs_company_issuance": True,
+            "lead_time_days": None,
+            "source": "https://example.go.jp",
+        }
+    )
+    monkeypatch.setattr(ai_client, "generate_grounded", lambda prompt, **k: enrich)
+
+    drafts = submission_agent.build_submission_task_drafts(SAMPLE, language="ja")
+    assert len(drafts) == 4
+    # 最終期限が無くても各やることに具体的な日付が登録される（空でない）
+    assert [d["due_date"] for d in drafts] == [
+        "2026-07-03",
+        "2026-07-17",
+        "2026-07-18",
+        "2026-07-21",
+    ]
+    for d in drafts:
+        assert d["event_date"] == d["due_date"]
+        assert d["due_date"]  # 空文字でない
+        assert "この手順の締切" in d["content"]
+
+
 def test_build_drafts_default_buffer_when_lead_unknown(monkeypatch):
     monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
     monkeypatch.setattr(
