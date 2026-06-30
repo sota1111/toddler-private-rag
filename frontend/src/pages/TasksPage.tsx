@@ -11,14 +11,20 @@ import { INFO_TYPES, STATUS_TYPES } from './infoFormOptions';
 // SOT-1342: 予定一覧との重複する一覧部分（ステータス絞り込み + 行リスト）を共有コンポーネント
 // DatedInfoList に1箇所化（タスク一覧が正）。
 // SOT-1358: タスクを手動で追加するボタン + 入力フォームを追加。既存の createInfo API を再利用し、
-// 追加後は ['info','all'] クエリを invalidate して一覧へ即時反映する。
+// 追加後は ['info'] クエリを invalidate して一覧へ即時反映する。
+// SOT-1408: 写真をアップロードすると「写真本体のレコード（添付あり・予定日なし＝登録一覧用）」と
+// 「文字起こしから分解したタスク」が別レコードで作られる（SOT-1318）。やることリストには分解した
+// タスクだけを出し、写真本体は登録一覧(RegisteredListPage)にのみ出す。RegisteredListPage と同じく
+// 「添付を持つレコード＝写真本体」と判定し、その逆（添付なし）だけをやることリストに表示する。
+// そのため添付情報が必要なので、SchedulePage が使う ['info','all']+include_attachments:false とは
+// 別のクエリキーで添付付き取得する。
 
 const TasksPage: React.FC = () => {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
-    queryKey: ['info', 'all'],
-    queryFn: () => getInfoList({ include_attachments: false }),
+    queryKey: ['info', 'tasks'],
+    queryFn: () => getInfoList(),
   });
   // SOT-1368: 紐づけるお子さまの選択肢。
   const { data: children } = useQuery({
@@ -46,7 +52,12 @@ const TasksPage: React.FC = () => {
 
   // SOT-1365: 日付不明（event_date 無し）のタスクも「期限なし」として表示するため、
   // 日付ありの絞り込みを外して全件を一覧へ渡す（カレンダーページは別途 event_date ありのみ表示）。
-  const events = useMemo<NurseryInfo[]>(() => data ?? [], [data]);
+  // SOT-1408: ただし写真本体のレコード（添付を持つ＝登録一覧用）はやることリストから除外する。
+  // 分解されたタスクや手動追加タスクは添付を持たないため残り、写真は登録一覧にのみ表示される。
+  const events = useMemo<NurseryInfo[]>(
+    () => (data ?? []).filter((it) => (it.attachments?.length ?? 0) === 0),
+    [data],
+  );
 
   const resetForm = () => {
     setTitle('');
@@ -81,7 +92,9 @@ const TasksPage: React.FC = () => {
         priority: '普通',
         child_id: childId || null,
       });
-      await queryClient.invalidateQueries({ queryKey: ['info', 'all'] });
+      // SOT-1408: ['info'] プレフィックスを invalidate し、やることリスト(['info','tasks'])と
+      // カレンダー(['info','all']) の両方を即時更新する。
+      await queryClient.invalidateQueries({ queryKey: ['info'] });
       closeForm();
     } catch {
       setSubmitError(t('tasks.submitError'));
