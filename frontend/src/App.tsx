@@ -5,10 +5,8 @@ import { AuthProvider } from './contexts/AuthContext';
 import { useAuth } from './contexts/useAuth';
 import { I18nProvider } from './i18n/I18nContext';
 import { useI18n } from './i18n/useI18n';
-import { RoleProvider } from './contexts/RoleContext';
 import { SettingsProvider } from './settings/SettingsContext';
 import LanguageToggle from './components/LanguageToggle';
-import RoleToggle from './components/RoleToggle';
 import ReminderBanner from './components/ReminderBanner';
 import ScrollToTop from './components/ScrollToTop';
 import { ConfirmDialogProvider } from './components/ConfirmDialog';
@@ -110,7 +108,6 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               </div>
             </div>
             <div className="flex items-center gap-2 md:gap-3">
-              <RoleToggle />
               <Link
                 to="/settings"
                 aria-label={t('nav.settings')}
@@ -176,7 +173,6 @@ const App: React.FC = () => {
       <I18nProvider>
         <ConfirmDialogProvider>
         <SettingsProvider>
-        <RoleProvider>
           <AuthProvider>
             <Router>
             <ScrollToTop />
@@ -211,7 +207,6 @@ const App: React.FC = () => {
             </Layout>
             </Router>
           </AuthProvider>
-        </RoleProvider>
         </SettingsProvider>
         </ConfirmDialogProvider>
       </I18nProvider>

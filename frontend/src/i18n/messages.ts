@@ -84,9 +84,6 @@ export const messages: Record<Lang, Messages> = {
     'datePicker.clear': 'クリア',
     'datePicker.unset': '未設定',
 
-    'role.label': '表示モード',
-    'role.admin': '管理者',
-    'role.user': 'ユーザー',
     'footer.copyright': '© 2026 おたよりナビ MVP',
 
     // common
@@ -452,9 +449,6 @@ export const messages: Record<Lang, Messages> = {
     'datePicker.clear': 'Clear',
     'datePicker.unset': 'Not set',
 
-    'role.label': 'Display mode',
-    'role.admin': 'Admin',
-    'role.user': 'User',
     'footer.copyright': '© 2026 Nursery Notice Guide MVP',
 
     // common
