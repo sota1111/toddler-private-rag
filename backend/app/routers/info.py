@@ -490,6 +490,14 @@ def investigate_deadline(
             final_due_iso=final_due_iso,
             municipality=municipality,
         )
+        # SOT-1411 再オープン対応: 生成した付随タスク(子)を1グループに束ね、基準日(最終提出期限)を
+        # 基準にオフセットを再計算する。group_id が返れば、後段で元タスク(親)を同グループのアンカー
+        # (offset 0)として加える。基準日が空のときは "" となりグループ化しない。
+        group_id = (
+            submission_agent.assign_anchor_group(sub_drafts, final_due_iso)
+            if (final_due_iso and sub_drafts)
+            else ""
+        )
         for sub in sub_drafts:
             try:
                 created = repo.create(
@@ -519,6 +527,21 @@ def investigate_deadline(
                     created_ids.append(cid)
             except Exception as e:  # 1件の失敗で全体を止めない
                 logger.warning("Failed to create submission draft for info %s: %s", id, e)
+        # SOT-1411 再オープン対応: 元タスク(親)を締切グループのアンカー(基準日=offset 0)として
+        # 加える。これにより親の詳細画面に基準日変更UIが出て、変更すると同グループの子タスクが
+        # まとめてずれる。元タスクの既存期限(event_date/due_date)は変更しない。
+        if group_id:
+            try:
+                repo.update(
+                    id,
+                    schemas.NurseryInfoUpdate(
+                        deadline_group_id=group_id,
+                        deadline_offset_days=0,
+                        deadline_base_date=final_due_iso,
+                    ),
+                )
+            except Exception as e:
+                logger.warning("Failed to anchor source task %s to deadline group: %s", id, e)
     except Exception as e:  # 提出書類エージェント全体の失敗は無視
         logger.warning("Submission agent failed for info %s: %s", id, e)
 

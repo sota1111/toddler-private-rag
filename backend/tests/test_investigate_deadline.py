@@ -251,3 +251,86 @@ def test_forward_generated_group_is_reschedulable(monkeypatch):
         ).isoformat()
         assert r["due_date"] == expected and r["event_date"] == expected
         assert r["deadline_base_date"] == "2026-09-30"
+
+
+def test_investigate_anchors_source_task_to_group(monkeypatch):
+    """SOT-1411 再オープン: 締切調査の元タスク(親)が、生成した付随タスク(子)と同じ締切グループの
+    アンカー(deadline_offset_days == 0)になること。
+
+    回帰: 修正前は元タスクがグループに含まれず、親の日付を変えても子が連動しなかった。さらに
+    基準日変更ボタンが子タスク側にだけ表示されていた（親=アンカーにのみ表示すべき）。
+    """
+    monkeypatch.setattr("app.routers.info.index_info_id", lambda *a, **k: None)
+
+    # build_submission_task_drafts は子タスク draft を返すスタブ。assign_anchor_group は実物が走る。
+    def fake_drafts(safe_text, detected_dates=None, **kwargs):
+        return [
+            {
+                "title": "在籍証明書の準備",
+                "info_type": "提出物",
+                "content": "c",
+                "items": "",
+                "date": "",
+                "event_date": "2026-07-22",
+                "due_date": "2026-07-22",
+                "tags": None,
+                "deadline_group_id": "per-doc-old",  # 上書きされる想定
+                "deadline_offset_days": 999,  # 上書きされる想定
+                "deadline_base_date": "old",  # 上書きされる想定
+            },
+        ]
+
+    monkeypatch.setattr(submission_agent, "build_submission_task_drafts", fake_drafts)
+
+    # 元タスク(親): 最終提出期限(due_date)を持つ。
+    info = _create(title="就労証明書の提出", content="メモ", due_date="2026-07-30")
+
+    resp = client.post(f"/api/info/{info['id']}/investigate-deadline")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["created"] == 1
+    child_id = resp.json()["ids"][0]
+
+    # 元タスク(親)がグループのアンカー(offset 0, base_date=親の期限)になっていること。
+    parent = client.get(f"/api/info/{info['id']}").json()
+    assert parent["deadline_group_id"], parent
+    assert parent["deadline_offset_days"] == 0
+    assert parent["deadline_base_date"] == "2026-07-30"
+
+    # 生成された子タスクが親と同じグループに属し、offset > 0（基準日変更ボタン非表示の対象）。
+    child = client.get(f"/api/info/{child_id}").json()
+    assert child["deadline_group_id"] == parent["deadline_group_id"]
+    assert child["deadline_offset_days"] == 8  # 2026-07-30 - 2026-07-22
+
+
+def test_investigate_no_anchor_when_base_date_empty(monkeypatch):
+    """SOT-1411 再オープン: 元タスクに最終提出期限が無い場合はグループ化・アンカー化しない。"""
+    monkeypatch.setattr("app.routers.info.index_info_id", lambda *a, **k: None)
+
+    def fake_drafts(safe_text, detected_dates=None, **kwargs):
+        return [
+            {
+                "title": "在籍証明書の準備",
+                "info_type": "提出物",
+                "content": "c",
+                "items": "",
+                "date": "",
+                "event_date": "",
+                "due_date": "",
+                "tags": None,
+                "deadline_group_id": "g",
+                "deadline_offset_days": None,
+                "deadline_base_date": "",
+            },
+        ]
+
+    monkeypatch.setattr(submission_agent, "build_submission_task_drafts", fake_drafts)
+
+    # 期限を一切持たない元タスク。
+    info = _create(title="就労証明書の提出", content="メモ")
+
+    resp = client.post(f"/api/info/{info['id']}/investigate-deadline")
+    assert resp.status_code == 200, resp.text
+
+    parent = client.get(f"/api/info/{info['id']}").json()
+    # 基準日が無いのでアンカー化されない（offset 0 にならない）。
+    assert parent["deadline_offset_days"] != 0
