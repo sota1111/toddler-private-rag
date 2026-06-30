@@ -381,3 +381,169 @@ def test_get_attachment_transcription_empty_when_no_ocr():
 def test_get_attachment_transcription_404():
     resp = client.get("/api/attachments/999999/transcription")
     assert resp.status_code == 404
+
+
+# --- SOT-1410: 要調査フラグ true のタスクで締切調査を自動実行する ---
+
+def _make_processing_info():
+    """registration_state='processing' の自動登録レコードを作成し info_id を返す。"""
+    from app.repository import SqliteInfoRepository
+    from app import schemas
+
+    db = TestingSessionLocal()
+    try:
+        repo = SqliteInfoRepository(db)
+        created = repo.create(
+            schemas.NurseryInfoCreate(
+                title="(processing)",
+                info_type="その他",
+                content="",
+                registration_state="processing",
+            )
+        )
+        return created.id
+    finally:
+        db.close()
+
+
+def _all_infos():
+    from app import models
+
+    db = TestingSessionLocal()
+    try:
+        return db.query(models.NurseryInfo).all()
+    finally:
+        db.close()
+
+
+def test_auto_deadline_investigation_runs_when_flag_true(monkeypatch):
+    from app import extraction, submission_agent
+    from app.routers import attachments
+
+    info_id = _make_processing_info()
+
+    monkeypatch.setattr(
+        extraction,
+        "build_draft_fields",
+        lambda *a, **k: {
+            "title": "写真から登録",
+            "info_type": "その他",
+            "content": "本文",
+            "items": "",
+            "date": "",
+        },
+    )
+    # 1件は要調査フラグ true、もう1件は false。
+    monkeypatch.setattr(
+        extraction,
+        "build_task_drafts",
+        lambda *a, **k: [
+            {
+                "title": "就労証明書の提出",
+                "info_type": "提出物",
+                "content": "勤務先に依頼",
+                "items": "",
+                "date": "",
+                "event_date": "2026-07-31",
+                "needs_deadline_investigation": True,
+            },
+            {
+                "title": "持ち物の準備",
+                "info_type": "持ち物",
+                "content": "",
+                "items": "タオル",
+                "date": "",
+                "event_date": "",
+                "needs_deadline_investigation": False,
+            },
+        ],
+    )
+
+    calls = []
+
+    def fake_build_submission(safe_text, detected_dates=None, **kwargs):
+        calls.append({"safe_text": safe_text, "kwargs": kwargs})
+        return [
+            {
+                "title": "就労証明書の準備",
+                "info_type": "提出物",
+                "content": "手順1",
+                "items": "",
+                "date": "",
+                "event_date": "2026-07-20",
+                "due_date": "2026-07-31",
+                "tags": submission_agent.SUBMISSION_TAG,
+            }
+        ]
+
+    monkeypatch.setattr(
+        submission_agent, "build_submission_task_drafts", fake_build_submission
+    )
+    # RAG index は副作用なので無効化。
+    monkeypatch.setattr(
+        "app.rag.indexing.index_info_id", lambda *a, **k: None, raising=False
+    )
+
+    attachments._promote_processing_draft(info_id, "OCRテキスト", None, language="ja")
+
+    # 締切調査はフラグ true のタスクに対して 1 回だけ実行される。
+    assert len(calls) == 1
+    # タイトル+本文が調査入力に渡る。
+    assert "就労証明書の提出" in calls[0]["safe_text"]
+    assert "勤務先に依頼" in calls[0]["safe_text"]
+    # タスク自身の締切が逆算アンカーとして渡る。
+    assert calls[0]["kwargs"].get("final_due_iso") == "2026-07-31"
+    assert calls[0]["kwargs"].get("municipality") is None
+
+    # 生成された提出準備タスクが draft として永続化される。
+    titles = [i.title for i in _all_infos()]
+    assert "就労証明書の準備" in titles
+
+
+def test_auto_deadline_investigation_skipped_when_no_flag(monkeypatch):
+    from app import extraction, submission_agent
+    from app.routers import attachments
+
+    info_id = _make_processing_info()
+
+    monkeypatch.setattr(
+        extraction,
+        "build_draft_fields",
+        lambda *a, **k: {
+            "title": "写真から登録",
+            "info_type": "その他",
+            "content": "本文",
+            "items": "",
+            "date": "",
+        },
+    )
+    monkeypatch.setattr(
+        extraction,
+        "build_task_drafts",
+        lambda *a, **k: [
+            {
+                "title": "持ち物の準備",
+                "info_type": "持ち物",
+                "content": "",
+                "items": "タオル",
+                "date": "",
+                "event_date": "",
+                "needs_deadline_investigation": False,
+            }
+        ],
+    )
+
+    calls = []
+    monkeypatch.setattr(
+        submission_agent,
+        "build_submission_task_drafts",
+        lambda *a, **k: calls.append(1) or [],
+    )
+    monkeypatch.setattr(
+        "app.rag.indexing.index_info_id", lambda *a, **k: None, raising=False
+    )
+
+    attachments._promote_processing_draft(info_id, "OCRテキスト", None, language="ja")
+
+    # フラグ true のタスクが無ければ締切調査は呼ばれない。
+    assert calls == []
