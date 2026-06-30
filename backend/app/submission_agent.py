@@ -139,8 +139,35 @@ def _format_source_links(sources: List[dict], ja: bool) -> List[str]:
 
 
 # 「お住まいの市区町村の窓口/公式ホームページから様式をダウンロード」型の手順を検出するための語（SOT-1405）。
-_MUNI_LOCATION_KEYWORDS = ("市区町村", "市町村", "自治体", "窓口", "公式ホームページ", "ホームページ")
+# 市役所/区役所/役所 や HP/ウェブサイト 等の略称・表記揺れも拾う（grounding LLM は手順名を簡潔に
+# 出力するため、語彙を広めに取らないと検出漏れする。SOT-1405 3回目の再オープン対応）。
+_MUNI_LOCATION_KEYWORDS = (
+    "市区町村",
+    "市町村",
+    "自治体",
+    "窓口",
+    "公式ホームページ",
+    "ホームページ",
+    "市役所",
+    "区役所",
+    "町役場",
+    "村役場",
+    "役所",
+    "役場",
+    "公式サイト",
+    "ウェブサイト",
+    "webサイト",
+    "サイト",
+    "HP",
+)
 _MUNI_GET_KEYWORDS = ("ダウンロード", "様式", "取得", "入手")
+
+
+def _has_get_keyword(text: str) -> bool:
+    """手順テキストが『ダウンロード/様式/取得/入手』等の取得アクションを含むか（場所語は不問）。"""
+    if not text:
+        return False
+    return any(k in text for k in _MUNI_GET_KEYWORDS) or "download" in text.lower()
 
 
 def _is_municipality_download_step(text: str) -> bool:
@@ -152,8 +179,23 @@ def _is_municipality_download_step(text: str) -> bool:
     if not text:
         return False
     has_location = any(k in text for k in _MUNI_LOCATION_KEYWORDS)
-    has_get = any(k in text for k in _MUNI_GET_KEYWORDS) or "download" in text.lower()
-    return has_location and has_get
+    return has_location and _has_get_keyword(text)
+
+
+def _doc_has_municipality_download(doc: dict) -> bool:
+    """書類全体（書類名＋全手順を結合したテキスト）が『市区町村窓口/公式HPから様式DL』型かを判定する。
+
+    grounding LLM は手順名を簡潔に出力するため、場所語（市区町村/窓口/公式HP）と取得語（DL/様式）が
+    別々の手順に分かれて、どの単一手順も `_is_municipality_download_step` を満たさないことがある。
+    その取りこぼしを防ぐため、書類スコープでまとめて判定する（SOT-1405 3回目の再オープン対応）。
+    常に never-throw。
+    """
+    if not isinstance(doc, dict):
+        return False
+    parts: List[str] = [str(doc.get("name", "") or "")]
+    for s in doc.get("steps") or []:
+        parts.append(s.get("name", "") if isinstance(s, dict) else str(s))
+    return _is_municipality_download_step("\n".join(p for p in parts if p))
 
 
 def _municipality_download_url(municipality: str, doc_name: str) -> str:
@@ -402,15 +444,13 @@ def _build_content(
     steps = doc.get("steps") or []
     if steps:
         lines.append("【手順】" if ja else "Steps:")
-        muni_download = False
         for s in steps:
             label = s.get("name", "") if isinstance(s, dict) else str(s)
             if label:
                 lines.append(f"・{label}" if ja else f"- {label}")
-                if _is_municipality_download_step(label):
-                    muni_download = True
-        # 市区町村の窓口/公式HPから様式をDLする手順がある場合、設定済み市町村のDLページリンクを1行付与（SOT-1405）。
-        if muni_download:
+        # 市区町村の窓口/公式HPから様式をDLする書類なら、設定済み市町村のDLページリンクを1行付与（SOT-1405）。
+        # 場所語と取得語が別々の手順に分かれていても拾えるよう書類スコープで判定する。
+        if _doc_has_municipality_download(doc):
             link = _download_link_line(municipality, name, ja)
             if link:
                 lines.append(link)
@@ -518,7 +558,12 @@ def _build_step_content(
     if step_name:
         lines.append(f"・{step_name}" if ja else f"- {step_name}")
         # 市区町村の窓口/公式HPから様式をDLする手順なら、設定済み市町村のDLページリンクを付与（SOT-1405）。
-        if _is_municipality_download_step(step_name):
+        # 単一手順で場所語＋取得語が揃う場合に加え、書類全体がDL型でこの手順が取得アクション
+        # （DL/様式/取得/入手）の場合も付与する。grounding LLM が手順名を簡潔に出力して場所語が
+        # 別手順に分かれても取りこぼさないようにするため（SOT-1405 3回目の再オープン対応）。
+        if _is_municipality_download_step(step_name) or (
+            _doc_has_municipality_download(doc) and _has_get_keyword(step_name)
+        ):
             link = _download_link_line(municipality, name, ja)
             if link:
                 lines.append(link)

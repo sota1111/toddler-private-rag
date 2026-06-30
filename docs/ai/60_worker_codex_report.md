@@ -1,50 +1,43 @@
-# Worker Report — Task Check (SOT-1401)
+# Worker Report — Task Check (SOT-1405 reopen)
 
 ## Fallback Disclosure (Worker Non-Response Policy)
-- Non-responsive worker: **Codex CLI** (usage-limit cooldown; `scripts/ai/run_codex.sh` exited with
-  non-response code `75`, cooldown until epoch 1798924200, now 1782780424). Retry futile (deterministic cooldown).
-- Failure mode: usage-limit cooldown (CODEX_COOLDOWN_ACTIVE).
-- Action: Claude Code performed the read-only task check directly under the Worker Non-Response Fallback Policy.
+Codex CLI was NON-RESPONSIVE for this run (usage-limit cooldown; `scripts/ai/run_codex.sh`
+delegated to Claude). Per the Worker Non-Response Fallback Policy, Claude Code performed the task
+check directly.
 
 ## Summary
-SOT-1401 「ダイアログを表示しない機能の削除」is **actionable**. Intent: the app currently triggers
-the browser-native `window.confirm()` dialog, which (on repeated firing) injects a browser checkbox
-「このページでこれ以上ダイアログを生成しない / 今後このダイアログを表示しない」(prevent this page from
-creating additional dialogs). The user wants that "don't show dialog" option gone — leaving only OK and
-Cancel. The fix is to replace native `window.confirm()` with a custom in-app confirmation modal that has
-only OK / Cancel buttons (no browser-injected suppress checkbox).
+Reopen request: 「登録から選択肢の市町村を削除してください。」 — remove the "市町村" option from the
+info_type registration choices (added in SOT-1403 1st run; municipality now lives in the Settings
+page after SOT-1403 2nd run, so the registration option is redundant).
+
+Issue is actionable: status In Progress, no blocking labels, requirement is clear and small (FIX,
+frontend-only).
 
 ## Changed Files
-- (none — investigation only)
+- (task check only — no source files modified)
 
 ## Commands Run
-- `ls frontend/src`, `grep -rn "表示しない|ダイアログ|dialog|confirm|alert"` over `frontend/src`.
-- Located all native dialog calls.
+- grep for "市町村" / INFO_TYPES across frontend/src
 
-## Findings
-- `window.confirm()` usages (these are where the browser injects the "don't show dialog" checkbox):
-  - `frontend/src/pages/DataDetailPage.tsx:151` — `window.confirm(t('records.confirmDelete', ...))`
-  - `frontend/src/pages/InfoListPage.tsx:59` — `window.confirm(t('list.confirmDelete', ...))`
-  - `frontend/src/pages/DraftsPage.tsx:138` — `window.confirm(t('drafts.confirmFinalizeAll'))`
-  - `frontend/src/pages/DraftsPage.tsx:154` — `window.confirm(t('drafts.confirmDiscard'))`
-- No custom dialog/modal component exists yet (`frontend/src/components/` has no Dialog/Modal). All
-  confirmations use the browser-native `window.confirm`. There is also `window.alert(...)` (DraftsPage)
-  but that is a single-OK error notice, out of scope for the OK/Cancel requirement.
-- Removal scope: introduce a reusable OK/Cancel confirm modal (component + promise-returning hook/context),
-  then swap the 4 `window.confirm()` call sites to await it. No backend changes; existing i18n keys reused.
-- Quality-gate commands (frontend): `npm run lint`, `npm run build` (tsc + vite), `npm run e2e`
-  (Playwright). No frontend unit test suite.
+## Findings (info_type "市町村" occurrences)
+- `frontend/src/pages/infoFormOptions.ts:2` — shared INFO_TYPES (registration form dropdown)
+- `frontend/src/pages/InfoListPage.tsx:7` — local filter INFO_TYPES (with "すべて")
+- `frontend/src/pages/SearchPage.tsx:7` — local filter INFO_TYPES (with "すべて")
+- `frontend/src/i18n/messages.ts:358` (ja) / `:722` (en) — `options.infoType.市町村`
+
+Removing "市町村" from these arrays is independent of the Settings-page municipality feature
+(`tpr.municipality`, `settings.municipality` key) — those are untouched.
 
 ## Acceptance Criteria
-- [x] "don't show dialog" option located in source (browser-injected on native `window.confirm`)
-- [x] removal scope identified (custom OK/Cancel modal replacing the 4 `window.confirm` call sites)
-- [x] quality-gate commands identified
+- [x] Issue is actionable (reopen, In Progress, requirement clear)
+- [x] Located all info_type "市町村" option sites (3 arrays + i18n ja/en)
+- [x] Confirmed Settings-page municipality feature is independent and must remain
+- [x] Confirmed removing the option is the requested change (FIX, frontend-only)
 
 ## Risks
-- The "don't show dialog" text is browser-injected, not app code, so removing it requires moving off
-  `window.confirm` to a custom modal. Custom modal must preserve current behavior (await user choice
-  before delete/finalize/discard).
-- Classification: **IMPLEMENT** (new reusable component + multi-file wiring) → Antigravity. No decomposition.
+- Existing saved records with info_type == "市町村" still display via optLabel raw-value fallback,
+  so keeping vs removing the i18n keys is non-breaking. Remove the now-unused i18n keys for
+  cleanliness.
 
 ## Next Action
 READY_FOR_REVIEW

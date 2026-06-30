@@ -744,3 +744,65 @@ def test_build_drafts_no_link_without_municipality(monkeypatch):
 
     drafts = submission_agent.build_submission_task_drafts(SAMPLE, language="ja")
     assert all("ダウンロードページ" not in d["content"] for d in drafts)
+
+
+def test_is_municipality_download_step_relaxed_keywords():
+    """市役所/HP 等の略称・表記揺れも場所語として拾う（SOT-1405 3回目の再オープン）。"""
+    assert submission_agent._is_municipality_download_step("市役所で指定様式を取得する")
+    assert submission_agent._is_municipality_download_step("区役所のHPから様式をダウンロード")
+    assert submission_agent._is_municipality_download_step("公式サイトから様式を入手")
+
+
+def test_doc_has_municipality_download_across_steps():
+    """場所語と取得語が別々の手順に分かれていても書類スコープで検出する。"""
+    doc = {
+        "name": "就労証明書",
+        "steps": [
+            {"name": "お住まいの市区町村の窓口を確認する"},
+            {"name": "指定様式をダウンロードする"},
+        ],
+    }
+    assert submission_agent._doc_has_municipality_download(doc)
+    # 単一手順では場所語のみ・取得語のみで、どちらも従来判定は False
+    assert not submission_agent._is_municipality_download_step("指定様式をダウンロードする")
+    assert not submission_agent._is_municipality_download_step("お住まいの市区町村の窓口を確認する")
+
+
+def _enrich_with_concise_download_steps():
+    """grounding LLM が手順名を簡潔に出力し、場所語と取得語が別々の手順に分かれるケース。"""
+    return json.dumps(
+        {
+            "steps": [
+                {"name": "市役所の窓口を確認する", "lead_time_days": 1},
+                {"name": "指定様式をダウンロードする", "lead_time_days": 1},
+                {"name": "記入して提出する", "lead_time_days": 3},
+            ],
+            "needs_company_issuance": False,
+            "lead_time_days": None,
+            "source": "https://example.go.jp",
+        }
+    )
+
+
+def test_build_drafts_adds_link_for_concise_download_step(monkeypatch):
+    """簡潔な「様式をダウンロード」手順でも、書類がDL型なら市町村リンクが付く（再オープン対応）。"""
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
+    monkeypatch.setattr(
+        submission_agent,
+        "_llm_extract_documents",
+        lambda text, language: [{"name": "就労証明書", "due_date": "2026-05-10"}],
+    )
+    monkeypatch.setattr(
+        ai_client,
+        "generate_grounded_with_sources",
+        lambda prompt, **k: (_enrich_with_concise_download_steps(), []),
+    )
+
+    drafts = submission_agent.build_submission_task_drafts(
+        SAMPLE, language="ja", municipality="渋谷区"
+    )
+    dl_drafts = [d for d in drafts if "ダウンロードページ" in d["content"]]
+    # ダウンロードアクションの手順タスクにリンクが付く（窓口確認/提出の手順には付かない）
+    assert len(dl_drafts) == 1
+    assert "ダウンロードする" in dl_drafts[0]["content"]
+    assert "https://www.google.com/search?q=" in dl_drafts[0]["content"]
