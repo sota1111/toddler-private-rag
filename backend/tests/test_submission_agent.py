@@ -15,6 +15,11 @@ SAMPLE = """入園のしおり
 運動会は5月20日に開催します。
 """
 
+# 日付を一切含まないおたより本文（締切アンカーが見つからない＝前向きフォールバック検証用）。
+SAMPLE_NO_DATES = """入園のしおり
+在籍証明書を提出してください。会社/勤務先の発行が必要です。
+"""
+
 
 class _FakeResponse:
     def __init__(self, text):
@@ -203,7 +208,7 @@ def test_step_deadlines_forward_when_due_unknown(monkeypatch):
 
 
 def test_build_drafts_forward_schedule_when_no_due(monkeypatch):
-    """手順つき書類で最終期限が無くても、各 draft に本日起点の前向き締切が登録される。"""
+    """書類にも本文にも日付が無いときだけ、本日起点の前向き締切でフォールバックする。"""
     monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
     monkeypatch.setattr(
         submission_agent, "_today", lambda: datetime.date(2026, 6, 30)
@@ -228,9 +233,10 @@ def test_build_drafts_forward_schedule_when_no_due(monkeypatch):
     )
     monkeypatch.setattr(ai_client, "generate_grounded", lambda prompt, **k: enrich)
 
-    drafts = submission_agent.build_submission_task_drafts(SAMPLE, language="ja")
+    # SAMPLE_NO_DATES は日付を含まないため、アンカーが無く前向きフォールバックになる。
+    drafts = submission_agent.build_submission_task_drafts(SAMPLE_NO_DATES, language="ja")
     assert len(drafts) == 4
-    # 最終期限が無くても各やることに具体的な日付が登録される（空でない）
+    # 期限が一切無いときは各やることに本日起点の具体的な日付が登録される（空でない）
     assert [d["due_date"] for d in drafts] == [
         "2026-07-03",
         "2026-07-17",
@@ -241,6 +247,51 @@ def test_build_drafts_forward_schedule_when_no_due(monkeypatch):
         assert d["event_date"] == d["due_date"]
         assert d["due_date"]  # 空文字でない
         assert "この手順の締切" in d["content"]
+
+
+def test_build_drafts_backward_from_text_date_when_doc_due_empty(monkeypatch):
+    """SOT-1399 3rd: 書類に締切が紐づかなくても、本文の最終締切から各手順を後ろ向きに逆算する。
+
+    再オープン「前向きの期限が設定される」への対応。本文に 2026-07-31 があるのに LLM が
+    書類へ締切を紐づけられない場合、前向き累積ではなく 7/31 を最終提出期限として逆算する。
+    """
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
+    monkeypatch.setattr(
+        submission_agent, "_today", lambda: datetime.date(2026, 6, 30)
+    )
+    monkeypatch.setattr(
+        submission_agent,
+        "_llm_extract_documents",
+        lambda text, language: [{"name": "在籍証明書", "due_date": ""}],
+    )
+    enrich = json.dumps(
+        {
+            "steps": [
+                {"name": "テンプレート入手", "lead_time_days": 3},
+                {"name": "証明書発行", "lead_time_days": 14},
+                {"name": "誤り確認", "lead_time_days": 1},
+                {"name": "市町村に提出", "lead_time_days": 3},
+            ],
+            "needs_company_issuance": True,
+            "lead_time_days": None,
+            "source": "https://example.go.jp",
+        }
+    )
+    monkeypatch.setattr(ai_client, "generate_grounded", lambda prompt, **k: enrich)
+
+    text = "入園のしおり\n在籍証明書を2026-07-31までにご提出ください。\n面談は2026-07-15。\n"
+    drafts = submission_agent.build_submission_task_drafts(text, language="ja")
+    assert len(drafts) == 4
+    # 本文の最も遅い日付 7/31 を最終提出期限として後ろ向きに逆算（実行順で返る）
+    assert [d["due_date"] for d in drafts] == [
+        "2026-07-10",
+        "2026-07-13",
+        "2026-07-27",
+        "2026-07-28",
+    ]
+    for d in drafts:
+        assert d["event_date"] == d["due_date"]
+        assert "最終提出期限: 2026-07-31" in d["content"]
 
 
 def test_build_drafts_default_buffer_when_lead_unknown(monkeypatch):
@@ -273,9 +324,22 @@ def test_build_drafts_no_due_date_gives_empty_event(monkeypatch):
         lambda text, language: [{"name": "口座振替依頼書", "due_date": ""}],
     )
     monkeypatch.setattr(ai_client, "generate_grounded", lambda prompt, **k: "")
-    drafts = submission_agent.build_submission_task_drafts(SAMPLE, language="ja")
+    # 手順も日付も無い書類は従来どおり日付が空（SAMPLE_NO_DATES でアンカー無し）。
+    drafts = submission_agent.build_submission_task_drafts(SAMPLE_NO_DATES, language="ja")
     assert drafts[0]["due_date"] == ""
     assert drafts[0]["event_date"] == ""
+
+
+def test_detect_deadline_iso():
+    """本文中の最も遅い日付を ISO で返す（提出期限アンカー）。"""
+    assert (
+        submission_agent._detect_deadline_iso(
+            "提出は2026-07-31まで、面談は2026-07-15。"
+        )
+        == "2026-07-31"
+    )
+    assert submission_agent._detect_deadline_iso("") == ""
+    assert submission_agent._detect_deadline_iso("日付の無い本文です。") == ""
 
 
 def test_build_drafts_unavailable_returns_empty(monkeypatch):

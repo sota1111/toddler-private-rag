@@ -14,6 +14,7 @@
 import datetime
 import json
 import logging
+import re
 from typing import List, Optional
 
 from . import ai_client, extraction
@@ -26,6 +27,34 @@ _MAX_DOCUMENTS = 10
 _DEFAULT_LEAD_DAYS = 3
 # リマインド側(SOT-1339)が提出書類を区別するためのタグ番兵
 SUBMISSION_TAG = "提出書類"
+
+# おたより本文から締切候補を拾うための日付パターン（ocr.py の検出と同等）。
+_DATE_PATTERNS = (
+    r"\d{4}[-/]\d{1,2}[-/]\d{1,2}",          # 2026-07-31, 2026/7/31
+    r"\d{1,2}月\d{1,2}日",                   # 7月31日（年は当年と仮定）
+    r"(?:令和|平成|昭和)\d{1,2}年\d{1,2}月\d{1,2}日",  # 令和8年7月31日
+)
+
+
+def _detect_deadline_iso(text: str) -> str:
+    """本文中の日付のうち最も遅い日付を ISO で返す（提出期限の代替アンカー）。
+
+    LLM が書類に締切を紐づけられなかった場合でも、おたよりに書かれた締切（例: 7/31）を
+    各手順の逆算アンカーとして利用するためのフォールバック。見つからなければ ""。常に never-throw。
+    """
+    if not text:
+        return ""
+    isos: List[str] = []
+    try:
+        for pattern in _DATE_PATTERNS:
+            for raw in re.findall(pattern, text):
+                iso = extraction.normalize_date(raw)
+                if iso:
+                    isos.append(iso)
+    except Exception as e:  # noqa: BLE001 - best-effort
+        logger.warning("deadline date detection failed: %s", e)
+        return ""
+    return max(isos) if isos else ""
 
 
 def _extract_json_object(text: str) -> dict:
@@ -194,12 +223,16 @@ def extract_submission_documents(
         logger.warning("submission document extraction failed: %s", e)
         return []
 
+    # LLM が書類に締切を紐づけられなかったときの逆算アンカー（本文の最も遅い日付）。
+    fallback_due_iso = _detect_deadline_iso(safe_text)
+
     enriched: List[dict] = []
     for doc in docs:
         name = doc.get("name", "")
         if not name:
             continue
-        due_iso = extraction.normalize_date(doc.get("due_date")) or ""
+        # 書類固有の締切が無ければ本文から拾った最終締切で逆算する（前向き累積に落とさない）。
+        due_iso = extraction.normalize_date(doc.get("due_date")) or fallback_due_iso
         try:
             info = _grounded_enrich(name, language)
         except Exception as e:  # noqa: BLE001 - never let one doc break the batch
