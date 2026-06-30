@@ -83,6 +83,11 @@ const AskPage: React.FC = () => {
 
   const SAMPLE_KEYS = ['ask.sample1', 'ask.sample2', 'ask.sample3'];
 
+  // SOT-1412: ストリーミングでは sources イベントが先に届き、回答本文が空のまま result が
+  // セットされる。回答トークンが届くまでは「生成中」表示を維持し、空の回答カード（空白時間）を
+  // 出さないよう、回答本文の有無で表示を切り替える。
+  const hasAnswer = !!result?.answer?.trim();
+
   return (
     <div className="w-full lg:max-w-3xl lg:mx-auto pb-12">
       <h1 className="text-2xl font-bold mb-6 text-foreground">{t('ask.title')}</h1>
@@ -131,7 +136,7 @@ const AskPage: React.FC = () => {
         </div>
       )}
 
-      {isLoading && !result && (
+      {isLoading && !hasAnswer && (
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <span className="h-8 w-8 mb-3 rounded-full border-2 border-border border-t-blue-500 animate-spin" aria-hidden />
           <p className="text-sm">{t('ask.generating')}</p>
@@ -146,7 +151,7 @@ const AskPage: React.FC = () => {
         </div>
       )}
 
-      {result && (
+      {result && (hasAnswer || !isLoading) && (
         <div className="space-y-6">
           <div className="bg-surface rounded-lg shadow-sm border border-border p-5">
             <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2">{t('ask.answer')}</h2>
