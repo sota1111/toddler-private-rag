@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getInfoById, deleteInfo, updateInfo, getAttachmentFileUrl, getAttachmentTranscription, investigateDeadline } from '../api';
+import { getInfoById, deleteInfo, updateInfo, getAttachmentFileUrl, getAttachmentTranscription, investigateDeadline, rescheduleDeadline } from '../api';
 import type { Attachment } from '../types';
 import { STATUS_TYPES } from './infoFormOptions';
 import { useI18n } from '../i18n/useI18n';
@@ -118,6 +118,10 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
 
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
+  // SOT-1411: 締切基準日の入力値。null のあいだは保存済みの基準日を表示する。
+  const [baseDateInput, setBaseDateInput] = useState<string | null>(null);
+  const [rescheduleMessage, setRescheduleMessage] = useState<string | null>(null);
+  const [rescheduleError, setRescheduleError] = useState<string | null>(null);
 
   const { data: item, isLoading, isError } = useQuery({
     queryKey: ['info-detail', id],
@@ -184,6 +188,33 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
     setInvestigateMessage(null);
     setInvestigateError(null);
     investigateMutation.mutate();
+  };
+
+  // SOT-1411: 締切調査タスクの基準日(最終提出期限)を変更し、同じ締切調査グループの付随タスクを
+  // 保存済みオフセットでまとめてずらす。
+  const rescheduleMutation = useMutation({
+    mutationFn: (baseDate: string) => rescheduleDeadline(id, baseDate),
+    onSuccess: (res) => {
+      setRescheduleError(null);
+      setRescheduleMessage(t('records.rescheduleDone', { count: String(res.updated) }));
+      setBaseDateInput(null);
+      queryClient.invalidateQueries({ queryKey: ['info-detail', id] });
+      queryClient.invalidateQueries({ queryKey: ['info'] });
+      queryClient.invalidateQueries({ queryKey: ['tomorrow'] });
+      queryClient.invalidateQueries({ queryKey: ['weekly'] });
+      queryClient.invalidateQueries({ queryKey: ['pending'] });
+    },
+    onError: () => {
+      setRescheduleMessage(null);
+      setRescheduleError(t('records.rescheduleError'));
+    },
+  });
+
+  const handleReschedule = (baseDate: string) => {
+    if (!baseDate || rescheduleMutation.isPending) return;
+    setRescheduleMessage(null);
+    setRescheduleError(null);
+    rescheduleMutation.mutate(baseDate);
   };
 
   const handleDelete = async () => {
@@ -286,6 +317,46 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
               <span className="inline-flex items-center gap-1 text-sm font-medium bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full">
                 📅 {t('records.eventDate')}: {item.event_date}
               </span>
+            </div>
+          )}
+
+          {/* SOT-1411: 締切調査由来（deadline_group_id あり）のタスクは、締切の基準日(最終提出期限)を
+              変更できる。基準日を変えると同じグループの付随タスクも保存済みオフセットで一緒にずれる。 */}
+          {!hasPhoto && item.deadline_group_id && (
+            <div className="mb-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <label htmlFor="reschedule-base-date" className="text-sm font-medium text-foreground">
+                  {t('records.rescheduleBaseDate')}
+                </label>
+                <input
+                  id="reschedule-base-date"
+                  type="date"
+                  value={baseDateInput ?? item.deadline_base_date ?? item.due_date ?? ''}
+                  onChange={(e) => setBaseDateInput(e.target.value)}
+                  disabled={rescheduleMutation.isPending}
+                  className="border border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2 disabled:opacity-60"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleReschedule(baseDateInput ?? item.deadline_base_date ?? item.due_date ?? '')
+                  }
+                  disabled={rescheduleMutation.isPending}
+                  className="text-sm font-medium text-brand-strong border border-accent-border bg-accent-bg hover:opacity-90 px-3 py-1.5 rounded-md disabled:opacity-60 transition-colors"
+                >
+                  {rescheduleMutation.isPending ? t('records.rescheduling') : t('records.rescheduleSave')}
+                </button>
+              </div>
+              {rescheduleMessage && (
+                <div className="mt-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">
+                  {rescheduleMessage}
+                </div>
+              )}
+              {rescheduleError && (
+                <div className="mt-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                  {rescheduleError}
+                </div>
+              )}
             </div>
           )}
 
