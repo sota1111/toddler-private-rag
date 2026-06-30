@@ -190,6 +190,52 @@ def test_build_drafts_per_step_backward_chain(monkeypatch):
     assert drafts[3]["title"] == "在籍証明書(4/4) 市町村に提出"
 
 
+def test_step_subtitle_shortens_long_step_name():
+    """長い動作文の手順名は最初の区切りまで＋字数上限で簡潔な見出しにする（SOT-1402 再オープン）。"""
+    # 既に簡潔な手順名はそのまま
+    assert submission_agent._step_subtitle("テンプレート入手") == "テンプレート入手"
+    # 「、」区切りの先頭句だけを採用し、長ければ末尾に「…」
+    sub = submission_agent._step_subtitle(
+        "勤務先（会社の人事や総務担当部署）に様式を提出し、証明書の記入・発行を依頼する"
+    )
+    assert sub.endswith("…")
+    assert "、" not in sub
+    assert len(sub) <= 19  # limit(18) + ellipsis
+
+
+def test_build_drafts_long_step_name_title_not_truncated_midsentence(monkeypatch):
+    """手順名が長文でもタイトルは途中切れの本文ではなく簡潔なサブタイトルになる（SOT-1402 再オープン）。"""
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
+    monkeypatch.setattr(
+        submission_agent,
+        "_llm_extract_documents",
+        lambda text, language: [{"name": "会社の在籍証明書", "due_date": "2026-07-30"}],
+    )
+    enrich = json.dumps(
+        {
+            "steps": [
+                {"name": "勤務先に様式の発行を依頼する", "lead_time_days": 2},
+                {
+                    "name": "勤務先（会社の人事や総務担当部署）に様式を提出し、証明書の記入・発行を依頼する",
+                    "lead_time_days": 1,
+                },
+            ],
+            "needs_company_issuance": True,
+            "lead_time_days": None,
+            "source": "",
+        }
+    )
+    monkeypatch.setattr(ai_client, "generate_grounded", lambda prompt, **k: enrich)
+
+    drafts = submission_agent.build_submission_task_drafts(SAMPLE, language="ja")
+    assert len(drafts) == 2
+    # サブタイトルは長文の途中切れにならない（「、」で切れた本文ではない）
+    assert drafts[1]["title"].startswith("会社の在籍証明書(2/2) ")
+    assert "、" not in drafts[1]["title"]
+    # 手順名フルは本文に残るので情報は失われない
+    assert "様式を提出し、証明書の記入・発行を依頼する" in drafts[1]["content"]
+
+
 def test_step_deadlines_forward_when_due_unknown(monkeypatch):
     """最終期限が不明な場合、本日起点で各手順の所要日数を前向きに累積して締切を割り当てる。"""
     monkeypatch.setattr(
