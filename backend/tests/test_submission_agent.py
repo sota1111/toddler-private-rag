@@ -298,6 +298,56 @@ def test_build_drafts_backward_from_text_date_when_doc_due_empty(monkeypatch):
         assert "最終提出期限: 2026-07-31" in d["content"]
 
 
+def test_build_drafts_explicit_final_due_takes_priority(monkeypatch):
+    """SOT-1399 4th: 調査対象タスクに設定済みの期限(final_due_iso)を最優先アンカーにする。
+
+    再オープン「タスク追加時に日付を設定している。その日付を最終期限としてください。」への対応。
+    本文の最も遅い日付(7/15)や LLM 抽出の書類別締切(7/20)があっても、明示的に渡した
+    タスクの期限 7/31 を最終提出期限として後ろ向きに逆算する。
+    """
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
+    monkeypatch.setattr(
+        submission_agent, "_today", lambda: datetime.date(2026, 6, 30)
+    )
+    monkeypatch.setattr(
+        submission_agent,
+        "_llm_extract_documents",
+        # LLM はあえて別の締切(7/20)を返す。明示アンカーが優先されることを確認する。
+        lambda text, language: [{"name": "在籍証明書", "due_date": "2026-07-20"}],
+    )
+    enrich = json.dumps(
+        {
+            "steps": [
+                {"name": "テンプレート入手", "lead_time_days": 3},
+                {"name": "証明書発行", "lead_time_days": 14},
+                {"name": "誤り確認", "lead_time_days": 1},
+                {"name": "市町村に提出", "lead_time_days": 3},
+            ],
+            "needs_company_issuance": True,
+            "lead_time_days": None,
+            "source": "https://example.go.jp",
+        }
+    )
+    monkeypatch.setattr(ai_client, "generate_grounded", lambda prompt, **k: enrich)
+
+    # 本文には別の日付(7/15)しか無い。タスクの期限 7/31 を明示的に渡す。
+    text = "入園のしおり\n面談は2026-07-15。\n"
+    drafts = submission_agent.build_submission_task_drafts(
+        text, language="ja", final_due_iso="2026-07-31"
+    )
+    assert len(drafts) == 4
+    # タスク設定日付 7/31 を最終提出期限として後ろ向きに逆算（実行順で返る）
+    assert [d["due_date"] for d in drafts] == [
+        "2026-07-10",
+        "2026-07-13",
+        "2026-07-27",
+        "2026-07-28",
+    ]
+    for d in drafts:
+        assert d["event_date"] == d["due_date"]
+        assert "最終提出期限: 2026-07-31" in d["content"]
+
+
 def test_build_drafts_default_buffer_when_lead_unknown(monkeypatch):
     monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
     monkeypatch.setattr(
