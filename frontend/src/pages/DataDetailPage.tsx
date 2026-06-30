@@ -288,19 +288,23 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
                 onChange={(e) => setEditTitle(e.target.value)}
                 disabled={editMutation.isPending}
                 aria-label={t('tasks.fieldTitle')}
-                className="flex-1 text-2xl font-bold text-foreground border border-border rounded-md shadow-sm focus:ring-brand focus:border-brand p-2 disabled:opacity-60"
+                className="flex-1 text-lg font-bold text-foreground border border-border rounded-md shadow-sm focus:ring-brand focus:border-brand p-2 disabled:opacity-60"
               />
             )}
             {/* SOT-1418: 編集ボタンを削除ボタンの下に配置するため縦並び（column）にする。 */}
             <div className="flex flex-col items-end gap-2 flex-shrink-0">
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={deleteMutation.isPending || isEditing}
-                className="text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1 rounded-md disabled:text-muted-foreground disabled:hover:bg-transparent transition-colors"
-              >
-                {deleteMutation.isPending ? t('records.deleting') : t('records.delete')}
-              </button>
+              {/* SOT-1419: 編集画面（編集モード）では削除ボタンを表示しない。
+                  写真ありレコードは編集モードに入らないため、削除ボタンは従来どおり表示される。 */}
+              {!isEditing && (
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleteMutation.isPending}
+                  className="text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1 rounded-md disabled:text-muted-foreground disabled:hover:bg-transparent transition-colors"
+                >
+                  {deleteMutation.isPending ? t('records.deleting') : t('records.delete')}
+                </button>
+              )}
               {/* SOT-1415: 詳細画面の「編集」ボタン。非写真タスクレコードのみ表示する。
                   SOT-1418: 削除ボタンの下に表示する。 */}
               {!hasPhoto && !isEditing && (

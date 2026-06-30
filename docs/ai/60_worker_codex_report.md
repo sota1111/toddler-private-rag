@@ -1,42 +1,33 @@
-# Worker Report — Task Check + Verify (SOT-1411 4th reopen)
+# Worker Report — Task Check + Verify (SOT-1419)
 
 ## Fallback Disclosure (Worker Non-Response Policy)
-- Codex CLI: usage-limit cooldown（`run_codex.sh` exit 75）で非応答 → タスク確認・検証を Claude Code が代替実施。
-- Antigravity CLI: 認証失敗（exit 75）で非応答 → 実装も Claude Code が代替実施。
+- Non-responsive worker: Codex CLI
+- Detected failure mode: usage-limit cooldown (`run_codex.sh` exit 75, CODEX_COOLDOWN_ACTIVE)
+- Action taken: Claude Code performed the initial task check AND the verification gate directly per
+  the Worker Non-Response Fallback Policy. (Antigravity CLI was also non-responsive — auth failure,
+  exit 75 — so implementation was likewise done by Claude Code; see 50_worker_antigravity_report.md.)
 
 ## Summary
-SOT-1411 は actionable（最新コメントで再オープン、label=Improvement、In Progress）。
-根本原因: 締切調査の元タスク（親）が `deadline_group_id` を持たずグループ外。子タスクのみグループ化され、
-(a) 親の日付変更が子に連動しない、(b) 基準日変更ボタンが子タスク側に表示される、という不具合。
-修正後、全 Quality Gate を Claude Code が直接検証して pass。
+SOT-1419 is actionable, single-file frontend UI change. Verified the two changes in
+`frontend/src/pages/DataDetailPage.tsx` (edit-mode title font `text-2xl`→`text-lg`; delete button
+hidden in edit mode via `!isEditing`). Ran the full frontend quality gate — all green.
 
 ## Changed Files
-- none（このレポートはタスク確認＋検証の記録。実装内容は 50_worker_antigravity_report.md 参照）
+- none (verification only; implementation in 50_worker_antigravity_report.md)
 
 ## Commands Run
-- `ruff check app` → All checks passed
-- `pytest -q` → 243 passed, 1 skipped
-- `npm run lint` → 0
-- `npm run build` → 0
-- `npm run e2e` → 17 passed
-
-## Findings
-- reschedule UI gating（修正前）: `DataDetailPage.tsx:353` が `item.deadline_group_id` のみで判定 →
-  グループ全タスク（子含む）にボタン表示。修正後は `&& item.deadline_offset_days === 0`（親のみ）。
-- reschedule-deadline handler: `routers/info.py:532-586` は group の全タスクを `list_by_deadline_group`
-  で集め `new_base - offset` で再計算。ハンドラ自体は正しい（親がグループに居れば連動する）。
-- root cause: 親タスクがグループ外（info.py / attachments.py の生成経路で親をグループに加えていなかった）。
-- anchor-vs-child: 親=offset 0（基準日そのもの）、子=offset > 0。
+- `npm run lint` → exit 0 (eslint clean)
+- `npm run build` (tsc -b && vite build) → exit 0 (typecheck + build clean)
+- `npm run e2e` (playwright) → 17 passed (incl. S5 詳細ページ削除シナリオ — 読み取りモードの削除は不変)
 
 ## Acceptance Criteria
-- [x] Issue confirmed actionable
-- [x] Reschedule UI gating identified
-- [x] reschedule-deadline handler sibling-selection identified
-- [x] Root cause of non-propagation identified（親がグループ外）
-- [x] Anchor-vs-child distinction identified（offset 0 = 親）
+- [x] 編集画面のタイトル文字サイズを小さくした（編集モード input: text-2xl → text-lg）
+- [x] 編集画面で削除ボタンを廃止（非表示）した
+- [x] Lint / typecheck+build / e2e すべて pass
+- [x] 写真レコードの削除・編集機能は不変（e2e S3/S5 pass）
 
 ## Risks
-- 旧データ（修正前生成）は親アンカー無し。締切調査やり直しで新モデル再生成が必要。
+- 削除ボタンは編集モードでのみ非表示。読み取りモード／写真レコードでは従来どおり表示される（意図どおり）。
 
 ## Next Action
 READY_FOR_REVIEW
