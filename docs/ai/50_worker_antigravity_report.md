@@ -1,40 +1,50 @@
-# Worker Report — SOT-1450 (使い方の動画生成プロンプト)
+# Worker Report — SOT-1428 (お気に入り機能追加)
+
+## Fallback Disclosure (Worker Non-Response Policy)
+- Antigravity CLI was NON-RESPONSIVE: `scripts/ai/run_antigravity.sh` exited 75
+  ("authentication failed or timed out" → crash exit 1 → WORKER_NONRESPONSE).
+- Codex CLI was also NON-RESPONSIVE for the task check: usage-limit cooldown, exit 75.
+- Per the Worker Non-Response Fallback Policy, Claude Code performed BOTH the task check and the
+  implementation directly. All Quality Gates apply unchanged.
 
 ## Summary
-Antigravity CLI was NON-RESPONSIVE: `scripts/ai/run_antigravity.sh` exited `75`
-(`WORKER_NONRESPONSE: antigravity (crash (exit 1)) — authentication failed or timed out`).
-Per the Worker Non-Response Fallback Policy, Claude Code performed this DOC implementation directly.
-
-Created `docs/howto-video-prompt.md`: a Japanese prompt to give to a general video-generation AI
-(Runway / Pika / Sora / Veo) to produce a how-to slideshow video. The video uses the existing
-`frontend/public/howto/*.png` app screenshots (screens only — no live-action/people), with subtitles
-that reuse the app's real `howto.*` copy so there is no drift from the app.
-
-## Fallback Disclosure (audit)
-- Non-responsive worker: Antigravity CLI
-- Detected failure mode: exit code 75 (auth failure / non-response marker)
-- Retry: not retried — persistent auth failure across recent runs; fell back immediately per policy
-- Work performed by: Claude Code (fallback)
+Added a "favorite" (お気に入り) feature to info items.
+- New backend boolean field `is_favorite` threaded through both backends (SQLite + Firestore),
+  mirroring the existing `needs_deadline_investigation` (SOT-1407) pattern. Reused the existing
+  `PUT /info/{id}` (`updateInfo`) endpoint — no new endpoint.
+- To-do list (やることリスト = TasksPage via `DatedInfoList`): each row gets a star TOGGLE button.
+  Filled yellow star when favorited; outline star when not. Clicking toggles `is_favorite` without
+  navigating (preventDefault + stopPropagation).
+- Board (掲示板 = DashboardPage): a filled yellow star is shown ONLY for favorited items
+  (display-only, all four sections: today / tomorrow / weekly / nextWeek).
 
 ## Changed Files
-- `docs/howto-video-prompt.md` — NEW. Video-generation prompt: overall direction (9:16 slideshow,
-  screenshots only, Ken Burns + crossfade, 60–90s), 8-scene storyboard (opening + 7 how-to screens +
-  closing) with per-scene image path / title subtitle / body subtitle / duration, subtitles copied
-  from the `howto.*` Japanese strings, and an English-swap note pointing to the `howto.*` English strings.
+- `backend/app/models.py` — add `is_favorite` Boolean column (nullable, default False).
+- `backend/app/schemas.py` — add `is_favorite` to `NurseryInfoBase` (default False) and
+  `NurseryInfoUpdate` (default None).
+- `backend/app/repository.py` — add `is_favorite` to `FirestoreNurseryInfo` dataclass and to
+  `_info_doc_to_obj` mapping. (create/update use model_dump → generic.)
+- `frontend/src/types/index.ts` — add `is_favorite?: boolean` to `NurseryInfo` and `NurseryInfoCreate`.
+- `frontend/src/i18n/messages.ts` — add `favorite.add` / `favorite.remove` (ja + en).
+- `frontend/src/components/FavoriteStar.tsx` — NEW shared inline-SVG star (filled/outline).
+- `frontend/src/components/DatedInfoList.tsx` — favorite toggle button (gated to namespace='tasks'),
+  useMutation(updateInfo) + query invalidation.
+- `frontend/src/pages/DashboardPage.tsx` — display-only favorite star in all 4 board sections.
 
 ## Commands Run
-- `ls -1 frontend/public/howto/*.png` — confirmed all 7 referenced captures exist.
-- `grep -n "howto" frontend/src/i18n/messages.ts` — confirmed ja + en `howto.*` title/body keys exist and match the subtitles used.
+- (quality gate run by Claude Code — see Codex report / final report)
 
 ## Acceptance Criteria
-- [x] `docs/howto-video-prompt.md` created
-- [x] Includes overall direction + scene storyboard + subtitles (real howto copy) + duration/transition guidance
-- [x] References all 7 existing captures by correct path in the correct (HowToPage) order
-- [x] No app code / image / i18n changes (doc-only)
+- [x] favorite toggle star on to-do list, filled yellow when active
+- [x] favorite indicator star shown only for favorited items on to-do list (toggle is the indicator)
+- [x] favorite indicator star shown only for favorited items on board
+- [x] is_favorite persisted via PUT /info/{id} (SQLite + Firestore)
 
 ## Risks
-- Doc-only change; no lint/typecheck/test impact. The prompt references screenshots by repo path — the
-  end user attaches those PNGs to the video AI as "提供画像1〜7".
+- No icon library; used inline SVG (consistent with repo).
+- DatedInfoList is shared with SchedulePage; toggle is gated to namespace='tasks' so the schedule
+  list is unchanged.
+- Existing rows have NULL is_favorite → treated as not favorited (backward compatible).
 
 ## Next Action
 READY_FOR_REVIEW
