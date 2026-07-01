@@ -146,11 +146,12 @@ def test_reschedule_shifts_sibling_tasks(monkeypatch):
         return r.json()
 
     d0, d1, d2 = _due(t0["id"]), _due(t1["id"]), _due(t2["id"])
-    # 新基準日 8/10 - 各オフセット
+    # 子タスク(offset > 0)は新しい提出目標日 8/10 - 各オフセットにずれる
     assert d0["due_date"] == "2026-08-02" and d0["event_date"] == "2026-08-02"
     assert d1["due_date"] == "2026-08-05" and d1["event_date"] == "2026-08-05"
-    assert d2["due_date"] == "2026-08-10" and d2["event_date"] == "2026-08-10"
-    # 基準日も更新される
+    # SOT-1432: アンカー(親, offset 0)の日付(event_date/due_date)は独立。提出目標日変更で上書きされず据え置き。
+    assert d2["due_date"] == "2026-07-30" and d2["event_date"] == "2026-07-30"
+    # 提出目標日(deadline_base_date)はアンカー含め全件更新される
     assert d0["deadline_base_date"] == "2026-08-10"
     assert d2["deadline_base_date"] == "2026-08-10"
 
@@ -173,6 +174,34 @@ def test_reschedule_is_idempotent(monkeypatch):
     assert r["due_date"] == "2026-08-02"
     assert r["event_date"] == "2026-08-02"
     assert r["deadline_base_date"] == "2026-08-10"
+
+
+def test_reschedule_keeps_anchor_event_date_independent(monkeypatch):
+    """SOT-1432: 親(アンカー offset 0)の「日付」(event_date)と「提出目標日」(deadline_base_date)は独立。
+    提出目標日を変更しても、親自身の event_date/due_date は上書きされず据え置き。子タスクだけずれる。"""
+    monkeypatch.setattr("app.routers.info.index_info_id", lambda *a, **k: None)
+
+    g = "grp-1432"
+    base = "2026-07-30"
+    anchor = _create_grouped(g, 0, base, "2026-07-30")  # 親: 日付=提出目標日=7/30
+    child = _create_grouped(g, 8, base, "2026-07-22")   # 子: 提出目標日-8
+
+    resp = client.post(
+        f"/api/info/{anchor['id']}/reschedule-deadline", json={"base_date": "2026-08-10"}
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["updated"] == 2
+
+    a = client.get(f"/api/info/{anchor['id']}").json()
+    c = client.get(f"/api/info/{child['id']}").json()
+
+    # 親の日付は据え置き（提出目標日変更で上書きされない）
+    assert a["event_date"] == "2026-07-30" and a["due_date"] == "2026-07-30"
+    # 親の提出目標日は新しい値に更新される
+    assert a["deadline_base_date"] == "2026-08-10"
+    # 子タスクは新しい提出目標日 8/10 - 8 = 8/2 にずれる
+    assert c["event_date"] == "2026-08-02" and c["due_date"] == "2026-08-02"
+    assert c["deadline_base_date"] == "2026-08-10"
 
 
 def test_reschedule_404_for_missing(monkeypatch):
@@ -245,11 +274,16 @@ def test_forward_generated_group_is_reschedulable(monkeypatch):
 
     for d, c in zip(drafts, created):
         r = client.get(f"/api/info/{c['id']}").json()
-        expected = (
-            __import__("datetime").date(2026, 9, 30)
-            - __import__("datetime").timedelta(days=d["deadline_offset_days"])
-        ).isoformat()
-        assert r["due_date"] == expected and r["event_date"] == expected
+        offset = d["deadline_offset_days"]
+        if offset == 0:
+            # SOT-1432: アンカー(offset 0)の日付は独立。提出目標日変更で据え置き（生成時の値のまま）。
+            assert r["due_date"] == d["due_date"] and r["event_date"] == d["event_date"]
+        else:
+            expected = (
+                __import__("datetime").date(2026, 9, 30)
+                - __import__("datetime").timedelta(days=offset)
+            ).isoformat()
+            assert r["due_date"] == expected and r["event_date"] == expected
         assert r["deadline_base_date"] == "2026-09-30"
 
 
