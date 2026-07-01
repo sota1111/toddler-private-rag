@@ -23,6 +23,7 @@ export const messages: Record<Lang, Messages> = {
     // settings (SOT-1315)
     'settings.title': '設定',
     'settings.subtitle': '言語・標準時間を設定できます。',
+    'settings.howtoButton': '使い方',
     'settings.language': '言語',
     'settings.timezone': '標準時間（タイムゾーン）',
     'settings.municipality': '市町村',
@@ -47,6 +48,24 @@ export const messages: Record<Lang, Messages> = {
     'settings.deleteAllInProgress': '削除中…',
     'settings.deleteAllSuccess': '全データを削除しました（{count}件）。',
     'settings.deleteAllError': '削除に失敗しました。時間をおいて再度お試しください。',
+
+    // アプリの使い方 (SOT-1435)
+    'howto.title': 'アプリの使い方',
+    'howto.subtitle': 'おたよりナビの主な使い方を、画面の図とあわせて説明します。',
+    'howto.back': '設定に戻る',
+    'howto.imageAlt': '画面の例',
+    'howto.registerTitle': '1. おたよりを写真から登録する',
+    'howto.registerBody': '「登録」画面でおたよりの写真を撮影・選択すると、文字を自動で読み取り、やること・持ち物・締め切りを自動で仮登録します。内容を確認して本登録します。',
+    'howto.tasksTitle': '2. やることを確認する',
+    'howto.tasksBody': '「やること」画面で、提出物・持ち物・締め切りを一覧で確認できます。完了したものはステータスを変更できます。',
+    'howto.scheduleTitle': '3. カレンダーで予定を見る',
+    'howto.scheduleBody': '「カレンダー」画面で、行事や締め切りを日付ごとに確認できます。',
+    'howto.boardTitle': '4. 掲示板で今日・今週を把握する',
+    'howto.boardBody': '「掲示板」画面（ホーム）で、今日・明日・今週・来週の予定やリマインドをまとめて確認できます。',
+    'howto.askTitle': '5. わからないことを質問する',
+    'howto.askBody': '「質問」画面で、登録したおたよりの内容について自然な言葉で質問できます。回答には根拠となるおたよりが表示されます。',
+    'howto.settingsTitle': '6. 設定',
+    'howto.settingsBody': '「設定」画面で、言語・タイムゾーン・市町村・お子さまの登録や、全データ削除ができます。',
 
     // schedule (SOT-1306)
     'schedule.listTitle': '予定一覧',
@@ -392,6 +411,7 @@ export const messages: Record<Lang, Messages> = {
     // settings (SOT-1315)
     'settings.title': 'Settings',
     'settings.subtitle': 'Configure language and standard time.',
+    'settings.howtoButton': 'How to use',
     'settings.language': 'Language',
     'settings.timezone': 'Standard time (timezone)',
     'settings.municipality': 'Municipality',
@@ -416,6 +436,24 @@ export const messages: Record<Lang, Messages> = {
     'settings.deleteAllInProgress': 'Deleting…',
     'settings.deleteAllSuccess': 'All data has been deleted ({count} items).',
     'settings.deleteAllError': 'Failed to delete. Please try again later.',
+
+    // How to use this app (SOT-1435)
+    'howto.title': 'How to use this app',
+    'howto.subtitle': 'A visual guide to the main features of Nursery Notice Guide.',
+    'howto.back': 'Back to settings',
+    'howto.imageAlt': 'Screen example',
+    'howto.registerTitle': '1. Register a notice from a photo',
+    'howto.registerBody': 'On the Add screen, take or pick a photo of a notice. The text is read automatically and tasks, belongings, and deadlines are drafted for you to confirm and save.',
+    'howto.tasksTitle': '2. Check your to-dos',
+    'howto.tasksBody': 'The Tasks screen lists submissions, belongings, and deadlines. Update the status as you finish each one.',
+    'howto.scheduleTitle': '3. See events on the calendar',
+    'howto.scheduleBody': 'The Calendar screen shows events and deadlines by date.',
+    'howto.boardTitle': '4. Today & this week on the board',
+    'howto.boardBody': "The Board (home) screen gathers today, tomorrow, this week and next week's items and reminders.",
+    'howto.askTitle': '5. Ask a question',
+    'howto.askBody': 'On the Questions screen, ask about your registered notices in plain language. Answers cite the source notices.',
+    'howto.settingsTitle': '6. Settings',
+    'howto.settingsBody': 'On the Settings screen you can set language, timezone, municipality, register children, and delete all data.',
 
     // schedule (SOT-1306)
     'schedule.listTitle': 'Schedule list',

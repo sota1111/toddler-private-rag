@@ -21,6 +21,7 @@ import DataDetailPage from './pages/DataDetailPage';
 import SchedulePage from './pages/SchedulePage';
 import TasksPage from './pages/TasksPage';
 import SettingsPage from './pages/SettingsPage';
+import HowToPage from './pages/HowToPage';
 
 const queryClient = new QueryClient();
 
@@ -187,6 +188,7 @@ const App: React.FC = () => {
                 <Route path="/schedule" element={<ProtectedRoute><SchedulePage /></ProtectedRoute>} />
                 <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+                <Route path="/howto" element={<ProtectedRoute><HowToPage /></ProtectedRoute>} />
                 <Route path="/ask" element={<Navigate to="/info?tab=ask" replace />} />
                 <Route path="/search" element={<Navigate to="/info?tab=search" replace />} />
                 <Route path="/list" element={<Navigate to="/info?tab=list" replace />} />
