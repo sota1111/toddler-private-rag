@@ -8,6 +8,7 @@ import { useI18n } from '../i18n/useI18n';
 const SECTIONS: Array<{ titleKey: string; bodyKey: string; image: string }> = [
   { titleKey: 'howto.registerTitle', bodyKey: 'howto.registerBody', image: '/howto/register.png' },
   { titleKey: 'howto.tasksTitle', bodyKey: 'howto.tasksBody', image: '/howto/tasks.png' },
+  { titleKey: 'howto.deadlineTitle', bodyKey: 'howto.deadlineBody', image: '/howto/agent-demo.png' },
   { titleKey: 'howto.scheduleTitle', bodyKey: 'howto.scheduleBody', image: '/howto/schedule.png' },
   { titleKey: 'howto.boardTitle', bodyKey: 'howto.boardBody', image: '/howto/board.png' },
   { titleKey: 'howto.askTitle', bodyKey: 'howto.askBody', image: '/howto/ask.png' },
