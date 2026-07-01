@@ -549,9 +549,11 @@ def investigate_deadline(
 
 
 # SOT-1411: 締切調査タスクの基準日(最終提出期限)を変更し、同じ締切調査グループの付随タスクを
-# 各タスクの deadline_offset_days(基準日から何日手前か)に基づいてまとめて再計算(ずらし)する。
-# 基準日からオフセット分だけ手前の日付を各付随タスクの event_date/due_date に再設定する。
-# 常に「新基準日 − オフセット」で計算するため、複数回呼んでも結果は同じ（冪等）。
+# 各子タスクの deadline_offset_days(提出目標日から何日手前か)に基づいてまとめて再計算(ずらし)する。
+# 提出目標日からオフセット分だけ手前の日付を各子タスクの event_date/due_date に再設定する。
+# 常に「新しい提出目標日 − オフセット」で計算するため、複数回呼んでも結果は同じ（冪等）。
+# SOT-1432: アンカー(親)自身の event_date は提出目標日と独立させ、ここでは上書きしない
+# （deadline_base_date のみ更新）。親の「日付」は編集モードの日付入力で別途変更する。
 @router.post("/{id}/reschedule-deadline")
 def reschedule_deadline(
     id: Union[int, str],
@@ -590,15 +592,16 @@ def reschedule_deadline(
             continue
         offset_days = getattr(task, "deadline_offset_days", None)
         update_fields = {"deadline_base_date": new_base}
-        shifted = _shifted_date(offset_days)
-        if shifted is not None:
-            # オフセットが分かるタスクは新基準日から手前にずらす。
-            update_fields["event_date"] = shifted
-            update_fields["due_date"] = shifted
-        elif tid == getattr(db_info, "id", None):
-            # 対象タスク自身でオフセット不明なら、基準日そのものを締切に据える。
-            update_fields["event_date"] = new_base
-            update_fields["due_date"] = new_base
+        if offset_days == 0:
+            # SOT-1432: アンカー(親, offset 0)の「日付」(event_date)と「提出目標日」(deadline_base_date)は独立。
+            # 提出目標日の変更でアンカーの event_date/due_date は上書きしない（deadline_base_date のみ更新）。
+            pass
+        else:
+            shifted = _shifted_date(offset_days)
+            if shifted is not None:
+                # オフセットが分かる子タスクは新しい提出目標日から手前にずらす。
+                update_fields["event_date"] = shifted
+                update_fields["due_date"] = shifted
         try:
             repo.update(tid, schemas.NurseryInfoUpdate(**update_fields))
             updated_ids.append(tid)
