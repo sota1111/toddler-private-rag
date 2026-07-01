@@ -5,6 +5,7 @@ import { getToday, getTomorrow, getWeekly, getNextWeek, getReminders } from '../
 import type { NurseryInfo, ReminderItem, ReminderUrgency } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import { getStatusDateChipClass } from './infoFormOptions';
+import FavoriteStar from '../components/FavoriteStar';
 
 // SOT-1080 / 提案5-A: 緊急度ごとの配色（受動表示ではなく能動的に目を引く）。
 const URGENCY_STYLES: Record<ReminderUrgency, { row: string; chip: string }> = {
@@ -185,7 +186,11 @@ const DashboardPage: React.FC = () => {
           renderItem={(item) => (
             <div className="flex justify-between items-center">
               <div>
-                <p className="font-medium text-foreground">{item.title}</p>
+                {/* SOT-1428: お気に入りの場合のみ星を表示（掲示板は表示専用）。 */}
+                <p className="font-medium text-foreground flex items-center gap-1">
+                  {item.is_favorite && <FavoriteStar filled />}
+                  {item.title}
+                </p>
                 {item.due_date && <p className="text-xs text-red-600 font-semibold">{t('dashboard.dueLabel')}{item.due_date}</p>}
               </div>
               <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">
@@ -204,7 +209,11 @@ const DashboardPage: React.FC = () => {
           renderItem={(item) => (
             <div>
               {/* SOT-1398: 持ち物(items)は写真OCRの原文（未翻訳）なので掲示板には出さず、タイトルのみ表示する。 */}
-              <p className="font-medium text-foreground">{item.title}</p>
+              {/* SOT-1428: お気に入りの場合のみ星を表示。 */}
+              <p className="font-medium text-foreground flex items-center gap-1">
+                {item.is_favorite && <FavoriteStar filled />}
+                {item.title}
+              </p>
             </div>
           )}
         />
@@ -217,7 +226,11 @@ const DashboardPage: React.FC = () => {
           accentClass="bg-emerald-50 text-emerald-700"
           renderItem={(item) => (
             <div className="flex justify-between items-center">
-              <span className="font-medium text-foreground">{item.title}</span>
+              {/* SOT-1428: お気に入りの場合のみ星を表示。 */}
+              <span className="font-medium text-foreground flex items-center gap-1">
+                {item.is_favorite && <FavoriteStar filled />}
+                {item.title}
+              </span>
               <span className={`text-xs px-2 py-1 rounded-full ${getStatusDateChipClass(item.status)}`}>
                 {item.event_date}
               </span>
@@ -233,7 +246,11 @@ const DashboardPage: React.FC = () => {
           accentClass="bg-indigo-50 text-indigo-700"
           renderItem={(item) => (
             <div className="flex justify-between items-center">
-              <span className="font-medium text-foreground">{item.title}</span>
+              {/* SOT-1428: お気に入りの場合のみ星を表示。 */}
+              <span className="font-medium text-foreground flex items-center gap-1">
+                {item.is_favorite && <FavoriteStar filled />}
+                {item.title}
+              </span>
               <span className={`text-xs px-2 py-1 rounded-full ${getStatusDateChipClass(item.status)}`}>
                 {item.event_date}
               </span>

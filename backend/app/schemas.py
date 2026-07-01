@@ -84,6 +84,8 @@ class NurseryInfoBase(BaseModel):
     registration_state: Optional[str] = "registered"
     # SOT-1407: 締め切り調査が必要なタスクか（やることリスト作成時に算出）。
     needs_deadline_investigation: Optional[bool] = False
+    # SOT-1428: お気に入りフラグ。
+    is_favorite: Optional[bool] = False
     # SOT-1411: 締切調査が生成した手順タスク群のグループ識別子・基準日からの日数オフセット・基準日。
     deadline_group_id: Optional[str] = None
     deadline_offset_days: Optional[int] = None
@@ -111,6 +113,8 @@ class NurseryInfoUpdate(BaseModel):
     status: Optional[str] = None
     registration_state: Optional[str] = None
     needs_deadline_investigation: Optional[bool] = None
+    # SOT-1428: お気に入りフラグ。
+    is_favorite: Optional[bool] = None
     # SOT-1411
     deadline_group_id: Optional[str] = None
     deadline_offset_days: Optional[int] = None

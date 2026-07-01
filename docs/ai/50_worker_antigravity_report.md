@@ -1,32 +1,50 @@
-# Worker Report — SOT-1419
+# Worker Report — SOT-1428 (お気に入り機能追加)
 
 ## Fallback Disclosure (Worker Non-Response Policy)
-- Non-responsive worker: Antigravity CLI
-- Detected failure mode: authentication failed (`run_antigravity.sh` exit 75, WORKER_NONRESPONSE)
-- Action taken: Claude Code performed this implementation directly per the Worker Non-Response
-  Fallback Policy. (Codex CLI was also non-responsive — usage-limit cooldown, exit 75 — so the
-  verification gate below was also run by Claude Code.)
+- Antigravity CLI was NON-RESPONSIVE: `scripts/ai/run_antigravity.sh` exited 75
+  ("authentication failed or timed out" → crash exit 1 → WORKER_NONRESPONSE).
+- Codex CLI was also NON-RESPONSIVE for the task check: usage-limit cooldown, exit 75.
+- Per the Worker Non-Response Fallback Policy, Claude Code performed BOTH the task check and the
+  implementation directly. All Quality Gates apply unchanged.
 
 ## Summary
-Two frontend-only UI changes in `frontend/src/pages/DataDetailPage.tsx`:
-1. 編集モードのタイトル入力欄のフォントサイズを `text-2xl` → `text-lg` に縮小（読み取りモードの
-   `<h1>` は `text-2xl` のまま据え置き — 要件は「編集画面」のタイトルのみ）。
-2. 編集画面（`isEditing === true`）で削除ボタンを `{!isEditing && (...)}` でラップして非表示化。
-   削除ボタンの `disabled` を `deleteMutation.isPending || isEditing` → `deleteMutation.isPending`
-   に簡素化。写真ありレコード(hasPhoto)は編集モードに入らないため削除ボタンは従来どおり表示。
+Added a "favorite" (お気に入り) feature to info items.
+- New backend boolean field `is_favorite` threaded through both backends (SQLite + Firestore),
+  mirroring the existing `needs_deadline_investigation` (SOT-1407) pattern. Reused the existing
+  `PUT /info/{id}` (`updateInfo`) endpoint — no new endpoint.
+- To-do list (やることリスト = TasksPage via `DatedInfoList`): each row gets a star TOGGLE button.
+  Filled yellow star when favorited; outline star when not. Clicking toggles `is_favorite` without
+  navigating (preventDefault + stopPropagation).
+- Board (掲示板 = DashboardPage): a filled yellow star is shown ONLY for favorited items
+  (display-only, all four sections: today / tomorrow / weekly / nextWeek).
 
 ## Changed Files
-- `frontend/src/pages/DataDetailPage.tsx` — 編集モードのタイトル input を `text-lg` に縮小、削除
-  ボタンを編集モードで非表示（`!isEditing` ゲート）
+- `backend/app/models.py` — add `is_favorite` Boolean column (nullable, default False).
+- `backend/app/schemas.py` — add `is_favorite` to `NurseryInfoBase` (default False) and
+  `NurseryInfoUpdate` (default None).
+- `backend/app/repository.py` — add `is_favorite` to `FirestoreNurseryInfo` dataclass and to
+  `_info_doc_to_obj` mapping. (create/update use model_dump → generic.)
+- `frontend/src/types/index.ts` — add `is_favorite?: boolean` to `NurseryInfo` and `NurseryInfoCreate`.
+- `frontend/src/i18n/messages.ts` — add `favorite.add` / `favorite.remove` (ja + en).
+- `frontend/src/components/FavoriteStar.tsx` — NEW shared inline-SVG star (filled/outline).
+- `frontend/src/components/DatedInfoList.tsx` — favorite toggle button (gated to namespace='tasks'),
+  useMutation(updateInfo) + query invalidation.
+- `frontend/src/pages/DashboardPage.tsx` — display-only favorite star in all 4 board sections.
+
+## Commands Run
+- (quality gate run by Claude Code — see Codex report / final report)
 
 ## Acceptance Criteria
-- [x] 編集画面のタイトル文字サイズを小さくした（編集モード input: text-2xl → text-lg）
-- [x] 編集画面で削除ボタンを廃止（非表示）した
-- [x] 写真ありレコードの削除ボタン・編集機能・i18n は不変
+- [x] favorite toggle star on to-do list, filled yellow when active
+- [x] favorite indicator star shown only for favorited items on to-do list (toggle is the indicator)
+- [x] favorite indicator star shown only for favorited items on board
+- [x] is_favorite persisted via PUT /info/{id} (SQLite + Firestore)
 
 ## Risks
-- 削除ボタンは編集モードでのみ非表示。読み取りモード／写真レコードでは従来どおり表示される。
-- `handleDelete` / `deleteMutation` / `deleteError` は読み取りモードで使用されるため温存。
+- No icon library; used inline SVG (consistent with repo).
+- DatedInfoList is shared with SchedulePage; toggle is gated to namespace='tasks' so the schedule
+  list is unchanged.
+- Existing rows have NULL is_favorite → treated as not favorited (backward compatible).
 
 ## Next Action
 READY_FOR_REVIEW
