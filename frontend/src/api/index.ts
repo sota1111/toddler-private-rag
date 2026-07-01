@@ -114,11 +114,17 @@ export const uploadAttachment = async (
   file: File,
   // SOT-1315: 文字起こし後のタスク登録を、この言語で生成させる（未指定時はサーバ側が ja 既定）。
   language?: string,
+  // SOT-1405: 設定済み市町村。自動締切調査で市町村ダウンロードリンクを付与するために送る。
+  municipality?: string,
 ): Promise<Attachment> => {
   const formData = new FormData();
   formData.append('file', file);
-  const url = language
-    ? `/info/${infoId}/attachments?language=${encodeURIComponent(language)}`
+  const params = new URLSearchParams();
+  if (language) params.set('language', language);
+  if (municipality) params.set('municipality', municipality);
+  const qs = params.toString();
+  const url = qs
+    ? `/info/${infoId}/attachments?${qs}`
     : `/info/${infoId}/attachments`;
   const response = await api.post<Attachment>(url, formData, {
     headers: {
@@ -134,12 +140,15 @@ export const createUploadSession = async (
   infoId: number | string,
   file: File,
   language?: string,
+  municipality?: string,
 ): Promise<UploadSession> => {
   const response = await api.post<UploadSession>(`/info/${infoId}/upload/session`, {
     filename: file.name,
     content_type: file.type,
     file_size: file.size,
     language: language || 'ja',
+    // SOT-1405: 自動締切調査の市町村ダウンロードリンク付与に使う。
+    municipality: municipality || '',
   });
   return response.data;
 };
@@ -175,10 +184,11 @@ export const uploadAttachmentSmart = async (
   infoId: number | string,
   file: File,
   language?: string,
+  municipality?: string,
 ): Promise<void> => {
   let session: UploadSession | null;
   try {
-    session = await createUploadSession(infoId, file, language);
+    session = await createUploadSession(infoId, file, language, municipality);
   } catch {
     session = null;
   }
@@ -186,7 +196,7 @@ export const uploadAttachmentSmart = async (
   // フォールバックする（multipart 側は同期 OCR なので finalize 不要）。
   // upload_url が得られたときだけ GCS へ直接 PUT する。
   if (!session || !session.upload_url) {
-    await uploadAttachment(infoId, file, language);
+    await uploadAttachment(infoId, file, language, municipality);
     return;
   }
   await putFileToSignedUrl(session, file);
