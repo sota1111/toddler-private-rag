@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getToday, getTomorrow, getWeekly, getNextWeek, getReminders } from '../api';
 import type { NurseryInfo, ReminderItem, ReminderUrgency } from '../types';
 import { useI18n } from '../i18n/useI18n';
-import { getStatusDateChipClass } from './infoFormOptions';
+import { getStatusDateChipClass, getStatusFilterPillClass } from './infoFormOptions';
 import FavoriteStar from '../components/FavoriteStar';
 
 // SOT-1080 / 提案5-A: 緊急度ごとの配色（受動表示ではなく能動的に目を引く）。
@@ -17,6 +17,32 @@ const URGENCY_STYLES: Record<ReminderUrgency, { row: string; chip: string }> = {
 
 // SOT-1071: 掲示板（親しみやすい）デザイン。彩度の高い単色ヘッダーをやめ、
 // 淡いパステル帯＋絵文字＋柔らかい角丸カードでお知らせボードらしい表現にする。
+// SOT-1429: 掲示板の週次/翌週セクションヘッダー右横に出す表示専用のステータス凡例。
+// やることリストのステータス絞り込みピル（getStatusFilterPillClass）と同じ配色だが、
+// フィルタ機能は持たない（button ではなく span の色見本）。
+const LEGEND_STATUSES: ('未確認' | '未対応' | '対応済')[] = ['未確認', '未対応', '対応済'];
+const LEGEND_LABEL_KEYS: Record<'未確認' | '未対応' | '対応済', string> = {
+  未確認: 'tasks.showUnconfirmed',
+  未対応: 'tasks.showPending',
+  対応済: 'tasks.showDone',
+};
+
+const StatusLegend: React.FC = () => {
+  const { t } = useI18n();
+  return (
+    <div className="ml-auto flex flex-wrap items-center gap-1">
+      {LEGEND_STATUSES.map((status) => (
+        <span
+          key={status}
+          className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${getStatusFilterPillClass(status, false)}`}
+        >
+          {t(LEGEND_LABEL_KEYS[status])}
+        </span>
+      ))}
+    </div>
+  );
+};
+
 const DashboardSection: React.FC<{
   title: string;
   items: NurseryInfo[];
@@ -24,13 +50,15 @@ const DashboardSection: React.FC<{
   renderItem: (item: NurseryInfo) => React.ReactNode;
   emoji: string;
   accentClass: string;
-}> = ({ title, items, isLoading, renderItem, emoji, accentClass }) => {
+  headerRight?: React.ReactNode;
+}> = ({ title, items, isLoading, renderItem, emoji, accentClass, headerRight }) => {
   const { t } = useI18n();
   return (
     <div className="bg-surface rounded-2xl shadow-card overflow-hidden mb-[1.125rem]">
       <div className={`${accentClass} flex items-center gap-2 px-4 py-3 font-bold`}>
         <span aria-hidden className="text-lg">{emoji}</span>
         <span>{title}</span>
+        {headerRight}
       </div>
       <div className="p-4">
         {isLoading ? (
@@ -224,6 +252,7 @@ const DashboardPage: React.FC = () => {
           isLoading={weeklyQuery.isLoading}
           emoji="📅"
           accentClass="bg-emerald-50 text-emerald-700"
+          headerRight={<StatusLegend />}
           renderItem={(item) => (
             <div className="flex justify-between items-center">
               {/* SOT-1428: お気に入りの場合のみ星を表示。 */}
@@ -244,6 +273,7 @@ const DashboardPage: React.FC = () => {
           isLoading={nextWeekQuery.isLoading}
           emoji="🗓️"
           accentClass="bg-indigo-50 text-indigo-700"
+          headerRight={<StatusLegend />}
           renderItem={(item) => (
             <div className="flex justify-between items-center">
               {/* SOT-1428: お気に入りの場合のみ星を表示。 */}
