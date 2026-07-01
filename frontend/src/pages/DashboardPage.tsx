@@ -119,24 +119,31 @@ const ReminderRow: React.FC<{ item: ReminderItem }> = ({ item }) => {
   const style = URGENCY_STYLES[item.urgency] ?? URGENCY_STYLES.upcoming;
   // SOT-1316 / SOT-1339: 提出書類先回りエージェントが生成したリマインドは専用カテゴリ表示。
   const isSubmission = item.kind === 'submission';
+  // SOT-1449: リマインド項目をクリックすると対象タスクの詳細（/data/:id）へ遷移する。
+  // 緊急度の枠線色は外側の <li> に残し、内側のクリック領域を Link にする。
   return (
-    <li className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 ${style.row}`}>
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          {isSubmission && (
-            <span className="flex-shrink-0 text-xs px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 font-medium">
-              {t('reminder.kind.submission')}
-            </span>
-          )}
-          <p className="font-medium text-foreground truncate">{composeReminderMessage(item, t)}</p>
+    <li className={`rounded-lg ${style.row}`}>
+      <Link
+        to={`/data/${item.info_id}`}
+        className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-brand/40"
+      >
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            {isSubmission && (
+              <span className="flex-shrink-0 text-xs px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 font-medium">
+                {t('reminder.kind.submission')}
+              </span>
+            )}
+            <p className="font-medium text-foreground truncate">{composeReminderMessage(item, t)}</p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {optLabel('infoType', item.info_type)} ・ {item.target_date}
+          </p>
         </div>
-        <p className="text-xs text-muted-foreground">
-          {optLabel('infoType', item.info_type)} ・ {item.target_date}
-        </p>
-      </div>
-      <span className={`flex-shrink-0 text-xs px-2 py-1 rounded-full ${style.chip}`}>
-        {t(`reminder.urgency.${item.urgency}`)}
-      </span>
+        <span className={`flex-shrink-0 text-xs px-2 py-1 rounded-full ${style.chip}`}>
+          {t(`reminder.urgency.${item.urgency}`)}
+        </span>
+      </Link>
     </li>
   );
 };
