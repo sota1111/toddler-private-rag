@@ -115,7 +115,7 @@ export const messages: Record<Lang, Messages> = {
     'dashboard.dueLabel': '期限: ',
 
     // reminder (能動リマインド SOT-1080 / 提案5-A)
-    'reminder.title': '能動リマインド',
+    'reminder.title': 'リマインド',
     'reminder.subtitle': '締切・行事・持ち物が近づくと自動でお知らせします。',
     'reminder.empty': '緊急のリマインドはありません',
     'reminder.bannerUrgent': '緊急のリマインドが{n}件あります',
@@ -484,7 +484,7 @@ export const messages: Record<Lang, Messages> = {
     'dashboard.dueLabel': 'Due: ',
 
     // reminder (proactive reminders SOT-1080)
-    'reminder.title': 'Proactive Reminders',
+    'reminder.title': 'Reminders',
     'reminder.subtitle': 'Get notified automatically as deadlines, events and items approach.',
     'reminder.empty': 'No urgent reminders',
     'reminder.bannerUrgent': '{n} urgent reminder(s)',
