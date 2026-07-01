@@ -7,6 +7,9 @@ class NurseryInfo(Base):
     __tablename__ = "nursery_info"
 
     id = Column(Integer, primary_key=True, index=True)
+    # SOT-1431: データ所有者(マルチテナント分離)。owner ごとにデータを分離する。
+    # nullable で追加（既存行は NULL = 既定 owner=主ユーザー扱い）。
+    owner_id = Column(String(64), nullable=True, index=True)
     title = Column(String(200), nullable=False)
     info_type = Column(String(50), nullable=False)
     content = Column(Text, nullable=False)
@@ -70,5 +73,7 @@ class Child(Base):
     __tablename__ = "children"
 
     id = Column(Integer, primary_key=True, index=True)
+    # SOT-1431: データ所有者(マルチテナント分離)。nullable で追加（既存行は既定 owner 扱い）。
+    owner_id = Column(String(64), nullable=True, index=True)
     name = Column(String(100), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

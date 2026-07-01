@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from datetime import date, timedelta
 from . import models
+from .identity import DEFAULT_OWNER_ID
 
 def seed_data(db: Session):
     # Check if data already exists
@@ -106,7 +107,8 @@ def seed_data(db: Session):
     ]
 
     for data in sample_data:
-        db_info = models.NurseryInfo(**data)
+        # SOT-1431: 開発用シードは主ユーザー(既定 owner)のデータとして登録する。
+        db_info = models.NurseryInfo(owner_id=DEFAULT_OWNER_ID, **data)
         db.add(db_info)
     
     db.commit()

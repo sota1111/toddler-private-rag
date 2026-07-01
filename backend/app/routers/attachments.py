@@ -113,6 +113,9 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja", mun
         # SOT-1368 follow-up: 親(写真)レコードに紐づけた子ども(child_id)を、
         # OCRから自動生成する各タスクdraftにも引き継ぐ。未指定(None)は紐付けなし。
         parent_child_id = getattr(info, "child_id", None)
+        # SOT-1431: 背景OCRの standalone repo は owner 無絞りのため、生成タスクに親写真の owner を
+        # 明示継承させる（これが無いと自動生成タスクが owner 未設定=既定 owner になり分離が崩れる）。
+        parent_owner_id = getattr(info, "owner_id", None)
         detected_dates = getattr(structured, "detected_dates", None) if structured else None
         detected_items = getattr(structured, "detected_items", None) if structured else None
 
@@ -164,6 +167,7 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja", mun
                             date=(task["date"] or None),
                             event_date=(task.get("event_date") or None),
                             child_id=parent_child_id,  # SOT-1368: 親写真の子どもを引き継ぐ
+                            owner_id=parent_owner_id,  # SOT-1431: 親写真の owner を継承
                             status="未確認",
                             priority="普通",
                             registration_state="draft",
@@ -233,6 +237,7 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja", mun
                                             deadline_offset_days=sub.get("deadline_offset_days"),
                                             deadline_base_date=(sub.get("deadline_base_date") or None),
                                             child_id=parent_child_id,
+                                            owner_id=parent_owner_id,  # SOT-1431: 親写真の owner を継承
                                             status="未確認",
                                             priority="普通",
                                             registration_state="draft",

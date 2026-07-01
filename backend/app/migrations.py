@@ -1,6 +1,7 @@
 from sqlalchemy.engine import Engine
 
 from . import models
+from .identity import DEFAULT_OWNER_ID
 
 
 def _nursery_info_column_sql(column) -> str:
@@ -52,3 +53,30 @@ def ensure_sqlite_schema(engine: Engine) -> None:
                 conn.exec_driver_sql(
                     f"ALTER TABLE attachments ADD COLUMN {column.name} {column.type.compile()}"
                 )
+
+        # SOT-1431: children テーブルも additive/nullable カラム(owner_id)を追記する。
+        children_exists = conn.exec_driver_sql(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'children'"
+        ).scalar()
+        if children_exists:
+            child_columns = {
+                row[1] for row in conn.exec_driver_sql("PRAGMA table_info(children)")
+            }
+            for column in models.Child.__table__.columns:
+                if column.primary_key or column.name in child_columns:
+                    continue
+                conn.exec_driver_sql(
+                    f"ALTER TABLE children ADD COLUMN {column.name} {column.type.compile()}"
+                )
+
+        # SOT-1431: 既存(owner 未設定)データを現行の主ユーザー(既定 owner)に一括割当する。
+        # 非破壊(NULL 行のみ更新)。マルチテナント分離導入前のデータが主ユーザーのものとして残る。
+        conn.exec_driver_sql(
+            "UPDATE nursery_info SET owner_id = ? WHERE owner_id IS NULL",
+            (DEFAULT_OWNER_ID,),
+        )
+        if children_exists:
+            conn.exec_driver_sql(
+                "UPDATE children SET owner_id = ? WHERE owner_id IS NULL",
+                (DEFAULT_OWNER_ID,),
+            )
