@@ -77,6 +77,10 @@ export const messages: Record<Lang, Messages> = {
     'tasks.cancel': 'キャンセル',
     'tasks.submitError': 'タスクの追加に失敗しました。もう一度お試しください。',
 
+    // favorite (SOT-1428)
+    'favorite.add': 'お気に入りに追加',
+    'favorite.remove': 'お気に入りから削除',
+
     // date picker (SOT-1307)
     'datePicker.year': '年',
     'datePicker.month': '月',
@@ -441,6 +445,10 @@ export const messages: Record<Lang, Messages> = {
     'tasks.submit': 'Add',
     'tasks.cancel': 'Cancel',
     'tasks.submitError': 'Failed to add the task. Please try again.',
+
+    // favorite (SOT-1428)
+    'favorite.add': 'Add to favorites',
+    'favorite.remove': 'Remove from favorites',
 
     // date picker (SOT-1307)
     'datePicker.year': 'Year',

@@ -22,6 +22,8 @@ class NurseryInfo(Base):
     # SOT-1407: 締め切り調査が必要なタスクか（やることリスト作成時に算出）。
     # nullable のまま追加（既存行は NULL = 未調査扱いで締め切り調査ボタン非表示）。
     needs_deadline_investigation = Column(Boolean, nullable=True, default=False)
+    # SOT-1428: お気に入りフラグ。nullable で追加（既存行は NULL = 非お気に入り扱い）。
+    is_favorite = Column(Boolean, nullable=True, default=False)
     # SOT-1411: 締切調査が生成した手順タスク群をまとめるグループ識別子と、基準日(最終提出期限)からの
     # 日数オフセットを永続化する。基準日を変更したとき同グループの付随タスクをオフセット分だけ
     # まとめてずらす。全て nullable（既存行・締切調査由来でないタスクは NULL = ずらし対象外）。

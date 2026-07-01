@@ -496,6 +496,8 @@ class FirestoreNurseryInfo:
     child_id: Optional[str] = None
     # SOT-1407: 締め切り調査が必要なタスクか。
     needs_deadline_investigation: bool = False
+    # SOT-1428: お気に入りフラグ。
+    is_favorite: bool = False
     # SOT-1411: 締切調査タスク群のグループ識別子・基準日からの日数オフセット・基準日。
     deadline_group_id: Optional[str] = None
     deadline_offset_days: Optional[int] = None
@@ -544,6 +546,7 @@ def _info_doc_to_obj(doc_id: str, data: dict, attachments: List[FirestoreAttachm
         registration_state=data.get("registration_state") or "registered",
         child_id=data.get("child_id"),
         needs_deadline_investigation=bool(data.get("needs_deadline_investigation")),
+        is_favorite=bool(data.get("is_favorite")),
         deadline_group_id=data.get("deadline_group_id"),
         deadline_offset_days=data.get("deadline_offset_days"),
         deadline_base_date=_to_date(data.get("deadline_base_date")),

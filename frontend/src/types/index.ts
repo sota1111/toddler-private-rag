@@ -47,6 +47,8 @@ export interface NurseryInfo {
   memo?: string
   registration_state?: string
   needs_deadline_investigation?: boolean
+  // SOT-1428: お気に入りフラグ。
+  is_favorite?: boolean
   // SOT-1411: 締切調査タスク群のグループ識別子・基準日からの日数オフセット・基準日。
   deadline_group_id?: string | null
   deadline_offset_days?: number | null
@@ -70,6 +72,8 @@ export interface NurseryInfoCreate {
   tags?: string
   memo?: string
   registration_state?: string
+  // SOT-1428: お気に入りフラグ。
+  is_favorite?: boolean
 }
 
 export interface ExtractedCategories {

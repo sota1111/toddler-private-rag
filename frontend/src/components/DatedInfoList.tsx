@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import type { NurseryInfo } from '../types';
 import { useI18n } from '../i18n/useI18n';
-import { getChildren } from '../api';
+import { getChildren, updateInfo } from '../api';
+import FavoriteStar from './FavoriteStar';
 import {
   getStatusDateChipClass,
   getStatusFilterPillClass,
@@ -52,6 +53,20 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({ items, isLoading, namespa
   // react-query は同一キーをデデュープするため TasksPage 等と並行でも安全。
   const { data: children } = useQuery({ queryKey: ['children'], queryFn: getChildren });
   const childList = children ?? [];
+
+  // SOT-1428: お気に入りトグル。やることリスト(namespace='tasks')の行にのみ星ボタンを出す。
+  // 更新後はやることリスト(['info',...])と掲示板(today/tomorrow/weekly/nextWeek)を再取得する。
+  const queryClient = useQueryClient();
+  const favoriteMutation = useMutation({
+    mutationFn: ({ id, value }: { id: number | string; value: boolean }) =>
+      updateInfo(id, { is_favorite: value }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['info'] });
+      ['today', 'tomorrow', 'weekly', 'nextWeek'].forEach((k) =>
+        queryClient.invalidateQueries({ queryKey: [k] }));
+    },
+  });
+  const showFavorite = namespace === 'tasks';
 
   const [statusFilter, setStatusFilter] = useState<DatedInfoStatusFilter>('all');
 
@@ -123,6 +138,24 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({ items, isLoading, namespa
                         {item.event_date ? item.event_date : t('common.noDeadline')}
                       </span>
                       <span className="text-xs text-muted-foreground">{optLabel('infoType', item.info_type)}</span>
+                      {/* SOT-1428: お気に入りトグル。行リンク内なので遷移を抑止する。お気に入り時は黄色塗り潰し。 */}
+                      {showFavorite && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            favoriteMutation.mutate({ id: item.id, value: !item.is_favorite });
+                          }}
+                          disabled={favoriteMutation.isPending}
+                          aria-pressed={!!item.is_favorite}
+                          aria-label={t(item.is_favorite ? 'favorite.remove' : 'favorite.add')}
+                          title={t(item.is_favorite ? 'favorite.remove' : 'favorite.add')}
+                          className="flex-shrink-0 rounded-full p-0.5 transition-colors hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand/40 disabled:opacity-50"
+                        >
+                          <FavoriteStar filled={!!item.is_favorite} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </Link>
