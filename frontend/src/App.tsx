@@ -161,9 +161,6 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       )}
       {isAuthenticated && <ReminderBanner />}
       <main className="max-w-7xl mx-auto py-6 px-4 lg:px-8">{children}</main>
-      <footer className="bg-surface border-t border-border py-4 mt-10">
-        <div className="text-center text-muted-foreground text-sm">{t('footer.copyright')}</div>
-      </footer>
     </div>
   );
 };

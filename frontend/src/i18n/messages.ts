@@ -109,8 +109,6 @@ export const messages: Record<Lang, Messages> = {
     'datePicker.clear': 'クリア',
     'datePicker.unset': '未設定',
 
-    'footer.copyright': '© 2026 おたよりナビ MVP',
-
     // common
     'common.loading': '読み込み中...',
     'common.noData': 'データなし',
@@ -498,8 +496,6 @@ export const messages: Record<Lang, Messages> = {
     'datePicker.day': 'Day',
     'datePicker.clear': 'Clear',
     'datePicker.unset': 'Not set',
-
-    'footer.copyright': '© 2026 Nursery Notice Guide MVP',
 
     // common
     'common.loading': 'Loading...',
