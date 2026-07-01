@@ -34,6 +34,9 @@ class UploadSessionRequest(BaseModel):
     content_type: str
     file_size: Optional[int] = None
     language: str = "ja"
+    # SOT-1405: 設定済み市町村(frontend localStorage: tpr.municipality)。自動締切調査で
+    # 市町村ダウンロードリンクを付与するため、direct upload の session に載せて添付に保持する。
+    municipality: str = ""
 
 
 class UploadSessionResponse(BaseModel):

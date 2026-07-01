@@ -47,6 +47,8 @@ async def internal_process_ocr(
             raise HTTPException(status_code=404, detail="Attachment not found")
         object_key = att.object_key
         mime_type = att.mime_type
+        # SOT-1405: 添付に保持した設定済み市町村を自動締切調査のリンク付与に貫通させる。
+        municipality = getattr(att, "municipality", None) or ""
     finally:
         # process_ocr opens its own standalone repo; release this read session for SQLite.
         if isinstance(repo, SqliteAttachmentRepository):
@@ -65,6 +67,7 @@ async def internal_process_ocr(
         cleanup_local,
         payload.info_id,
         payload.language,
+        municipality,
     )
     return {"status": "accepted", "att_id": payload.att_id}
 
@@ -136,6 +139,8 @@ async def internal_gcs_finalize(
         info_id = getattr(att, "info_id", None)
         mime_type = att.mime_type
         language = getattr(att, "language", None) or "ja"
+        # SOT-1405: 添付に保持した設定済み市町村を自動締切調査のリンク付与に貫通させる。
+        municipality = getattr(att, "municipality", None) or ""
 
         # CAS: pending の場合のみ processing に遷移し OCR 起動権を得る（重複配送を吸収）。
         if not repo.begin_ocr_if_pending(att_id):
@@ -157,6 +162,7 @@ async def internal_gcs_finalize(
         cleanup_local,
         info_id,
         language,
+        municipality,
     )
     return {"status": "accepted", "att_id": att_id}
 

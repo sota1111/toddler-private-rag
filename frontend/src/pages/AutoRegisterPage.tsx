@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { createInfo, uploadAttachmentSmart, getInfoById, getChildren } from '../api';
 import type { Child, NurseryInfo, NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
+import { useSettings } from '../settings/useSettings';
 import { compressImageFile } from '../utils/imageCompression';
 import RegisterMenu from '../components/RegisterMenu';
 
@@ -15,6 +16,8 @@ type Phase = 'idle' | 'confirm' | 'saving' | 'done';
 
 const AutoRegisterPage: React.FC = () => {
   const { t, lang } = useI18n();
+  // SOT-1405: 設定済み市町村を写真アップロードに渡し、自動締切調査の市町村DLリンク付与に使う。
+  const { municipality } = useSettings();
   const navigate = useNavigate();
   const photoInputRef = useRef<HTMLInputElement>(null);
   // SOT-1289: 文字起こし整理中でも次の写真を追加できる。並行アップロード時、
@@ -163,7 +166,7 @@ const AutoRegisterPage: React.FC = () => {
       // SOT-1315: 設定言語(lang)を渡し、文字起こし後のタスク登録をその言語で生成させる。
       // SOT-1377: 画像本体は Cloud Run を経由せず GCS へ直接アップロードする(session方式)。
       // session 未対応(ローカル等)時は従来の multipart に自動フォールバックする。
-      await uploadAttachmentSmart(created.id, processed, lang);
+      await uploadAttachmentSmart(created.id, processed, lang, municipality);
       // SOT-1322: アップロード成功＝写真はサーバ保存済み。整理(OCR/enrich)はサーバ側の
       // バックグラウンドで進むため、ユーザーを待たせず即「完了」表示にする。
       // SOT-1380 follow-up: 写真アップ直後だと仮登録画面に知らせるため、アップ時刻を記録する。

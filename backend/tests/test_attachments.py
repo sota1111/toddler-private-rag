@@ -494,11 +494,71 @@ def test_auto_deadline_investigation_runs_when_flag_true(monkeypatch):
     assert "勤務先に依頼" in calls[0]["safe_text"]
     # タスク自身の締切が逆算アンカーとして渡る。
     assert calls[0]["kwargs"].get("final_due_iso") == "2026-07-31"
+    # 市町村未指定(空)のときは None が渡り、リンクは付与されない（従来どおり）。
     assert calls[0]["kwargs"].get("municipality") is None
 
     # 生成された提出準備タスクが draft として永続化される。
     titles = [i.title for i in _all_infos()]
     assert "就労証明書の準備" in titles
+
+
+def test_auto_deadline_investigation_passes_municipality(monkeypatch):
+    """SOT-1405 回帰: 自動締切調査に、アップロード時の設定済み市町村が貫通すること。
+
+    これが無いと `build_submission_task_drafts(municipality=None)` 固定となり、
+    市町村のGoogle検索ダウンロードリンクが生成タスクに付与されない（退行の原因）。
+    """
+    from app import extraction, submission_agent
+    from app.routers import attachments
+
+    info_id = _make_processing_info()
+
+    monkeypatch.setattr(
+        extraction,
+        "build_draft_fields",
+        lambda *a, **k: {
+            "title": "写真から登録",
+            "info_type": "その他",
+            "content": "本文",
+            "items": "",
+            "date": "",
+        },
+    )
+    monkeypatch.setattr(
+        extraction,
+        "build_task_drafts",
+        lambda *a, **k: [
+            {
+                "title": "就労証明書の提出",
+                "info_type": "提出物",
+                "content": "勤務先に依頼",
+                "items": "",
+                "date": "",
+                "event_date": "2026-07-31",
+                "needs_deadline_investigation": True,
+            },
+        ],
+    )
+
+    calls = []
+
+    def fake_build_submission(safe_text, detected_dates=None, **kwargs):
+        calls.append({"safe_text": safe_text, "kwargs": kwargs})
+        return []
+
+    monkeypatch.setattr(
+        submission_agent, "build_submission_task_drafts", fake_build_submission
+    )
+    monkeypatch.setattr(
+        "app.rag.indexing.index_info_id", lambda *a, **k: None, raising=False
+    )
+
+    attachments._promote_processing_draft(
+        info_id, "OCRテキスト", None, language="ja", municipality="渋谷区"
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["kwargs"].get("municipality") == "渋谷区"
 
 
 def test_auto_deadline_investigation_persists_group_fields(monkeypatch):

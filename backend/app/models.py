@@ -57,6 +57,10 @@ class Attachment(Base):
     # SOT-1377: GCS direct-upload では OCR が finalize イベント経由で非同期起動するため、
     # session 発行時のリクエスト言語をここに保持しておき finalize 時に再利用する。
     language = Column(String(8), nullable=True)
+    # SOT-1405: 自動締切調査(写真アップロード→OCR→タスク生成)で市町村ダウンロードリンクを
+    # 付与するため、アップロード時の設定済み市町村(frontend localStorage: tpr.municipality)を
+    # ここに保持し、非同期の finalize/OCR 経路で再利用する（language と同じ貫通方式）。
+    municipality = Column(String(120), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     info = relationship("NurseryInfo", back_populates="attachments")

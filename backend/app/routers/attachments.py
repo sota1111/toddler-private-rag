@@ -33,6 +33,7 @@ async def process_ocr(
     cleanup_local: bool = False,
     info_id: Optional[Union[int, str]] = None,
     language: str = "ja",
+    municipality: str = "",
 ):
     repo = get_attachment_repo_standalone()
     safe_text = ""
@@ -84,10 +85,11 @@ async def process_ocr(
             safe_text if ocr_ok else "",
             structured if ocr_ok else None,
             language=language,
+            municipality=municipality,
         )
 
 
-def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
+def _promote_processing_draft(info_id, safe_text, structured, language="ja", municipality=""):
     """processing のレコードを enrich してサーバ側で本登録(registered)へ昇格する (SOT-1293 / SOT-1324)。
 
     対象が `registration_state == 'processing'`（自動登録の番兵）のときだけ作用する。
@@ -196,9 +198,10 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja"):
                                 None,
                                 language=language,
                                 final_due_iso=final_due_iso,
-                                # 市町村はfrontend localStorageのみ(SOT-1405)でパイプラインから
-                                # は参照不可。自動実行ではダウンロードリンクを付与しない。
-                                municipality=None,
+                                # SOT-1405: アップロード時に添付へ保持した設定済み市町村を
+                                # 貫通させ、自動締切調査でもダウンロードリンクを付与する。
+                                # 未設定(空)のときは従来どおりリンクを付けない。
+                                municipality=(municipality or None),
                             )
                             # SOT-1411 再オープン対応: 生成した付随タスク(子)を1グループに束ね、
                             # 基準日(最終提出期限)を基準にオフセットを再計算する。group_id が返れば
@@ -309,6 +312,7 @@ async def upload_attachment(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     language: str = "ja",
+    municipality: str = "",
     repo: AttachmentRepository = Depends(get_attachment_repository),
     current_user: str = Depends(get_current_user)
 ):
@@ -367,6 +371,7 @@ async def upload_attachment(
         cleanup_local,
         info_id,
         language,
+        municipality,
     )
 
     return db_attachment
@@ -426,6 +431,8 @@ async def create_upload_session(
         ocr_text=None,
         ocr_status="pending",
         language=language,
+        # SOT-1405: finalize(非同期OCR)時に自動締切調査へ渡すため市町村を保持する。
+        municipality=((payload.municipality or "").strip() or None),
     )
 
     return schemas.UploadSessionResponse(
@@ -466,6 +473,7 @@ async def finalize_upload_session(
     ocr_path = storage_backend.local_path_for_ocr(att.object_key, content)
     cleanup_local = (storage_backend.name == "gcs")
     language = getattr(att, "language", None) or "ja"
+    municipality = getattr(att, "municipality", None) or ""
 
     background_tasks.add_task(
         process_ocr,
@@ -475,6 +483,7 @@ async def finalize_upload_session(
         cleanup_local,
         att.info_id,
         language,
+        municipality,
     )
     return {"status": "accepted", "att_id": att.id}
 

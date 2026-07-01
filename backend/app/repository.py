@@ -117,7 +117,8 @@ class AttachmentRepository(abc.ABC):
                original_filename: str, mime_type: str, file_size: int,
                storage_backend: str, object_key: Optional[str],
                ocr_text: Optional[str], ocr_status: str = "pending",
-               language: Optional[str] = None) -> Any:
+               language: Optional[str] = None,
+               municipality: Optional[str] = None) -> Any:
         pass
 
     @abc.abstractmethod
@@ -366,7 +367,8 @@ class SqliteAttachmentRepository(AttachmentRepository):
                original_filename: str, mime_type: str, file_size: int,
                storage_backend: str, object_key: Optional[str],
                ocr_text: Optional[str], ocr_status: str = "pending",
-               language: Optional[str] = None) -> models.Attachment:
+               language: Optional[str] = None,
+               municipality: Optional[str] = None) -> models.Attachment:
         db_attachment = models.Attachment(
             info_id=int(info_id),
             stored_filename=stored_filename,
@@ -378,6 +380,7 @@ class SqliteAttachmentRepository(AttachmentRepository):
             ocr_text=ocr_text,
             ocr_status=ocr_status,
             language=language,
+            municipality=municipality,
         )
         self.db.add(db_attachment)
         self.db.commit()
@@ -475,6 +478,7 @@ class FirestoreAttachment:
     created_at: datetime.datetime
     translations: Optional[dict] = None
     language: Optional[str] = None
+    municipality: Optional[str] = None
 
 @dataclass
 class FirestoreNurseryInfo:
@@ -570,6 +574,7 @@ def _att_doc_to_obj(doc_id: str, data: dict) -> FirestoreAttachment:
         created_at=data.get("created_at") or datetime.datetime.now(),
         translations=data.get("translations") or {},
         language=data.get("language"),
+        municipality=data.get("municipality"),
     )
 
 def _is_registered_data(data: dict) -> bool:
@@ -914,7 +919,8 @@ class FirestoreAttachmentRepository(AttachmentRepository):
                original_filename: str, mime_type: str, file_size: int,
                storage_backend: str, object_key: Optional[str],
                ocr_text: Optional[str], ocr_status: str = "pending",
-               language: Optional[str] = None) -> FirestoreAttachment:
+               language: Optional[str] = None,
+               municipality: Optional[str] = None) -> FirestoreAttachment:
         now = datetime.datetime.now(datetime.timezone.utc)
         doc_data = {
             "info_id": str(info_id),
@@ -927,6 +933,7 @@ class FirestoreAttachmentRepository(AttachmentRepository):
             "ocr_text": ocr_text,
             "ocr_status": ocr_status,
             "language": language,
+            "municipality": municipality,
             "created_at": now
         }
         _, doc_ref = self.db.collection("attachments").add(doc_data)
