@@ -1,154 +1,215 @@
-# おたよりナビ MVP (Nursery Notice Guide)
+# おたよりナビ — 保育園おたよりを「撮るだけ」で先回りする自律AIエージェント
 
-保育園から提供される膨大な情報（お手紙、掲示、行事予定など）を一元管理し、必要な情報を素早く
-確認するためのプライベートRAGアシスタントです。登録した情報・添付資料のOCRテキストを
-ベクトル検索し、LLMで質問に回答します。プライベートデータを扱うため、認証とSecret管理を前提に
-設計されています。
+> 保育園から届く大量の紙・掲示・行事案内を **写真に撮って登録するだけ**。
+> AIエージェントが OCR → 情報の構造化 → **公式手順の自律調査** → **締切から逆算した準備タスクの自動生成**
+> までを一気通貫で実行する、家庭向けプライベート RAG アシスタントです。
 
-## 主な機能
+**Findy DevOps AI Agent Hackathon 提出作品**
+Google Cloud（Cloud Run / Vertex AI Gemini / Cloud Vision AI）上で、Terraform による IaC・
+Workload Identity Federation による CI/CD・Cloud Monitoring まで含めたフルサイクルで運用しています。
 
-- **ダッシュボード / 掲示板**: 今日・明日の持ち物、今週・来週の行事、未対応の提出物をクイックビュー
-  （`GET /api/info/today` / `tomorrow` / `weekly` / `next-week` / `pending`）
-- **能動リマインド**: 締切・行事の緊急度別リマインドとダイジェスト（`GET /api/info/reminders` / `reminders/digest`）
-- **情報一覧**: キーワード・種別・ステータスによる検索／フィルタリング
-- **ハイブリッド検索**: キーワード＋ベクトル＋ファセットの統合検索（`GET /api/info/hybrid-search`）
-- **AI 自動タグ付け**: 内容からタグ候補を生成（`POST /api/info/suggest-tags`）
-- **情報登録 / 自動登録**: 手動登録と、写真/PDFをOCR・構造化して登録フォームのドラフトを自動生成
-  （`POST /api/info/extract`、DB未保存）。添付ファイル（画像/PDF）アップロードはOCR連携
-- **仮登録 / 本登録**: ドラフト（仮登録）の一覧取得（`GET /api/info/drafts`）と本登録への確定（`POST /api/info/{id}/finalize`）
-- **5カテゴリ抽出**: 提出物 / 持ち物 / 締切 / 行事 / 注意事項を抽出
-- **情報の編集・削除（管理）**: 情報一覧から各レコードの編集（`PUT /api/info/{id}`）・削除（`DELETE /api/info/{id}`）
-- **RAG（ベクトル検索＋LLM回答生成）**: 埋め込みベースのベクトル検索で関連情報を取得し、
-  LLMで質問に回答（出典チャンク付き）
-- **ロール切替**: 管理者/利用者の表示切替（フロント側のトグル）と日本語/英語の言語切替
+- 🔗 **デモ（デプロイ済み Cloud Run URL）**: `TODO: 本番 Cloud Run の URL を記入`
+- 🎥 デモ動画: `TODO: 動画URLを記入`
 
-## アーキテクチャ
+---
 
-```mermaid
-flowchart TD
-    User([ユーザー / ブラウザ])
+## 1. 課題 / 背景 / 対象ユーザー / 提供価値
 
-    subgraph Frontend["Frontend — React + Vite (Cloud Run :8080 / Firebase Hosting)"]
-        FE["SPA: Dashboard(掲示板) / InfoHub(一覧・検索・Q&A) / 登録・自動登録 / Login"]
-    end
+### 課題
+保育園からの情報は「紙のおたより・玄関の掲示・行事予定表」など**非構造・非デジタル**で大量に届きます。
+提出物・持ち物・締切・行事が各所に散らばり、保護者は毎回それを読み解き、
+「この書類は勤務先発行か？」「発行に何日かかる？」「いつ準備を始めれば締切に間に合う？」を
+**手作業で調べて逆算**する必要があります。共働き世帯ではこの認知負荷が積み重なり、提出漏れ・締切超過の
+原因になります。
 
-    subgraph Backend["Backend — FastAPI (Cloud Run :8080)"]
-        AUTH["routers/auth (/api/auth)"]
-        ATT["routers/attachments (/api)"]
-        INFO["routers/info (/api/info)"]
-        OCR["ocr.py — Gemini Vision / Pillow + pytesseract / pypdf / pdf2image"]
-        RAG["rag/ — chunking → embedding → InMemoryVectorStore → LLM"]
-    end
+### 対象ユーザー
+- 共働き・多忙で、園からの情報を追いきれない保護者
+- 紙とデジタルが混在し、情報が一元化されていない家庭
 
-    subgraph Storage["永続化"]
-        DB[("メタDB: sqlite | firestore")]
-        FILES[("添付: local | GCS")]
-    end
+### 提供価値
+- **撮って登録するだけ**：写真/PDF を上げれば、AI が提出物・持ち物・締切・行事・注意事項を自動抽出。
+- **先回りしてくれる**：提出書類について公式手順・発行元・所要期間を **AI が自律的に調べ**、
+  締切から逆算した**準備タスク**を日付付きで自動生成。
+- **迷わない UI**：今日/明日の持ち物、今週/来週の行事、未対応の提出物をダッシュボードで即確認。
+  自然文で質問すれば、登録情報を根拠（出典）付きで回答。
 
-    subgraph GCP["GCP"]
-        IDT["Firebase Identity Toolkit REST<br/>accounts:signInWithPassword"]
-        SM["Secret Manager<br/>rag-auth-secret / rag-allowed-emails / rag-firebase-api-key"]
-        GEM["Gemini API（任意: embedding / LLM）"]
-    end
+---
 
-    User --> FE
-    FE -->|"HMAC署名 auth_token cookie"| AUTH
-    FE --> INFO
-    FE --> ATT
-    AUTH -->|"メール/パスワード照合"| IDT
-    ATT --> OCR
-    ATT --> FILES
-    INFO --> RAG
-    INFO --> DB
-    ATT --> DB
-    RAG -. "EMBEDDING_PROVIDER / LLM_PROVIDER = gemini 時" .-> GEM
-    Backend -. "本番: シークレット読込" .-> SM
-```
+## 2. なぜ「AIエージェント」なのか（必然性）
 
-## データフロー（取り込み → 検索 → 回答）
+本作品は単なるチャットボットではありません。**人間が毎回行っていた多段の判断・調査・逆算を、
+エージェントが自律的に実行**します。中核は提出書類先回りエージェント
+（`backend/app/submission_agent.py`）です。
 
 ```mermaid
 flowchart LR
-    subgraph Ingest["① 取り込み"]
-        A1["POST /api/info<br/>NurseryInfo 作成"]
-        A2["POST /api/info/{id}/attachments<br/>ファイル保存 (local/GCS)"]
-        A3["ocr.extract_text<br/>OCRテキスト抽出"]
-        A4[("Attachment.ocr_text 保存<br/>sqlite/firestore")]
-        A1 --> A2 --> A3 --> A4
-    end
-
-    subgraph Index["② 索引"]
-        B1["get_rag_service(repo)<br/>repo.list() 全info取得"]
-        B2["chunking.build_documents<br/>title/content + OCR を chunk_size=500 / overlap=50"]
-        B3["EmbeddingProvider.embed<br/>(fake | gemini)"]
-        B4["InMemoryVectorStore<br/>（リクエスト毎に構築）"]
-        B1 --> B2 --> B3 --> B4
-    end
-
-    subgraph Query["③ 検索・回答"]
-        C1["クエリ埋め込み"]
-        C2["コサイン類似度で top_k チャンク取得"]
-        C3["LLMProvider.generate(query, contexts)"]
-        C4["{answer, sources[]} 返却<br/>出典ラベル付き"]
-        C1 --> C2 --> C3 --> C4
-    end
-
-    A4 --> B1
-    B4 --> C1
+    P[おたより写真/PDF] --> OCR["OCR 抽出<br/>Cloud Vision AI / Gemini Vision<br/>(ocr.py)"]
+    OCR --> EX["5カテゴリ構造化抽出<br/>提出物/持ち物/締切/行事/注意事項<br/>(extraction.py)"]
+    EX --> AGENT{{"提出書類先回りエージェント<br/>(submission_agent.py)"}}
+    AGENT -->|"① 提出が必要な書類を判定"| D[書類リスト]
+    AGENT -->|"② Google Search grounding で<br/>公式手順・発行元・所要期間を自律調査"| G[(公式情報)]
+    AGENT -->|"③ 締切から所要期間を逆算"| T["準備タスクを日付付きで自動生成"]
+    T --> R["能動リマインド / ダッシュボード表示<br/>(reminders.py)"]
 ```
 
-- **① 取り込み (Ingest)**: `POST /api/info` で情報レコード（`NurseryInfo`）を作成。
-  `POST /api/info/{id}/attachments` で画像/PDFを保存（`STORAGE_BACKEND`=local|gcs）し、
-  `ocr.extract_text` がOCRテキストを抽出して `Attachment.ocr_text` に保存します。
-  - 画像: Pillow + pytesseract（`jpn+eng`、データ欠如時は既定言語へフォールバック）
-  - PDF: pypdf の埋め込みテキストを優先し、無ければ pdf2image + pytesseract でOCR
-- **② 索引 (Index)**: `get_rag_service(repo)` が `repo.list()` で全情報を取得し、
-  `chunking.build_documents` でタイトル/本文（source=`content`）と添付OCRテキスト（source=`ocr`）を
-  `chunk_size=500` / `overlap=50` でチャンク化。`EmbeddingProvider.embed` で埋め込み、
-  インプロセスの `InMemoryVectorStore`（純Pythonのコサイン類似度）へ格納します。
-  ベクトルストアはリクエストごとに構築されるため追加インフラは不要です。
-- **③ 検索 (Search)**: `GET /api/info/search?q=...&top_k=4` はベクトル検索のみを行い、
-  関連チャンク（出典）を返します。
-- **③ 回答 (Answer)**: `POST /api/info/ask`（`{"query": "...", "top_k": 4}`）は検索結果を
-  コンテキストに `LLMProvider.generate` で回答を生成し、`{"answer": "...", "sources": [...]}`
-  を返します。OCR由来の出典は `タイトル（添付: ファイル名）` というラベルになります。
-- すべてのエンドポイントは認証必須です（HMAC署名された `auth_token` cookie を検証）。
+エージェントが自律的に行う判断・実行:
 
-## 技術スタック
+1. **抽出判断** — OCR テキストから「提出が必要な書類」を LLM で判定（暴走防止に上限つき）。
+2. **自律調査** — 各書類について **Google Search grounding** で公式手順・勤務先/会社発行の要否・
+   標準的な所要期間を調べる（利用不可時は LLM の既知知識へ graceful fallback、例外を伝播させない設計）。
+3. **逆算実行** — 提出期限から所要期間を差し引いた**準備開始日**を計算し、日付付き準備タスクを生成。
+   以降は能動リマインドが緊急度別に通知します。
+
+> 「読む → 調べる → 逆算する」という人手の一連作業をエージェントが肩代わりすること自体が価値であり、
+> ここに **AIエージェントである必然性** があります。
+
+---
+
+## 3. 主な機能
+
+- **ダッシュボード / 掲示板**: 今日・明日の持ち物、今週・来週の行事、未対応の提出物をクイックビュー
+  （`GET /api/info/today` / `tomorrow` / `weekly` / `next-week` / `pending`）
+- **提出書類先回りエージェント**: 提出書類の公式手順を自律調査し、締切逆算の準備タスクを自動生成
+  （`backend/app/submission_agent.py`）
+- **自動登録（OCR）**: 写真/PDF を OCR・構造化して登録フォームのドラフトを自動生成（`POST /api/info/extract`）。
+  仮登録（`GET /api/info/drafts`）→ 本登録（`POST /api/info/{id}/finalize`）
+- **能動リマインド**: 締切・行事の緊急度別リマインドとダイジェスト（`GET /api/info/reminders` / `reminders/digest`）
+- **RAG Q&A**: 登録情報・添付OCRテキストをベクトル検索し、LLM が**出典（sources）付き**で回答
+  （`POST /api/info/ask`、Markdown整形表示）
+- **ハイブリッド検索 / AI自動タグ付け**: キーワード＋ベクトル＋ファセット統合検索（`GET /api/info/hybrid-search`）、
+  内容からタグ候補生成（`POST /api/info/suggest-tags`）
+- **お気に入り / 編集・削除**: やることリスト・掲示板でのお気に入り表示、レコード編集（`PUT /api/info/{id}`）・
+  削除（`DELETE /api/info/{id}`）
+- **ユーザー単位のデータ分離**: メールから導出した owner 単位で情報を分離し、他ユーザーのデータに触れない
+  （`backend/app/identity.py`）
+- **日本語 / 英語 切替**、JST 統一の日付計算
+
+---
+
+## 4. Google Cloud 必須要件の充足（審査用マッピング）
+
+| 必須要件 | 使用プロダクト | 用途 | 実装根拠 |
+|---|---|---|---|
+| **アプリ実行プロダクト（1つ以上）** | **Cloud Run** | backend（重処理API）と `upload-api`（軽量アップロード受付）の**2サービス構成** | `infra/terraform/cloud_run.tf` / `cloud_run_upload.tf`, `backend/upload_function/`, `.github/workflows/deploy-cloudrun.yml` |
+| | Cloud Build / Artifact Registry | コンテナのビルド・格納 | `scripts/deploy-cloudrun.sh`, `infra/terraform/artifact_registry.tf` |
+| | Cloud Scheduler | 孤児ファイルの定期パージ等の自律ジョブ | `infra/terraform/scheduler.tf` |
+| **AI 技術（1つ以上）** | **Vertex AI 上の Gemini** | 構造化抽出・RAG回答生成・提出書類調査（`google-genai` SDK, Vertex モード） | `backend/app/ai_client.py`（`GOOGLE_GENAI_USE_VERTEXAI`）, `extraction.py`, `rag/providers.py` |
+| | **Cloud Vision AI** | 画像おたよりの OCR | `backend/app/ocr.py`（`google-cloud-vision`, `OCR_PROVIDER=vision`） |
+| | **Google Search grounding** | 提出書類の公式手順・所要期間の自律調査 | `backend/app/submission_agent.py` |
+
+> ローカル/テストでは API キー不要の `fake` プロバイダで決定論的に動作し、本番では Vertex AI へ切替。
+> OCR は Vision AI / Gemini Vision を優先し、未設定時は pytesseract / pypdf へ graceful fallback します。
+
+---
+
+## 5. アーキテクチャ
+
+```mermaid
+flowchart TD
+    User([保護者 / ブラウザ])
+
+    subgraph FE["Frontend — React 19 + Vite (Cloud Run / Firebase Hosting)"]
+        SPA["SPA: ダッシュボード / やることリスト / 掲示板 / 自動登録 / Q&A / 設定"]
+    end
+
+    subgraph UP["Cloud Run: upload-api（軽量アップロード受付）"]
+        U1["写真を受領→GCS保存→backend workerを呼出 (202即応答)"]
+    end
+
+    subgraph BE["Cloud Run: backend（FastAPI / 重処理）"]
+        AUTH["/api/auth — Firebase REST + HMAC cookie"]
+        INFO["/api/info — 登録/検索/RAG/リマインド"]
+        WORKER["/routers/worker — 非同期OCR起動 (process_ocr)"]
+        AGENT["submission_agent — 提出書類先回り"]
+        RAG["rag/ — chunk→embed→InMemoryVectorStore→LLM"]
+    end
+
+    subgraph GCP["Google Cloud"]
+        VERTEX["Vertex AI — Gemini"]
+        VISION["Cloud Vision AI — OCR"]
+        SEARCH["Google Search grounding"]
+        FS[("Firestore — メタデータ")]
+        GCS[("Cloud Storage — 添付")]
+        SM["Secret Manager"]
+        SCHED["Cloud Scheduler"]
+        MON["Cloud Monitoring — 5xx/p99 アラート"]
+    end
+
+    User --> SPA
+    SPA -->|写真| U1
+    U1 --> WORKER
+    SPA --> AUTH
+    SPA --> INFO
+    WORKER --> VISION
+    AGENT --> VERTEX
+    AGENT --> SEARCH
+    INFO --> RAG --> VERTEX
+    INFO --> FS
+    U1 --> GCS
+    BE -. secrets .-> SM
+    SCHED -.->|定期ジョブ| BE
+    BE -.-> MON
+```
+
+**非同期取り込み**: 軽量 `upload-api` が写真を GCS に保存して backend の worker を呼び、
+worker は 202 を即返して背景で `process_ocr`（OCR→構造化→エージェント）を実行します。
+アップロード体験をブロックしない、実運用志向の構成です。
+
+---
+
+## 6. DevOps フルサイクル
+
+デプロイまでを見据え、Infrastructure as Code・CI/CD・監視まで整備しています。
+
+- **IaC (Terraform)** — `infra/terraform/`（16ファイル）で GCP をコード管理:
+  Cloud Run ×2（`cloud_run.tf` / `cloud_run_upload.tf`）、Firestore、Pub/Sub、Cloud Storage、
+  Secret Manager、IAM、**Workload Identity Federation**（`wif.tf`）、Artifact Registry、
+  Cloud Scheduler、Cloud Monitoring、API 有効化。
+- **CI** (`.github/workflows/ci.yml`) — backend: `pytest`、frontend: `eslint` + `typecheck/build` +
+  **Playwright e2e**。
+- **CD** (`.github/workflows/deploy-cloudrun.yml`) — `main` への push / 手動実行で backend → upload-api を
+  Docker build → Artifact Registry push → Cloud Run deploy。認証は **Workload Identity Federation**（
+  JSON キーレス、`id-token: write`）。
+- **監視** (`infra/terraform/monitoring.tf`) — Cloud Run の **5xx エラー率**・**p99 レイテンシ**に
+  アラートポリシー、メール通知チャネル。
+- **シークレット管理** — セッション署名鍵・許可メール・Firebase API key・worker トークンを
+  Secret Manager から `--set-secrets` で注入。
+
+---
+
+## 7. スクリーンショット（UI/UX）
+
+| 画面 | 説明 |
+|---|---|
+| ![掲示板](frontend/public/howto/board.png) | **掲示板 / ダッシュボード** — 今日・明日・今週・来週を一目で把握 |
+| ![やることリスト](frontend/public/howto/tasks.png) | **やることリスト** — 提出物・持ち物をステータス管理、お気に入り表示 |
+| ![自動登録](frontend/public/howto/register.png) | **自動登録** — 写真を上げるだけで AI が下書きを生成 |
+| ![Q&A](frontend/public/howto/ask.png) | **AI Q&A** — 自然文の質問に、登録情報を出典付きで回答 |
+| ![予定](frontend/public/howto/schedule.png) | **予定** — 行事・締切をカレンダー的に確認 |
+| ![設定](frontend/public/howto/settings.png) | **設定** — 言語切替・各種設定、アプリの使い方ガイド |
+
+---
+
+## 8. 技術スタック
 
 | レイヤ | 技術 |
 |--------|------|
-| Frontend | React 19 + TypeScript, Vite, Tailwind CSS, TanStack Query, React Router 7（本リポジトリ同梱の monorepo） |
+| Frontend | React 19 + TypeScript, Vite, Tailwind CSS, TanStack Query, React Router 7 |
 | Backend | FastAPI (Python 3.12), SQLAlchemy, SQLite（local）/ Firestore（本番） |
-| OCR | Gemini Vision（`OCR_PROVIDER`、利用可能時に優先）→ pytesseract / pypdf / pdf2image / Pillow にフォールバック |
-| RAG | インプロセス・ベクトルストア（コサイン類似度）+ Provider抽象（fake / gemini） |
-| AI | google-genai 経由の Gemini。本番は Vertex AI（`GOOGLE_GENAI_USE_VERTEXAI=true`）、ローカルは API キーも可 |
-| GCP | Cloud Run, Cloud Build, Secret Manager、（任意）Cloud Storage / Firestore / Gemini・Vertex AI |
+| AI エージェント | 提出書類先回りエージェント（`submission_agent.py`）+ Google Search grounding |
+| OCR | Cloud Vision AI / Gemini Vision（優先）→ pytesseract / pypdf / pdf2image / Pillow にフォールバック |
+| RAG | インプロセス・ベクトルストア（純Pythonコサイン類似度）+ Provider抽象（fake / gemini） |
+| AI | `google-genai` 経由の Gemini。本番は Vertex AI（`GOOGLE_GENAI_USE_VERTEXAI=true`）、ローカルは APIキーも可 |
+| GCP | Cloud Run ×2, Cloud Build, Artifact Registry, Secret Manager, Firestore, Cloud Storage, Cloud Scheduler, Cloud Monitoring, Vertex AI, Vision AI |
+| IaC / CI/CD | Terraform, GitHub Actions（Workload Identity Federation） |
 | 認証 | Firebase Identity Toolkit REST（サーバサイド照合）+ HMAC署名セッションcookie |
 
-## RAG（ベクトル検索＋LLM回答生成）
+---
 
-登録情報（タイトル・本文・添付のOCRテキスト）をチャンク化して埋め込み、コサイン類似度で
-関連チャンクを検索し、その結果をコンテキストにLLMで回答を生成します。
-
-### エンドポイント（要認証）
-
-- `POST /api/info/ask` — `{"query": "...", "top_k": 4}` → `{"answer": "...", "sources": [...]}`
-- `GET /api/info/search?q=...&top_k=4` — ベクトル検索のみ（出典チャンクを返す）
-
-### Provider 設定（環境変数）
-
-- `EMBEDDING_PROVIDER` / `LLM_PROVIDER`: `fake`（既定）| `gemini`
-- 既定の `fake` は決定論的でAPIキー不要。オフラインで動作し、テストにも使用します。
-- `gemini` を使う場合は `GEMINI_API_KEY`（または `GOOGLE_API_KEY`）を設定し、
-  `google-generativeai` をインストールしてください（SDKは遅延インポートのため未導入でも起動は可能）。
-- ベクトルストアはインプロセス（純Pythonのコサイン類似度）で追加インフラ不要。
-  `sqlite` / `firestore` いずれのメタデータバックエンドでも動作します。
-
-## セットアップ（ローカル）
+## 9. セットアップ（ローカル）
 
 事前に `.env.example` をコピーして `.env` を作成し、必要な変数を設定してください
-（→ [環境変数一覧](#環境変数一覧)）。
+（→ [環境変数一覧](#11-環境変数一覧)）。ローカルは既定の `fake` プロバイダで API キー不要・オフライン動作します。
 
 ### バックエンド
 
@@ -160,44 +221,52 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-- API: http://localhost:8000
-- API ドキュメント (Swagger UI): http://localhost:8000/docs
-- ヘルスチェック: http://localhost:8000/health
+- API: http://localhost:8000 ／ Swagger UI: http://localhost:8000/docs ／ ヘルスチェック: http://localhost:8000/health
 
 ### フロントエンド
 
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev     # http://localhost:5173 (Vite)
 ```
-
-- 開発サーバー: http://localhost:5173 (Vite)
 
 ### Docker（任意）
 
 ```bash
-# docker compose（backend を :8000 で起動、./backend/data をマウント）
-docker compose up
-
-# もしくは個別ビルド
-docker build -t toddler-private-rag-backend ./backend
-docker run -p 8000:8000 --env-file .env toddler-private-rag-backend
-
-docker build -t toddler-private-rag-frontend ./frontend
-docker run -p 8080:8080 toddler-private-rag-frontend
+docker compose up   # backend を :8000 で起動、./backend/data をマウント
 ```
 
-## 環境変数一覧
+---
+
+## 10. RAG（ベクトル検索＋LLM回答生成）
+
+登録情報（タイトル・本文・添付のOCRテキスト）をチャンク化して埋め込み、コサイン類似度で
+関連チャンクを検索し、その結果をコンテキストにLLMで回答を生成します。ベクトルストアは
+インプロセス（純Pythonのコサイン類似度）でリクエスト毎に構築するため、追加インフラは不要です。
+
+### エンドポイント（要認証）
+
+- `POST /api/info/ask` — `{"query": "...", "top_k": 4}` → `{"answer": "...", "sources": [...]}`
+- `GET /api/info/search?q=...&top_k=4` — ベクトル検索のみ（出典チャンクを返す）
+
+### Provider 設定（環境変数）
+
+- `EMBEDDING_PROVIDER` / `LLM_PROVIDER`: `fake`（既定, APIキー不要・決定論的）| `gemini`
+- `gemini` 利用時は Vertex AI（`GOOGLE_GENAI_USE_VERTEXAI=true`）またはローカル API キー。
+
+---
+
+## 11. 環境変数一覧
 
 `.env.example` を参照のうえ `.env` に設定します（本番のシークレットは Secret Manager 管理を推奨）。
 
 | 変数名 | 説明 | 既定・例 |
 |--------|------|----------|
 | `APP_ENV` | 実行環境。`production` で cookie secure 有効・起動時 seed 無効 | `local` |
-| `APP_TIMEZONE` | 掲示板・リマインドの日付計算に使うタイムゾーン（zoneinfo 名）。Cloud Run の UTC ズレ回避に使用 | `Asia/Tokyo` |
-| `FIREBASE_WEB_API_KEY` | Firebase Web API key（推奨名・優先、本番は `rag-firebase-api-key`） | `your-firebase-web-api-key` |
-| `FIREBASE_API_KEY` | Firebase Web API key（後方互換の fallback 名） | `your-firebase-web-api-key` |
+| `APP_TIMEZONE` | 掲示板・リマインドの日付計算に使うタイムゾーン。Cloud Run の UTC ズレ回避 | `Asia/Tokyo` |
+| `FIREBASE_WEB_API_KEY` | Firebase Web API key（優先、本番は `rag-firebase-api-key`） | `your-firebase-web-api-key` |
+| `FIREBASE_API_KEY` | Firebase Web API key（後方互換 fallback 名） | `your-firebase-web-api-key` |
 | `ALLOWED_USER_EMAILS` | ログインを許可するメール（カンマ区切り、本番は Secret Manager 推奨） | `you@example.com` |
 | `AUTH_SECRET` | セッションcookie署名シークレット（32文字以上推奨、本番は `rag-auth-secret`） | `your-random-secret-key-here` |
 | `GOOGLE_CLOUD_PROJECT` | Firebase Admin / GCP プロジェクトID | `your-gcp-project-id` |
@@ -213,41 +282,39 @@ docker run -p 8080:8080 toddler-private-rag-frontend
 | `FIRESTORE_DATABASE` | Firestore データベース名 | `(default)` |
 | `EMBEDDING_PROVIDER` | 埋め込みプロバイダ | `fake`（既定）/ `gemini` |
 | `LLM_PROVIDER` | 回答生成プロバイダ | `fake`（既定）/ `gemini` |
-| `OCR_PROVIDER` | OCRエンジン。未指定かつ Gemini 利用可能時は Gemini Vision を優先。`tesseract`/`local`/`fake` で従来OCR | （未設定） |
-| `GOOGLE_GENAI_USE_VERTEXAI` | truthy で Vertex AI モード（APIキー不要。本番 Cloud Run の SA 認証で利用） | （未設定） |
+| `OCR_PROVIDER` | OCRエンジン。未指定かつ利用可能時は Vision/Gemini を優先。`tesseract`/`local`/`fake` で従来OCR | （未設定） |
+| `GOOGLE_GENAI_USE_VERTEXAI` | truthy で Vertex AI モード（APIキー不要。Cloud Run の SA 認証で利用） | （未設定） |
 | `GOOGLE_CLOUD_LOCATION` | Vertex AI のロケーション | `global` |
 | `GEMINI_MODEL` | 使用する Gemini モデル | `gemini-3.5-flash` |
-| `GEMINI_API_KEY` | API-key モード利用時のみ必要（`GOOGLE_API_KEY` でも可） | （未設定） |
+| `GEMINI_API_KEY` | API-key モード利用時のみ（`GOOGLE_API_KEY` でも可） | （未設定） |
+| `WORKER_INVOKE_TOKEN` | upload-api → backend worker 呼出の共有シークレット | （本番は `rag-worker-invoke-token`） |
 | `ATTACHMENT_RETENTION_DAYS` | 添付ファイルの保持日数（期限切れをパージ） | （未設定） |
 
-## 認証
+---
 
-このアプリは **Firebase（メール/パスワード）+ 署名付きセッションcookie** を使用します。
+## 12. 認証
 
-### 責務の分離
-- **Backend (API)**: **API 専用**であり、`/login` UI は持ちません（設計上正しい）。認証の実体として、Identity Toolkit REST (`accounts:signInWithPassword`) を用いたメール/パスワードの照合、`ALLOWED_USER_EMAILS` による許可判定、および HMAC 署名セッションcookie (`auth_token`) の発行・検証を担います。
-- **Frontend (SPA)**: 同梱の React アプリケーションが `/login` 画面および認証フローの UI を提供します。
+**Firebase（メール/パスワード）+ 署名付きセッションcookie** を使用します。
 
-ブラウザ（Frontend）は Firebase SDK を使用せず、直接 Firebase と通信することもありません。すべての認証処理は backend の `/api/auth/session` を経由してサーバーサイドで完結します。
-ログインしたメールアドレスが `ALLOWED_USER_EMAILS` に含まれている場合のみアクセスが許可されます。
+- **Backend (API)**: API 専用。Identity Toolkit REST (`accounts:signInWithPassword`) でメール/パスワードを
+  照合し、`ALLOWED_USER_EMAILS` で許可判定、HMAC 署名セッションcookie (`auth_token`) を発行・検証します。
+- **Frontend (SPA)**: `/login` 画面と認証フロー UI を提供。ブラウザは Firebase SDK を使わず、
+  すべて backend の `/api/auth/session` 経由でサーバサイド完結します。
+- ログインメールが `ALLOWED_USER_EMAILS` に含まれる場合のみアクセス許可。データは owner 単位で分離されます。
 
-## GCP デプロイ
+---
 
-Cloud Run（Backend :8000 / Frontend :8080）にデプロイできます。
+## 13. GCP デプロイ
+
+Cloud Run（backend / upload-api / frontend）にデプロイします。
 
 ### 1. Secret Manager のシークレット作成（初回のみ）
 
 ```bash
-# セッション署名シークレット
 echo -n "your-random-32+chars" | gcloud secrets create rag-auth-secret --data-file=- --project=YOUR_PROJECT_ID
-
-# 許可メールアドレス
 echo -n "you@example.com,other@example.com" | gcloud secrets create rag-allowed-emails --data-file=- --project=YOUR_PROJECT_ID
-
-# Firebase Web API key（サーバサイドREST認証用）
 echo -n "your-firebase-web-api-key" | gcloud secrets create rag-firebase-api-key --data-file=- --project=YOUR_PROJECT_ID
 
-# Cloud Run サービスアカウントへ secretAccessor 権限を付与
 gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
   --member="serviceAccount:YOUR_PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
   --role="roles/secretmanager.secretAccessor"
@@ -256,55 +323,38 @@ gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
 ### 2. デプロイ
 
 ```bash
+# スクリプト経由（Cloud Build → Cloud Run）
 GCP_PROJECT_ID=your-project-id bash scripts/deploy-cloudrun.sh
+
+# もしくは Terraform で一括プロビジョニング（推奨）
+cd infra/terraform && terraform init && terraform apply
 ```
 
-スクリプトは Cloud Build で backend / frontend をビルドし、Cloud Run にデプロイします。
-backend は `APP_ENV=production`（cookie secure 有効・起動時 seed 無効）で起動し、
-シークレットは Secret Manager から注入されます。
+backend は `APP_ENV=production`（cookie secure 有効・起動時 seed 無効）で起動し、シークレットは
+Secret Manager から注入されます。
 
 ### 3. GitHub Actions による自動デプロイ
 
-`main` への push（および `workflow_dispatch` 手動実行）をトリガーに、
-`.github/workflows/deploy-cloudrun.yml` が backend → frontend の順に
-Docker build → Artifact Registry push → Cloud Run deploy を実行します。
-認証は Workload Identity Federation（WIF）を使用し、JSON キーは使用しません
-（`permissions: contents: read` / `id-token: write`）。
+`main` への push（および `workflow_dispatch`）で `.github/workflows/deploy-cloudrun.yml` が
+backend → upload-api の順に Docker build → Artifact Registry push → Cloud Run deploy を実行します。
+認証は **Workload Identity Federation**（JSON キー不使用、`permissions: contents: read` / `id-token: write`）。
 
-#### 必要な GitHub Actions Secrets
+必要な GitHub Actions Secrets: `GCP_PROJECT_ID` / `GCP_PROJECT_NUMBER` / `GCP_REGION` /
+`GCP_WORKLOAD_IDENTITY_PROVIDER` / `GCP_SERVICE_ACCOUNT` / `ARTIFACT_REGISTRY_REPOSITORY` /
+`CLOUD_RUN_SERVICE_BACKEND` / `CLOUD_RUN_SERVICE_UPLOAD` / `CLOUD_RUN_SERVICE_FRONTEND`。
+GCP Secret Manager: `rag-auth-secret` / `rag-allowed-emails` / `rag-firebase-api-key` /
+`rag-worker-invoke-token`。
 
-リポジトリの Settings > Secrets and variables > Actions に以下を設定します。
+### データ永続化
 
-| Secret | 説明 / 値の例 |
-|---|---|
-| `GCP_PROJECT_ID` | GCP プロジェクト ID |
-| `GCP_PROJECT_NUMBER` | GCP プロジェクト番号（Cloud Run URL / WIF 用） |
-| `GCP_REGION` | `asia-northeast1` |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | WIF プロバイダのリソースパス |
-| `GCP_SERVICE_ACCOUNT` | デプロイ用サービスアカウント email |
-| `ARTIFACT_REGISTRY_REPOSITORY` | Artifact Registry リポジトリ名（例: `toddler-rag-registry`） |
-| `CLOUD_RUN_SERVICE_BACKEND` | `toddler-private-rag-backend` |
-| `CLOUD_RUN_SERVICE_FRONTEND` | `toddler-private-rag-frontend` |
+ローカルは SQLite + ローカルファイルが既定。Cloud Run はステートレスのため、本番は
+`DATABASE_TYPE=firestore`（メタデータ）+ `STORAGE_BACKEND=gcs` + `GCS_BUCKET_NAME`（添付）を使用します。
 
-#### 必要な GCP Secret Manager シークレット（GitHub Secrets ではない）
+---
 
-backend のデプロイ時に `--set-secrets` で注入されます。上記「1. Secret Manager の
-シークレット作成」で作成済みであることが前提です。
+## 14. プライバシー・セキュリティ
 
-- `rag-auth-secret`（`AUTH_SECRET`）
-- `rag-allowed-emails`（`ALLOWED_USER_EMAILS`）
-- `rag-firebase-api-key`（`FIREBASE_API_KEY`）
-
-### データ永続化について
-
-ローカルでは SQLite + ローカルファイル保存が既定です。Cloud Run はステートレスなため、
-本番の永続化には `DATABASE_TYPE=firestore`（メタデータ）と `STORAGE_BACKEND=gcs` +
-`GCS_BUCKET_NAME`（添付ファイル）を使用します。
-
-## プライバシー・セキュリティ
-
-- 保育園資料・個人メモなどのプライベートデータを外部に送信しないこと。
-- 外部 LLM API（`gemini` プロバイダ等）を使用する場合はデータ送信範囲を確認すること。
-- 実データなしでもデプロイ準備状態を確認できます（空の状態でも起動可能）。
-- 本番環境（`APP_ENV=production`）では、起動時のサンプルデータ投入（seed）は行われません。
-- 実際の `.env` は Git 管理対象外（`.gitignore` 設定済み）。個人情報・保育園資料はコードに直書きしないこと。
+- 保育園資料・個人メモなどのプライベートデータを扱う前提で、認証・Secret 管理・owner 単位のデータ分離を設計。
+- 外部 LLM API（`gemini` プロバイダ等）使用時はデータ送信範囲を確認すること。
+- 実データなしでもデプロイ準備状態を確認可能（空状態で起動可）。本番（`APP_ENV=production`）では seed を行いません。
+- 実際の `.env` は Git 管理対象外（`.gitignore` 済み）。個人情報・保育園資料はコードに直書きしないこと。
