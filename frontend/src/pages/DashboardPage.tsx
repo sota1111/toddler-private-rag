@@ -154,7 +154,7 @@ const ProactiveReminders: React.FC = () => {
       <div className="bg-surface rounded-2xl shadow-card overflow-hidden mb-6">
         <div className="bg-rose-50 text-rose-700 flex items-center gap-2 px-4 py-3 font-bold">
           <span aria-hidden className="text-lg">🔔</span>
-          <span>{t('reminder.title')}</span>
+          <span className="whitespace-nowrap">{t('reminder.title')}</span>
         </div>
         <div className="p-4"><p className="text-muted-foreground">{t('common.loading')}</p></div>
       </div>
@@ -167,7 +167,7 @@ const ProactiveReminders: React.FC = () => {
     <div className="bg-surface rounded-2xl shadow-card overflow-hidden mb-6 ring-1 ring-rose-100">
       <div className="bg-rose-50 text-rose-700 flex items-center gap-2 px-4 py-3 font-bold">
         <span aria-hidden className="text-lg">🔔</span>
-        <span>{t('reminder.title')}</span>
+        <span className="whitespace-nowrap">{t('reminder.title')}</span>
         <span className="ml-auto text-xs font-normal text-rose-500">{t('reminder.subtitle')}</span>
       </div>
       <div className="p-4">
