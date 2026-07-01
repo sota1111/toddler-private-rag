@@ -19,6 +19,21 @@ const SettingsPage: React.FC = () => {
   const [deleting, setDeleting] = React.useState(false);
   const [result, setResult] = React.useState<{ ok: boolean; message: string } | null>(null);
 
+  // SOT-1436: 市町村「登録」ボタン押下時の確認メッセージ。
+  const [municipalityRegistered, setMunicipalityRegistered] = React.useState(false);
+
+  const handleRegisterMunicipality = React.useCallback(() => {
+    // 値は onChange で自動保存済みだが、明示的に保存を確定して確認メッセージを出す。
+    setMunicipality(municipality);
+    setMunicipalityRegistered(true);
+  }, [municipality, setMunicipality]);
+
+  React.useEffect(() => {
+    if (!municipalityRegistered) return;
+    const id = window.setTimeout(() => setMunicipalityRegistered(false), 2500);
+    return () => window.clearTimeout(id);
+  }, [municipalityRegistered]);
+
   // SOT-1368: お子さまの登録・管理。
   const [children, setChildren] = React.useState<Child[]>([]);
   const [newChildName, setNewChildName] = React.useState('');
@@ -129,14 +144,29 @@ const SettingsPage: React.FC = () => {
           <label className="block text-sm font-semibold text-foreground mb-2">
             {t('settings.municipality')}
           </label>
-          <input
-            type="text"
-            aria-label={t('settings.municipality')}
-            value={municipality}
-            onChange={(e) => setMunicipality(e.target.value)}
-            placeholder={t('settings.municipalityPlaceholder')}
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40"
-          />
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              aria-label={t('settings.municipality')}
+              value={municipality}
+              onChange={(e) => {
+                setMunicipality(e.target.value);
+                setMunicipalityRegistered(false);
+              }}
+              placeholder={t('settings.municipalityPlaceholder')}
+              className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40"
+            />
+            <button
+              type="button"
+              onClick={handleRegisterMunicipality}
+              className="shrink-0 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-strong focus:outline-none focus:ring-2 focus:ring-brand/40"
+            >
+              {t('settings.municipalityRegister')}
+            </button>
+          </div>
+          {municipalityRegistered && (
+            <p className="mt-2 text-sm text-brand-strong">{t('settings.municipalityRegistered')}</p>
+          )}
         </div>
       </div>
 
