@@ -57,13 +57,40 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({ items, isLoading, namespa
   // SOT-1428: お気に入りトグル。やることリスト(namespace='tasks')の行にのみ星ボタンを出す。
   // 更新後はやることリスト(['info',...])と掲示板(today/tomorrow/weekly/nextWeek)を再取得する。
   const queryClient = useQueryClient();
+  // SOT-1430: タップ→黄色までのラグ解消のため楽観的更新を行う。星の黄色表示は is_favorite に
+  // 束縛されており、従来は onSuccess の再取得完了後にしか反映されなかった。onMutate でキャッシュを
+  // 即時反映し、失敗時は onError でロールバック、onSettled でサーバ値へ再同期する。
+  const FAVORITE_QUERY_KEYS = [['info'], ['today'], ['tomorrow'], ['weekly'], ['nextWeek']];
   const favoriteMutation = useMutation({
     mutationFn: ({ id, value }: { id: number | string; value: boolean }) =>
       updateInfo(id, { is_favorite: value }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['info'] });
-      ['today', 'tomorrow', 'weekly', 'nextWeek'].forEach((k) =>
-        queryClient.invalidateQueries({ queryKey: [k] }));
+    onMutate: async ({ id, value }: { id: number | string; value: boolean }) => {
+      // 楽観的更新の間は進行中の再取得を止め、上書きが巻き戻されないようにする。
+      await Promise.all(
+        FAVORITE_QUERY_KEYS.map((queryKey) => queryClient.cancelQueries({ queryKey })),
+      );
+      const patch = (old: unknown): unknown => {
+        const flip = (it: NurseryInfo) =>
+          String(it.id) === String(id) ? { ...it, is_favorite: value } : it;
+        if (Array.isArray(old)) return (old as NurseryInfo[]).map(flip);
+        if (old && typeof old === 'object' && 'id' in (old as NurseryInfo))
+          return flip(old as NurseryInfo);
+        return old;
+      };
+      // 触れる全キャッシュをスナップショットしてから楽観的に書き換える。
+      const snapshots = FAVORITE_QUERY_KEYS.flatMap((queryKey) => {
+        const entries = queryClient.getQueriesData({ queryKey });
+        queryClient.setQueriesData({ queryKey }, patch);
+        return entries;
+      });
+      return { snapshots };
+    },
+    onError: (_err, _vars, context) => {
+      // 失敗時は全スナップショットを元のキーへ復元（星を元の状態に戻す）。
+      context?.snapshots.forEach(([queryKey, data]) => queryClient.setQueryData(queryKey, data));
+    },
+    onSettled: () => {
+      FAVORITE_QUERY_KEYS.forEach((queryKey) => queryClient.invalidateQueries({ queryKey }));
     },
   });
   const showFavorite = namespace === 'tasks';
@@ -147,11 +174,10 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({ items, isLoading, namespa
                             e.stopPropagation();
                             favoriteMutation.mutate({ id: item.id, value: !item.is_favorite });
                           }}
-                          disabled={favoriteMutation.isPending}
                           aria-pressed={!!item.is_favorite}
                           aria-label={t(item.is_favorite ? 'favorite.remove' : 'favorite.add')}
                           title={t(item.is_favorite ? 'favorite.remove' : 'favorite.add')}
-                          className="flex-shrink-0 rounded-full p-0.5 transition-colors hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand/40 disabled:opacity-50"
+                          className="flex-shrink-0 rounded-full p-0.5 transition-colors hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand/40"
                         >
                           <FavoriteStar filled={!!item.is_favorite} />
                         </button>
