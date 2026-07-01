@@ -1,51 +1,39 @@
-# Worker Report (SOT-1424, 2nd run — task check)
-
-## Fallback Disclosure (audit)
-- Non-responsive worker: Codex CLI.
-- Detected failure mode: `scripts/ai/run_codex.sh` exited `75` (CODEX_COOLDOWN_ACTIVE —
-  usage limit until epoch 1798924200). Non-response per Worker Non-Response Fallback Policy.
-- Action: Claude Code performed this task check (read-only diagnosis) directly.
+# Worker Report
 
 ## Summary
-SOT-1424 was reopened by the human after PR#248 (calendar-week boundary fix). New feedback:
-「違う。漏れている予定がある。一部の予定は掲示板に載っているのに、一部の予定は載ってない。」
-The 1st-run fix (calendar boundaries) was not the full root cause. Diagnosis confirmed:
+SOT-1456 is actionable. Linear shows status `In Progress`, no labels, no blocking relations, and the requirement is clear: write Findy DevOps AI Agent Hackathon submission text grounded in the app's real architecture and judging criteria.
 
-The board's 今週の予定 / 来週の予定 sections show **only `info_type == "行事"`**, while the
-今日 / 明日 sections are inclusive of any `info_type` (by `date`/`event_date`/`due_date`).
-Decomposed tasks of other categories (`持ち物`/`提出物`/etc.) get an `event_date` populated
-(`extraction.py:652` `event_iso = normalize_date(...)` for ANY category) but keep their
-non-`行事` `info_type`. Such items appear in today/tomorrow but are dropped from the weekly /
-next-week board — exactly "some schedules show, others don't."
+## Changed Files
+- none (read-only task check; only this report file was written as requested)
 
-## Evidence
-- `backend/app/repository.py:253-262` (Sqlite `list_weekly`) and `:264-275` (`list_next_week`):
-  filter `models.NurseryInfo.info_type == "行事"` AND `event_date` in range.
-- `backend/app/repository.py:721-748` / `:750-777` (Firestore): `.where("info_type","==","行事")`
-  + app-side `event_date` range filter.
-- `backend/app/repository.py:231-251` (`list_today`/`list_tomorrow`): NO `info_type` restriction
-  (match `date`/`event_date`/`due_date`; tomorrow also `持ち物` by `date`). → asymmetry.
-- `backend/app/extraction.py:647-679` (`_task_to_draft`): `event_iso` set for any category;
-  `info_type` only `行事` when category == "events".
-- `frontend/src/pages/DashboardPage.tsx:171-172,212-242`: `tasksOnly` (attachments.length===0)
-  applied to all four sections; legitimate decomposed week items have no attachment so this is
-  not the cause, but confirms only attachment-free task records reach the board.
+## Commands Run
+- `pwd && rg --files -g 'README.md' -g 'infra/terraform/**' -g 'backend/app/**' -g 'frontend/**' -g '.github/workflows/**' -g 'docs/**'`
+- Linear MCP `get_issue` for `SOT-1456`
+- `rg -n "Cloud Run|google_cloud_run|run.googleapis|...|FastAPI" README.md infra/terraform backend/app frontend/src frontend/package.json frontend/Dockerfile frontend/vite.config.ts .github/workflows -g '!frontend/node_modules/**' -g '!frontend/dist/**' -g '!**/__pycache__/**'`
+- `rg -n "^resource \"google_|^data \"google_|google_cloud_run_v2_service|google_monitoring|..." infra/terraform`
+- `rg -n "submission_agent|submit|ocr|structure|task|deadline|ground|research|rag|Gemini|Vision|Vertex|generate|worker|reminder" backend/app frontend/src -g '!**/__pycache__/**'`
+- `rg --files .github/workflows infra/terraform backend frontend -g '!frontend/node_modules/**' -g '!frontend/dist/**' -g '!**/__pycache__/**'`
+- `nl -ba` reads for `README.md`, `infra/terraform/*.tf`, `.github/workflows/*.yml`, `backend/app/ai_client.py`, `backend/app/ocr.py`, `backend/app/submission_agent.py`, `backend/app/extraction.py`, `backend/app/routers/attachments.py`, `backend/app/routers/info.py`, `backend/app/rag/providers.py`, `backend/requirements.txt`, `frontend/package.json`, Dockerfiles
+- `find infra/terraform -maxdepth 1 -type f -name '*.tf' | wc -l`
+- `rg -c '^resource "google_' infra/terraform/*.tf | awk -F: '{s+=$2} END {print s}'`
 
-## Issue State
-- Status: In Progress (was reopened Todo → moved to In Progress by this run).
-- Labels: none. Priority: No priority. Project: toddler-private-rag.
-- Latest comment: human reopen feedback (see Summary).
-- Actionable: YES — single-file backend FIX in `backend/app/repository.py` (both backends),
-  with a regression test in `backend/tests/test_dashboard_views.py`.
+## Facts For Submission (ground truth)
+- Google Cloud compute: Cloud Run. Terraform defines `google_cloud_run_v2_service.backend` and `google_cloud_run_v2_service.frontend` in `infra/terraform/cloud_run.tf:15` and `infra/terraform/cloud_run.tf:135`, plus `google_cloud_run_v2_service.upload` in `infra/terraform/cloud_run_upload.tf:8`. CI/CD deploys backend, upload-api, and frontend to Cloud Run in `.github/workflows/deploy-cloudrun.yml:51`, `.github/workflows/deploy-cloudrun.yml:91`, and `.github/workflows/deploy-cloudrun.yml:136`. README says Cloud Run is the required app execution product at `README.md:133` and shows the architecture at `README.md:151`.
+- Google Cloud AI: Vertex AI Gemini via `google-genai`, Cloud Vision AI OCR, Gemini Vision fallback, and Google Search grounding. `backend/app/ai_client.py:1` describes the Gemini / Vertex AI client; `backend/app/ai_client.py:29` reads `GOOGLE_GENAI_USE_VERTEXAI`; `backend/app/ai_client.py:85` constructs `genai.Client(vertexai=True, project=..., location=...)`; Terraform sets `GOOGLE_GENAI_USE_VERTEXAI=true` for backend in `infra/terraform/cloud_run.tf:50`; deploy workflow also sets it in `.github/workflows/deploy-cloudrun.yml:67`. Cloud Vision OCR is implemented in `backend/app/ocr.py:81` and `backend/app/ocr.py:106`, calling `vision.ImageAnnotatorClient()` and `document_text_detection()` at `backend/app/ocr.py:136`. Gemini Vision OCR fallback is in `backend/app/ocr.py:178`. Google Search grounding is configured through `types.Tool(google_search=types.GoogleSearch())` in `backend/app/ai_client.py:132`, and used through `generate_grounded_with_sources()` in `backend/app/ai_client.py:185`; `submission_agent` calls it at `backend/app/submission_agent.py:320`.
+- Core AI-agent behavior: The app is not just chat; it runs an autonomous submission-preparation pipeline. README summarizes OCR -> structure -> official-procedure research -> deadline-backcalc task generation at `README.md:3` and `README.md:40`. `backend/app/routers/attachments.py:29` starts `process_ocr`; it runs OCR at `backend/app/routers/attachments.py:47`, builds structured extraction at `backend/app/routers/attachments.py:51`, redacts PII and stores OCR at `backend/app/routers/attachments.py:53`, then promotes processing drafts at `backend/app/routers/attachments.py:82`. Draft promotion splits OCR output into parent registration plus task drafts via `extraction.build_draft_fields` and `extraction.build_task_drafts` at `backend/app/routers/attachments.py:134`. If a task needs deadline investigation, it automatically calls `submission_agent.build_submission_task_drafts()` at `backend/app/routers/attachments.py:189`. `submission_agent.py` documents the agent at `backend/app/submission_agent.py:1`: extract required submission documents from OCR text, research official steps / issuer / lead time with Search grounding, and generate preparation task drafts by back-calculating from deadlines. It extracts submission documents at `backend/app/submission_agent.py:356`, enriches each document with grounded research at `backend/app/submission_agent.py:295`, computes step deadlines backward from final due dates at `backend/app/submission_agent.py:494`, and returns draft tasks at `backend/app/submission_agent.py:619`.
+- APIs/tools/frameworks: Frontend is React 19, TypeScript, Vite, Tailwind CSS, TanStack Query, React Router, Axios from `frontend/package.json:13` and dev tooling from `frontend/package.json:20`. Backend is FastAPI, Uvicorn, SQLAlchemy, Pydantic from `backend/requirements.txt:1`; local SQLite is configured in `backend/app/database.py:5`; production Firestore is selected through Cloud Run env `DATABASE_TYPE=firestore` in `infra/terraform/cloud_run.tf:66` and upload service at `infra/terraform/cloud_run_upload.tf:43`. Google Cloud libraries include Cloud Storage, Firestore, Vision, and `google-genai` at `backend/requirements.txt:13`. Storage supports local and GCS; GCS client usage is in `backend/app/storage.py:78`. RAG uses provider abstraction with fake/offline or Gemini providers in `backend/app/rag/providers.py:1`, Gemini embeddings at `backend/app/rag/providers.py:119`, and Gemini answer generation at `backend/app/rag/providers.py:147`; `/info/ask` retrieves OCR-grounded contexts and answers with sources in `backend/app/routers/info.py:125`. Containers are Dockerized: backend Uvicorn in `backend/Dockerfile:16`, upload functions-framework wrapper in `backend/upload_function/Dockerfile:1`, and frontend nginx build in `frontend/Dockerfile:1`.
+- DevOps signals: Terraform has 16 `.tf` files under `infra/terraform` and 31 `resource "google_*"` declarations from the grep count. It enables required APIs including Run, Artifact Registry, Storage, Firestore, AI Platform, Cloud Build, Scheduler, Pub/Sub, and Monitoring in `infra/terraform/apis.tf:4`. Cloud Run services are in `infra/terraform/cloud_run.tf` and `infra/terraform/cloud_run_upload.tf`; Artifact Registry in `infra/terraform/artifact_registry.tf:1`; Firestore in `infra/terraform/firestore.tf:5`; Cloud Storage in `infra/terraform/storage.tf:1`; Pub/Sub/GCS finalize event routing in `infra/terraform/pubsub.tf:1`; Cloud Scheduler orphan cleanup in `infra/terraform/scheduler.tf:13`; Workload Identity Federation in `infra/terraform/wif.tf:1`; Cloud Monitoring 5xx and p99 latency alert policies in `infra/terraform/monitoring.tf:28` and `infra/terraform/monitoring.tf:66`. CI runs backend pytest and frontend lint/build/e2e in `.github/workflows/ci.yml:10` and `.github/workflows/ci.yml:44`. CD authenticates to Google Cloud with Workload Identity Federation in `.github/workflows/deploy-cloudrun.yml:19`, builds/pushes Docker images to Artifact Registry at `.github/workflows/deploy-cloudrun.yml:38`, `.github/workflows/deploy-cloudrun.yml:78`, `.github/workflows/deploy-cloudrun.yml:123`, and deploys to Cloud Run as noted above.
 
 ## Acceptance Criteria
-- [x] Diagnosis confirmed with file:line evidence
-- [x] Actionable as a focused FIX (no decomposition needed)
+- [x] Issue is actionable
+- [x] Ground-truth stack facts gathered for truthful submission text
 
 ## Risks
-- Broadening the week sections to all `info_type` may surface 持ち物/提出物 items that were
-  previously hidden there — this is the intended behavior per the complaint and matches the
-  inclusiveness of today/tomorrow.
+- README has placeholders for live demo and video URLs: `README.md:11` and `README.md:12`. Do not claim a public demo URL or video exists unless the human supplies them.
+- README says "Cloud Run x2" in one table at `README.md:133` / `README.md:204`, but Terraform and deploy workflow currently show three Cloud Run services: backend, upload-api, frontend. For submission text, say "Cloud Run services for backend, upload-api, and frontend" to avoid ambiguity.
+- Cloud Build is enabled as an API and README mentions it, but the deploy workflow shown here uses GitHub Actions Docker build/push plus `gcloud run deploy`, not a Cloud Build trigger. Avoid claiming Cloud Build trigger automation unless verified elsewhere.
+- Terraform `infra/terraform/README.md` includes import-only cautions for existing live resources. This verifies IaC definitions and deployment workflow, not that `terraform apply` was run during this task.
+- I did not run tests or query live Google Cloud. Any claims about current production health, exact deployed URL, current monitoring incidents, or live traffic are not verified by this check.
 
 ## Next Action
 READY_FOR_REVIEW
