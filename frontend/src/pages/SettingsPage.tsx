@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useI18n } from '../i18n/useI18n';
 import { useSettings } from '../settings/useSettings';
 import { TIMEZONE_OPTIONS } from '../settings/settingsContextValue';
@@ -74,8 +75,18 @@ const SettingsPage: React.FC = () => {
 
   return (
     <div className="w-full lg:max-w-2xl lg:mx-auto">
-      <h1 className="text-2xl font-bold mb-1 text-foreground">{t('settings.title')}</h1>
-      <p className="text-sm text-muted-foreground mb-6">{t('settings.subtitle')}</p>
+      <div className="flex items-start justify-between gap-3 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold mb-1 text-foreground">{t('settings.title')}</h1>
+          <p className="text-sm text-muted-foreground">{t('settings.subtitle')}</p>
+        </div>
+        <Link
+          to="/howto"
+          className="flex-shrink-0 inline-flex items-center gap-1 rounded-lg border border-brand/40 px-3 py-2 text-sm font-semibold text-brand-strong hover:bg-brand/10"
+        >
+          {t('settings.howtoButton')}
+        </Link>
+      </div>
 
       <div className="bg-surface rounded-2xl shadow-card p-4 sm:p-6 space-y-6">
         {/* 言語 */}
