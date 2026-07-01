@@ -17,6 +17,7 @@ export interface MockRecord {
   priority: string
   tags?: string
   memo?: string
+  child_id?: string
   registration_state?: string
   created_at: string
   updated_at: string
@@ -111,17 +112,28 @@ function json(route: Route, status: number, body: unknown) {
   })
 }
 
+// SOT-1435: 使い方スクショ用に、子ども（お子さまの登録）をシードできるようにする。
+export interface MockChild {
+  id: number | string
+  name: string
+  created_at: string
+}
+
 export interface MockApiOptions {
   authed?: boolean
   records?: MockRecord[]
+  children?: MockChild[]
 }
 
 // `/api/**` をすべてモックする。戻り値のストアを使ってテスト側でアサートできる。
 export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
   const authed = opts.authed ?? true
   const store: MockRecord[] = opts.records ?? defaultRecords()
+  // SOT-1435: 子どもストア。既定は空配列（従来どおり「お子さま未登録」）で、既存スペックの挙動は不変。
+  const childStore: MockChild[] = opts.children ?? []
   let nextId = Math.max(0, ...store.map(r => r.id)) + 1
   let nextAttId = 1000
+  let nextChildId = Math.max(0, ...childStore.map(c => Number(c.id) || 0)) + 1
 
   await page.route('**/api/**', async route => {
     const req = route.request()
@@ -131,6 +143,27 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
     // --- 認証 ---
     if (path === '/auth/me') return json(route, authed ? 200 : 401, {})
     if (path === '/auth/session' || path === '/auth/logout') return json(route, 200, {})
+
+    // --- 子ども（お子さまの登録, SOT-1368 / SOT-1435） ---
+    if (path === '/children' || path === '/children/') {
+      if (method === 'GET') return json(route, 200, childStore)
+      if (method === 'POST') {
+        const data = JSON.parse(req.postData() || '{}')
+        const child: MockChild = {
+          id: nextChildId++,
+          name: (data.name ?? '').trim(),
+          created_at: NOW,
+        }
+        childStore.push(child)
+        return json(route, 200, child)
+      }
+    }
+    const childIdMatch = path.match(/^\/children\/(\w+)$/)
+    if (childIdMatch && method === 'DELETE') {
+      const idx = childStore.findIndex(c => String(c.id) === childIdMatch[1])
+      if (idx !== -1) childStore.splice(idx, 1)
+      return json(route, 200, { deleted: true })
+    }
 
     // --- 添付 ---
     const fileMatch = path.match(/^\/attachments\/(\d+)\/file$/)
