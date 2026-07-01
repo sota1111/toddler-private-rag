@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Cookie, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from ..identity import owner_id_for_email, DEFAULT_OWNER_ID  # noqa: F401 (re-exported)
+
 router = APIRouter()
 
 _APP_NAME = "toddler-private-rag"
@@ -25,26 +27,43 @@ class SessionRequest(BaseModel):
     password: str
 
 
-def _compute_token(secret: str) -> str:
+def _sign(owner_id: str, secret: str) -> str:
+    """owner_id を AUTH_SECRET で HMAC 署名する（SOT-1431）。cookie 改竄防止。"""
     return hmac.new(
-        secret.encode(), f"{_APP_NAME}-auth".encode(), hashlib.sha256
+        secret.encode(), f"{_APP_NAME}-auth:{owner_id}".encode(), hashlib.sha256
     ).hexdigest()
 
 
+def _build_session_token(owner_id: str, secret: str) -> str:
+    """署名付きセッショントークン `<owner_id>.<sig>` を組み立てる（SOT-1431）。"""
+    return f"{owner_id}.{_sign(owner_id, secret)}"
+
+
 def get_current_user(auth_token: str = Cookie(None)) -> str:
+    """署名付きセッションから owner_id を復元して返す（SOT-1431）。
+
+    cookie は `<owner_id>.<hmac署名>`。署名を検証し、一致した owner_id を返す。
+    これによりログイン中のユーザーをサーバ側で一意に識別し、データを owner で分離する。
+    """
     auth_secret = os.getenv("AUTH_SECRET")
     if not auth_secret or not auth_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
         )
-    expected = _compute_token(auth_secret)
-    if not hmac.compare_digest(auth_token, expected):
+    owner_id, _, signature = auth_token.rpartition(".")
+    if not owner_id or not signature:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid session",
         )
-    return "authenticated"
+    expected = _sign(owner_id, auth_secret)
+    if not hmac.compare_digest(signature, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session",
+        )
+    return owner_id
 
 
 def _verify_with_firebase(email: str, password: str, api_key: str) -> str:
@@ -117,7 +136,8 @@ def create_session(request: SessionRequest):
             detail="このメールアドレスは許可されていません",
         )
 
-    token = _compute_token(auth_secret)
+    # SOT-1431: 検証済みメールから安定した owner_id を導出し、署名付きセッションに格納する。
+    token = _build_session_token(owner_id_for_email(email), auth_secret)
     is_production = os.getenv("APP_ENV", "local") == "production"
 
     response = JSONResponse(content={"success": True, "email": email})

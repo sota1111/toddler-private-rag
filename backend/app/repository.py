@@ -9,8 +9,32 @@ from sqlalchemy import or_
 from fastapi import Depends
 
 from . import models, schemas, database, clock
+from .identity import DEFAULT_OWNER_ID
 
 logger = logging.getLogger(__name__)
+
+
+# --- SOT-1431: マルチテナント owner 絞り込みヘルパー ---
+
+def _normalize_owner(owner_id) -> Optional[str]:
+    """コンストラクタに渡された owner_id を正規化する。
+
+    FastAPI の未解決 Depends センチネルや非文字列が渡ってきた場合は None (=無絞り/system) に倒す。
+    これにより、テストや背景タスクがリポジトリを直接構築しても後方互換で全件が見える。
+    """
+    return owner_id if isinstance(owner_id, str) else None
+
+
+def _sqlite_owner_filter(model, owner_id: str):
+    """owner_id 所有行にマッチする SQLAlchemy 条件。NULL は既定 owner(主ユーザー)扱い。"""
+    if owner_id == DEFAULT_OWNER_ID:
+        return or_(model.owner_id == owner_id, model.owner_id.is_(None))
+    return model.owner_id == owner_id
+
+
+def _owner_of(data: dict) -> str:
+    """Firestore ドキュメントの実効 owner。未設定(NULL)は既定 owner 扱い。"""
+    return data.get("owner_id") or DEFAULT_OWNER_ID
 
 
 def _calendar_week_bounds(today: datetime.date) -> Tuple[datetime.date, datetime.date, datetime.date]:
@@ -181,23 +205,39 @@ def _sqlite_registered_only():
 
 
 class SqliteInfoRepository(InfoRepository):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, owner_id: Optional[str] = None):
         self.db = db
+        # SOT-1431: owner_id None = 無絞り(system/背景タスク/直接構築の単体テスト)。
+        self.owner_id = _normalize_owner(owner_id)
+
+    def _scoped(self, query):
+        """SOT-1431: owner が設定されていれば owner 絞り込みを適用する。"""
+        if self.owner_id is not None:
+            query = query.filter(_sqlite_owner_filter(models.NurseryInfo, self.owner_id))
+        return query
 
     def create(self, data: schemas.NurseryInfoCreate) -> models.NurseryInfo:
-        db_info = models.NurseryInfo(**data.model_dump())
+        payload = data.model_dump()
+        # SOT-1431: リクエスト経路では current user の owner を強制する(ボディのなりすまし無効化)。
+        # 背景経路(owner None)ではスキーマ由来の owner_id(親写真から継承)をそのまま使う。
+        if self.owner_id is not None:
+            payload["owner_id"] = self.owner_id
+        db_info = models.NurseryInfo(**payload)
         self.db.add(db_info)
         self.db.commit()
         self.db.refresh(db_info)
         return db_info
 
     def get(self, id: Union[int, str]) -> Optional[models.NurseryInfo]:
-        return self.db.query(models.NurseryInfo).filter(models.NurseryInfo.id == int(id)).first()
+        # SOT-1431: owner スコープ付き get。他 owner の ID を指定しても None を返す
+        # （update/delete/finalize/list_attachments_for_info は self.get を経由するため一律に保護される）。
+        query = self.db.query(models.NurseryInfo).filter(models.NurseryInfo.id == int(id))
+        return self._scoped(query).first()
 
     def list(self, q: Optional[str] = None, info_type: Optional[str] = None,
              status: Optional[str] = None, priority: Optional[str] = None,
              tag: Optional[str] = None, include_attachments: bool = True) -> List[models.NurseryInfo]:
-        query = self.db.query(models.NurseryInfo).filter(_sqlite_registered_only())
+        query = self._scoped(self.db.query(models.NurseryInfo).filter(_sqlite_registered_only()))
 
         if q:
             search = f"%{q}%"
@@ -232,24 +272,24 @@ class SqliteInfoRepository(InfoRepository):
     def list_today(self) -> List[models.NurseryInfo]:
         # 今日やること: 本日が日付/行事日/提出期限のいずれかに該当する情報 (SOT-1093)
         today = clock.today()
-        return self.db.query(models.NurseryInfo).filter(
+        return self._scoped(self.db.query(models.NurseryInfo).filter(
             _sqlite_registered_only(),
             or_(
                 models.NurseryInfo.date == today,
                 models.NurseryInfo.event_date == today,
                 models.NurseryInfo.due_date == today,
             )
-        ).all()
+        )).all()
 
     def list_tomorrow(self) -> List[models.NurseryInfo]:
         tomorrow = clock.today() + datetime.timedelta(days=1)
-        return self.db.query(models.NurseryInfo).filter(
+        return self._scoped(self.db.query(models.NurseryInfo).filter(
             _sqlite_registered_only(),
             or_(
                 models.NurseryInfo.event_date == tomorrow,
                 (models.NurseryInfo.info_type == "持ち物") & (models.NurseryInfo.date == tomorrow)
             )
-        ).all()
+        )).all()
 
     def list_weekly(self) -> List[models.NurseryInfo]:
         # 今週の予定 (SOT-1424): 本日から今週末(日曜)までのカレンダー週に event_date を持つ予定。
@@ -258,11 +298,11 @@ class SqliteInfoRepository(InfoRepository):
         # 一部は載らない」状態になっていた。今日/明日の枠と同じく種別を問わず日付で集計する。
         today = clock.today()
         this_week_end, _, _ = _calendar_week_bounds(today)
-        return self.db.query(models.NurseryInfo).filter(
+        return self._scoped(self.db.query(models.NurseryInfo).filter(
             _sqlite_registered_only(),
             models.NurseryInfo.event_date >= today,
             models.NurseryInfo.event_date <= this_week_end
-        ).order_by(models.NurseryInfo.event_date.asc()).all()
+        )).order_by(models.NurseryInfo.event_date.asc()).all()
 
     def list_next_week(self) -> List[models.NurseryInfo]:
         # 来週の予定 (SOT-1296 / SOT-1424): 翌カレンダー週(月〜日)に event_date を持つ予定。
@@ -271,30 +311,30 @@ class SqliteInfoRepository(InfoRepository):
         # また種別(info_type)では絞らない(list_weekly と同じ理由)。
         today = clock.today()
         _, next_week_start, next_week_end = _calendar_week_bounds(today)
-        return self.db.query(models.NurseryInfo).filter(
+        return self._scoped(self.db.query(models.NurseryInfo).filter(
             _sqlite_registered_only(),
             models.NurseryInfo.event_date >= next_week_start,
             models.NurseryInfo.event_date <= next_week_end
-        ).order_by(models.NurseryInfo.event_date.asc()).all()
+        )).order_by(models.NurseryInfo.event_date.asc()).all()
 
     def list_pending(self) -> List[models.NurseryInfo]:
         # 未対応のタスク: 提出物に限らず全カテゴリ横断で status=="未対応" (SOT-1093)
-        return self.db.query(models.NurseryInfo).filter(
+        return self._scoped(self.db.query(models.NurseryInfo).filter(
             _sqlite_registered_only(),
             models.NurseryInfo.status == "未対応"
-        ).all()
+        )).all()
 
     def list_drafts(self) -> List[models.NurseryInfo]:
         # 仮登録(draft)のみ。新しい順で返す。
-        return self.db.query(models.NurseryInfo).filter(
+        return self._scoped(self.db.query(models.NurseryInfo).filter(
             models.NurseryInfo.registration_state == "draft"
-        ).order_by(models.NurseryInfo.created_at.desc()).all()
+        )).order_by(models.NurseryInfo.created_at.desc()).all()
 
     def count_processing(self) -> int:
         # SOT-1380: 文字起こし中(processing)の件数。仮登録画面のインジケータ用。
-        return self.db.query(models.NurseryInfo).filter(
+        return self._scoped(self.db.query(models.NurseryInfo).filter(
             models.NurseryInfo.registration_state == "processing"
-        ).count()
+        )).count()
 
     def finalize(self, id: Union[int, str]) -> Optional[models.NurseryInfo]:
         db_info = self.get(id)
@@ -321,9 +361,9 @@ class SqliteInfoRepository(InfoRepository):
     def list_by_deadline_group(self, group_id: str) -> List[models.NurseryInfo]:
         if not group_id:
             return []
-        return self.db.query(models.NurseryInfo).filter(
+        return self._scoped(self.db.query(models.NurseryInfo).filter(
             models.NurseryInfo.deadline_group_id == group_id
-        ).all()
+        )).all()
 
     def list_attachments_for_info(self, id: Union[int, str]) -> List[models.Attachment]:
         db_info = self.get(id)
@@ -341,13 +381,20 @@ class SqliteInfoRepository(InfoRepository):
         return True
 
     def delete_all(self) -> Tuple[int, List[str]]:
-        # blob 削除用に全 attachment の object_key を先に集める
+        # SOT-1431: owner が設定されていれば、その owner のデータ(と写真)のみを削除する。
+        # 「全データ削除」ボタンは押したユーザー自身のデータだけを消す。
+        # blob 削除用に対象 attachment の object_key を先に集める。
         object_keys: List[str] = []
-        for att in self.db.query(models.Attachment).all():
+        att_query = self.db.query(models.Attachment)
+        if self.owner_id is not None:
+            att_query = att_query.join(
+                models.NurseryInfo, models.Attachment.info_id == models.NurseryInfo.id
+            ).filter(_sqlite_owner_filter(models.NurseryInfo, self.owner_id))
+        for att in att_query.all():
             key = att.object_key or att.stored_filename
             if key:
                 object_keys.append(key)
-        infos = self.db.query(models.NurseryInfo).all()
+        infos = self._scoped(self.db.query(models.NurseryInfo)).all()
         count = len(infos)
         for info in infos:
             # relationship cascade="all, delete-orphan" で attachment も削除される
@@ -357,11 +404,18 @@ class SqliteInfoRepository(InfoRepository):
 
 
 class SqliteAttachmentRepository(AttachmentRepository):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, owner_id: Optional[str] = None):
         self.db = db
+        # SOT-1431: owner None = 無絞り(背景OCRタスク/直接構築の単体テスト)。
+        self.owner_id = _normalize_owner(owner_id)
 
     def info_exists(self, info_id: Union[int, str]) -> bool:
-        return self.db.query(models.NurseryInfo).filter(models.NurseryInfo.id == int(info_id)).first() is not None
+        # SOT-1431: owner が設定されていれば、その owner の info だけを存在扱いにする
+        # （他 owner の info への添付アップロードを防ぐ）。
+        query = self.db.query(models.NurseryInfo).filter(models.NurseryInfo.id == int(info_id))
+        if self.owner_id is not None:
+            query = query.filter(_sqlite_owner_filter(models.NurseryInfo, self.owner_id))
+        return query.first() is not None
 
     def create(self, *, info_id: Union[int, str], stored_filename: str,
                original_filename: str, mime_type: str, file_size: int,
@@ -388,7 +442,14 @@ class SqliteAttachmentRepository(AttachmentRepository):
         return db_attachment
 
     def get(self, att_id: Union[int, str]) -> Optional[models.Attachment]:
-        return self.db.query(models.Attachment).filter(models.Attachment.id == int(att_id)).first()
+        # SOT-1431: owner が設定されていれば、親 info が current owner のものである添付だけを返す。
+        # これで GET /attachments/{id}/file・/transcription・DELETE・finalize が横断アクセスから守られる。
+        query = self.db.query(models.Attachment).filter(models.Attachment.id == int(att_id))
+        if self.owner_id is not None:
+            query = query.join(
+                models.NurseryInfo, models.Attachment.info_id == models.NurseryInfo.id
+            ).filter(_sqlite_owner_filter(models.NurseryInfo, self.owner_id))
+        return query.first()
 
     def get_by_object_key(self, object_key: str) -> Optional[models.Attachment]:
         return (
@@ -439,21 +500,29 @@ class SqliteAttachmentRepository(AttachmentRepository):
 
 
 class SqliteChildRepository(ChildRepository):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, owner_id: Optional[str] = None):
         self.db = db
+        self.owner_id = _normalize_owner(owner_id)
 
     def list(self) -> List[models.Child]:
-        return self.db.query(models.Child).order_by(models.Child.created_at.asc()).all()
+        query = self.db.query(models.Child)
+        if self.owner_id is not None:
+            query = query.filter(_sqlite_owner_filter(models.Child, self.owner_id))
+        return query.order_by(models.Child.created_at.asc()).all()
 
     def create(self, data: schemas.ChildCreate) -> models.Child:
-        db_child = models.Child(name=data.name)
+        # SOT-1431: 作成時に current owner を付与する(リクエスト経路)。owner None(背景)は未設定のまま。
+        db_child = models.Child(name=data.name, owner_id=self.owner_id)
         self.db.add(db_child)
         self.db.commit()
         self.db.refresh(db_child)
         return db_child
 
     def delete(self, child_id: Union[int, str]) -> bool:
-        db_child = self.db.query(models.Child).filter(models.Child.id == int(child_id)).first()
+        query = self.db.query(models.Child).filter(models.Child.id == int(child_id))
+        if self.owner_id is not None:
+            query = query.filter(_sqlite_owner_filter(models.Child, self.owner_id))
+        db_child = query.first()
         if not db_child:
             return False
         self.db.delete(db_child)
@@ -497,6 +566,8 @@ class FirestoreNurseryInfo:
     created_at: datetime.datetime
     updated_at: datetime.datetime
     registration_state: str = "registered"
+    # SOT-1431: データ所有者(マルチテナント分離)。未設定は既定 owner 扱い。
+    owner_id: Optional[str] = None
     child_id: Optional[str] = None
     # SOT-1407: 締め切り調査が必要なタスクか。
     needs_deadline_investigation: bool = False
@@ -548,6 +619,7 @@ def _info_doc_to_obj(doc_id: str, data: dict, attachments: List[FirestoreAttachm
         tags=_tags_array_to_str(data.get("tags")),
         memo=data.get("memo"),
         registration_state=data.get("registration_state") or "registered",
+        owner_id=data.get("owner_id"),
         child_id=data.get("child_id"),
         needs_deadline_investigation=bool(data.get("needs_deadline_investigation")),
         is_favorite=bool(data.get("is_favorite")),
@@ -605,10 +677,12 @@ def _matches_query(info: FirestoreNurseryInfo, q: Optional[str], tag: Optional[s
     return True
 
 class FirestoreInfoRepository(InfoRepository):
-    def __init__(self):
+    def __init__(self, owner_id: Optional[str] = None):
         self.project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
         self.database_id = os.getenv("FIRESTORE_DATABASE", "(default)")
         self._db = None
+        # SOT-1431: owner None = 無絞り(system/背景タスク)。
+        self.owner_id = _normalize_owner(owner_id)
 
     @property
     def db(self):
@@ -617,9 +691,23 @@ class FirestoreInfoRepository(InfoRepository):
             self._db = firestore.Client(project=self.project_id, database=self.database_id)
         return self._db
 
+    def _owner_ok(self, data: dict) -> bool:
+        """SOT-1431: owner が設定されていれば、ドキュメントが current owner のものか判定する。
+
+        owner 絞りは Firestore の `.where` に載せない（複合インデックス要求を避ける。SOT-1285 の教訓）。
+        全件 stream 後にアプリ側でこの判定を適用する。
+        """
+        if self.owner_id is None:
+            return True
+        return _owner_of(data) == self.owner_id
+
     def create(self, data: schemas.NurseryInfoCreate) -> FirestoreNurseryInfo:
         now = datetime.datetime.now(datetime.timezone.utc)
         doc_data = data.model_dump()
+        # SOT-1431: リクエスト経路では current owner を強制。背景経路(owner None)はスキーマ由来
+        # (親写真から継承した owner_id)をそのまま使う。
+        if self.owner_id is not None:
+            doc_data["owner_id"] = self.owner_id
         # Convert dates and tags
         doc_data["date"] = _from_date(doc_data.get("date"))
         doc_data["event_date"] = _from_date(doc_data.get("event_date"))
@@ -637,11 +725,14 @@ class FirestoreInfoRepository(InfoRepository):
         doc = doc_ref.get()
         if not doc.exists:
             return None
-        
+        # SOT-1431: 他 owner の ID を指定しても None を返す。
+        if not self._owner_ok(doc.to_dict()):
+            return None
+
         # Get attachments
         att_refs = self.db.collection("attachments").where("info_id", "==", str(id)).stream()
         attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
-        
+
         return _info_doc_to_obj(doc.id, doc.to_dict(), attachments)
 
     def list(self, q: Optional[str] = None, info_type: Optional[str] = None,
@@ -663,6 +754,9 @@ class FirestoreInfoRepository(InfoRepository):
         results = []
         for doc in docs:
             doc_data = doc.to_dict()
+            # SOT-1431: owner 絞り(アプリ側)。
+            if not self._owner_ok(doc_data):
+                continue
             # 仮登録(draft)は通常一覧に含めない (SOT-1113)
             if not _is_registered_data(doc_data):
                 continue
@@ -696,6 +790,8 @@ class FirestoreInfoRepository(InfoRepository):
 
         results = []
         for doc_id, data in results_dict.items():
+            if not self._owner_ok(data):  # SOT-1431: owner 絞り
+                continue
             if not _is_registered_data(data):  # 仮登録は除外 (SOT-1113)
                 continue
             att_refs = self.db.collection("attachments").where("info_id", "==", doc_id).stream()
@@ -720,6 +816,8 @@ class FirestoreInfoRepository(InfoRepository):
             
         results = []
         for doc_id, data in results_dict.items():
+            if not self._owner_ok(data):  # SOT-1431: owner 絞り
+                continue
             if not _is_registered_data(data):  # 仮登録は除外 (SOT-1113)
                 continue
             att_refs = self.db.collection("attachments").where("info_id", "==", doc_id).stream()
@@ -746,6 +844,8 @@ class FirestoreInfoRepository(InfoRepository):
         results = []
         for doc in docs:
             data = doc.to_dict()
+            if not self._owner_ok(data):  # SOT-1431: owner 絞り
+                continue
             if not _is_registered_data(data):  # 仮登録は除外 (SOT-1113)
                 continue
             event_date = data.get("event_date")
@@ -775,6 +875,8 @@ class FirestoreInfoRepository(InfoRepository):
         results = []
         for doc in docs:
             data = doc.to_dict()
+            if not self._owner_ok(data):  # SOT-1431: owner 絞り
+                continue
             if not _is_registered_data(data):  # 仮登録は除外 (SOT-1113)
                 continue
             event_date = data.get("event_date")
@@ -794,6 +896,8 @@ class FirestoreInfoRepository(InfoRepository):
 
         results = []
         for doc in docs:
+            if not self._owner_ok(doc.to_dict()):  # SOT-1431: owner 絞り
+                continue
             if not _is_registered_data(doc.to_dict()):  # 仮登録は除外 (SOT-1113)
                 continue
             att_refs = self.db.collection("attachments").where("info_id", "==", doc.id).stream()
@@ -807,6 +911,8 @@ class FirestoreInfoRepository(InfoRepository):
         results = []
         for doc in docs:
             doc_data = doc.to_dict()
+            if not self._owner_ok(doc_data):  # SOT-1431: owner 絞り
+                continue
             if (doc_data.get("registration_state") or "registered") != "draft":
                 continue
             att_refs = self.db.collection("attachments").where("info_id", "==", doc.id).stream()
@@ -819,13 +925,17 @@ class FirestoreInfoRepository(InfoRepository):
         # SOT-1380: 文字起こし中(processing)の件数。件数のみ集計し attachments は読まない。
         count = 0
         for doc in self.db.collection("nursery_info").stream():
-            if (doc.to_dict().get("registration_state") or "registered") == "processing":
+            data = doc.to_dict()
+            if not self._owner_ok(data):  # SOT-1431: owner 絞り
+                continue
+            if (data.get("registration_state") or "registered") == "processing":
                 count += 1
         return count
 
     def finalize(self, id: Union[int, str]) -> Optional[FirestoreNurseryInfo]:
         doc_ref = self.db.collection("nursery_info").document(str(id))
-        if not doc_ref.get().exists:
+        snap = doc_ref.get()
+        if not snap.exists or not self._owner_ok(snap.to_dict()):  # SOT-1431: owner 絞り
             return None
         doc_ref.update({
             "registration_state": "registered",
@@ -836,10 +946,12 @@ class FirestoreInfoRepository(InfoRepository):
     def update(self, id: Union[int, str], data: schemas.NurseryInfoUpdate) -> Optional[FirestoreNurseryInfo]:
         doc_ref = self.db.collection("nursery_info").document(str(id))
         doc = doc_ref.get()
-        if not doc.exists:
+        if not doc.exists or not self._owner_ok(doc.to_dict()):  # SOT-1431: owner 絞り
             return None
-            
+
         update_data = data.model_dump(exclude_unset=True)
+        # SOT-1431: 更新で owner_id を書き換えさせない(なりすまし防止)。
+        update_data.pop("owner_id", None)
         # Convert dates and tags
         if "date" in update_data:
             update_data["date"] = _from_date(update_data["date"])
@@ -863,17 +975,28 @@ class FirestoreInfoRepository(InfoRepository):
         docs = self.db.collection("nursery_info").where(
             "deadline_group_id", "==", group_id
         ).stream()
-        return [_info_doc_to_obj(doc.id, doc.to_dict()) for doc in docs]
+        return [
+            _info_doc_to_obj(doc.id, doc.to_dict())
+            for doc in docs
+            if self._owner_ok(doc.to_dict())  # SOT-1431: owner 絞り
+        ]
 
     def list_attachments_for_info(self, id: Union[int, str]) -> List[FirestoreAttachment]:
+        # SOT-1431: 親 info が current owner のものでなければ添付を返さない
+        # （delete_info が blob 削除前にこれを呼ぶため、横断的な blob 削除を防ぐ）。
+        if self.owner_id is not None:
+            info_doc = self.db.collection("nursery_info").document(str(id)).get()
+            if not info_doc.exists or not self._owner_ok(info_doc.to_dict()):
+                return []
         att_refs = self.db.collection("attachments").where("info_id", "==", str(id)).stream()
         return [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
 
     def delete(self, id: Union[int, str]) -> bool:
         doc_ref = self.db.collection("nursery_info").document(str(id))
-        if not doc_ref.get().exists:
+        snap = doc_ref.get()
+        if not snap.exists or not self._owner_ok(snap.to_dict()):  # SOT-1431: owner 絞り
             return False
-            
+
         # Delete attachments first
         att_refs = self.db.collection("attachments").where("info_id", "==", str(id)).stream()
         for att in att_refs:
@@ -883,27 +1006,42 @@ class FirestoreInfoRepository(InfoRepository):
         return True
 
     def delete_all(self) -> Tuple[int, List[str]]:
-        # blob 削除用に全 attachment の object_key を集めつつ、attachment ドキュメントを削除
+        # SOT-1431: owner が設定されていれば、その owner のデータ(と写真)のみ削除する。
+        # まず削除対象の info id 集合を確定し、その info に属する attachment だけを削除する。
+        owned_info_ids = None  # None = 全件(system/owner 未設定)
+        if self.owner_id is not None:
+            owned_info_ids = set()
+            for doc in self.db.collection("nursery_info").stream():
+                if self._owner_ok(doc.to_dict()):
+                    owned_info_ids.add(doc.id)
+
         object_keys: List[str] = []
         for att in self.db.collection("attachments").stream():
             data = att.to_dict() or {}
+            if owned_info_ids is not None and str(data.get("info_id")) not in owned_info_ids:
+                continue
             key = data.get("object_key") or data.get("stored_filename")
             if key:
                 object_keys.append(key)
             self.db.collection("attachments").document(att.id).delete()
-        # 全 nursery_info ドキュメントを削除
+
+        # 対象 nursery_info ドキュメントを削除
         count = 0
         for doc in self.db.collection("nursery_info").stream():
+            if owned_info_ids is not None and doc.id not in owned_info_ids:
+                continue
             self.db.collection("nursery_info").document(doc.id).delete()
             count += 1
         return count, object_keys
 
 
 class FirestoreAttachmentRepository(AttachmentRepository):
-    def __init__(self):
+    def __init__(self, owner_id: Optional[str] = None):
         self.project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
         self.database_id = os.getenv("FIRESTORE_DATABASE", "(default)")
         self._db = None
+        # SOT-1431: owner None = 無絞り(背景OCRタスク)。
+        self.owner_id = _normalize_owner(owner_id)
 
     @property
     def db(self):
@@ -912,8 +1050,21 @@ class FirestoreAttachmentRepository(AttachmentRepository):
             self._db = firestore.Client(project=self.project_id, database=self.database_id)
         return self._db
 
+    def _info_owner_ok(self, info_id) -> bool:
+        """SOT-1431: 添付の親 info が current owner のものか判定する。owner 未設定なら常に True。"""
+        if self.owner_id is None:
+            return True
+        doc = self.db.collection("nursery_info").document(str(info_id)).get()
+        return doc.exists and _owner_of(doc.to_dict()) == self.owner_id
+
     def info_exists(self, info_id: Union[int, str]) -> bool:
-        return self.db.collection("nursery_info").document(str(info_id)).get().exists
+        doc = self.db.collection("nursery_info").document(str(info_id)).get()
+        if not doc.exists:
+            return False
+        # SOT-1431: 他 owner の info への添付を防ぐ。
+        if self.owner_id is not None and _owner_of(doc.to_dict()) != self.owner_id:
+            return False
+        return True
 
     def create(self, *, info_id: Union[int, str], stored_filename: str,
                original_filename: str, mime_type: str, file_size: int,
@@ -944,7 +1095,11 @@ class FirestoreAttachmentRepository(AttachmentRepository):
         doc = doc_ref.get()
         if not doc.exists:
             return None
-        return _att_doc_to_obj(doc.id, doc.to_dict())
+        data = doc.to_dict()
+        # SOT-1431: 親 info が current owner のものでなければ None（横断アクセス遮断）。
+        if self.owner_id is not None and not self._info_owner_ok(data.get("info_id")):
+            return None
+        return _att_doc_to_obj(doc.id, data)
 
     def get_by_object_key(self, object_key: str) -> Optional[FirestoreAttachment]:
         docs = list(
@@ -1004,10 +1159,11 @@ class FirestoreChild:
 
 
 class FirestoreChildRepository(ChildRepository):
-    def __init__(self):
+    def __init__(self, owner_id: Optional[str] = None):
         self.project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
         self.database_id = os.getenv("FIRESTORE_DATABASE", "(default)")
         self._db = None
+        self.owner_id = _normalize_owner(owner_id)
 
     @property
     def db(self):
@@ -1024,19 +1180,25 @@ class FirestoreChildRepository(ChildRepository):
                 created_at=doc.to_dict().get("created_at") or datetime.datetime.now(),
             )
             for doc in self.db.collection("children").stream()
+            if self.owner_id is None or _owner_of(doc.to_dict()) == self.owner_id  # SOT-1431
         ]
         children.sort(key=lambda c: c.created_at)
         return children
 
     def create(self, data: schemas.ChildCreate) -> FirestoreChild:
         now = datetime.datetime.now(datetime.timezone.utc)
-        doc_data = {"name": data.name, "created_at": now}
+        # SOT-1431: 作成時に current owner を付与する(owner None=背景は未設定)。
+        doc_data = {"name": data.name, "created_at": now, "owner_id": self.owner_id}
         _, doc_ref = self.db.collection("children").add(doc_data)
         return FirestoreChild(id=doc_ref.id, name=data.name, created_at=now)
 
     def delete(self, child_id: Union[int, str]) -> bool:
         doc_ref = self.db.collection("children").document(str(child_id))
-        if not doc_ref.get().exists:
+        snap = doc_ref.get()
+        if not snap.exists:
+            return False
+        # SOT-1431: 他 owner の子供を削除できない。
+        if self.owner_id is not None and _owner_of(snap.to_dict()) != self.owner_id:
             return False
         doc_ref.delete()
         return True
@@ -1047,20 +1209,36 @@ class FirestoreChildRepository(ChildRepository):
 def get_database_type() -> str:
     return os.getenv("DATABASE_TYPE", "sqlite").lower()
 
-def get_info_repository(db: Session = Depends(database.get_db)) -> InfoRepository:
-    if get_database_type() == "firestore":
-        return FirestoreInfoRepository()
-    return SqliteInfoRepository(db)
 
-def get_attachment_repository(db: Session = Depends(database.get_db)) -> AttachmentRepository:
-    if get_database_type() == "firestore":
-        return FirestoreAttachmentRepository()
-    return SqliteAttachmentRepository(db)
+# SOT-1431: リクエストスコープの repo は current user の owner_id で絞り込む。
+# get_current_user は署名付きセッションから owner_id を返す。import はここ(関数外)で行うと
+# routers.auth → (何も) の依存だけなので循環しない。
+from .routers.auth import get_current_user  # noqa: E402
 
-def get_child_repository(db: Session = Depends(database.get_db)) -> ChildRepository:
+
+def get_info_repository(
+    db: Session = Depends(database.get_db),
+    owner_id: str = Depends(get_current_user),
+) -> InfoRepository:
     if get_database_type() == "firestore":
-        return FirestoreChildRepository()
-    return SqliteChildRepository(db)
+        return FirestoreInfoRepository(owner_id=owner_id)
+    return SqliteInfoRepository(db, owner_id=owner_id)
+
+def get_attachment_repository(
+    db: Session = Depends(database.get_db),
+    owner_id: str = Depends(get_current_user),
+) -> AttachmentRepository:
+    if get_database_type() == "firestore":
+        return FirestoreAttachmentRepository(owner_id=owner_id)
+    return SqliteAttachmentRepository(db, owner_id=owner_id)
+
+def get_child_repository(
+    db: Session = Depends(database.get_db),
+    owner_id: str = Depends(get_current_user),
+) -> ChildRepository:
+    if get_database_type() == "firestore":
+        return FirestoreChildRepository(owner_id=owner_id)
+    return SqliteChildRepository(db, owner_id=owner_id)
 
 def get_attachment_repo_standalone() -> Any:
     """Helper for background tasks where Depends() cannot be used."""

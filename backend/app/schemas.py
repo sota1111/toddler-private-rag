@@ -73,6 +73,10 @@ class ChildResponse(ChildBase):
 
 
 class NurseryInfoBase(BaseModel):
+    # SOT-1431: データ所有者。背景OCR経路で親写真レコードの owner を子タスクへ継承させるための
+    # 任意フィールド。リクエスト経路ではリポジトリが current user の owner を強制するため、
+    # API ボディからの owner なりすましは効かない。
+    owner_id: Optional[str] = None
     title: str
     info_type: str
     content: str
