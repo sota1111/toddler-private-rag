@@ -63,6 +63,45 @@ flowchart LR
 > 「読む → 調べる → 逆算する」という人手の一連作業をエージェントが肩代わりすること自体が価値であり、
 > ここに **AIエージェントである必然性** があります。
 
+### 2.1 実例: 就労証明書の準備を「読む → 調べる → 逆算」まで自動化
+
+**Before（保護者が受け取るおたより 1 行）:**
+
+> 保育を必要とする状況の確認のため、**就労証明書を 2026/7/30 までにご提出ください。**
+
+**エージェントの自律処理:**
+
+1. **抽出** — OCR テキストから「保護者が提出すべき書類」を LLM で判定 → `就労証明書`（期限 2026-07-30）。
+2. **自律調査（Google Search grounding）** — 公式手順・発行元・所要期間を調べる → 手順は
+   `テンプレート入手(約3日)` → `証明書発行（勤務先へ依頼, 約14日）` → `誤り確認(約1日)` → `市町村に提出(約3日)`。
+3. **逆算実行** — 最終締切 2026-07-30 から各手順の所要期間を後ろ向きに差し引き、**準備タスクを日付付きで自動生成**。
+
+**After（自動生成された準備タスク）:**
+
+| # | 準備タスク | 生成された締切 |
+|---|---|---|
+| 1/4 | 就労証明書 テンプレート入手 | 2026-07-09 |
+| 2/4 | 就労証明書 証明書発行（勤務先へ依頼） | 2026-07-12 |
+| 3/4 | 就労証明書 誤り確認 | 2026-07-26 |
+| 4/4 | 就労証明書 市町村に提出 | 2026-07-27 |
+
+![実例: 締切逆算で自動生成された準備タスク（やることリスト）](frontend/public/howto/agent-demo.png)
+
+> 「7/30 提出」という 1 行のおたよりから、発行に約 2 週間かかる書類の**準備開始日（7/9）まで逆算**して
+> タスク化しています。この逆算ロジックは `backend/tests/test_submission_agent.py`
+> （`test_build_drafts_per_step_backward_chain`）で検証済みで、上記の日付はテストで固定された生成結果と一致します。
+
+### 2.2 設計判断: ADK/Agent Builder ではなく Vertex AI 上の自前 in-process 実装
+
+エージェント基盤として **ADK / Agent Builder / Agent Engine** も検討しましたが、本エージェントの処理は
+「OCR → 抽出 → Google Search grounding → 締切逆算」という**確定的で短いパイプライン**です。多エージェントの
+動的オーケストレーションや外部ツール群の呼び出しを必要としないため、**軽量・低レイテンシ・依存最小**を優先し、
+Vertex AI（`google-genai` SDK, `GOOGLE_GENAI_USE_VERTEXAI`）上の **in-process 実装**を採用しました
+（設計決定は `backend/app/submission_agent.py` 冒頭に「決定1=案A」として明記）。自律調査の中核である
+**Google Search grounding は Vertex AI Gemini の機能**として利用しており、GCP AI 技術の必須要件は充足しています。
+将来的に多エージェント化や外部ツール連携が必要になった場合は、この境界を保ったまま ADK / Agent Engine へ
+移行できる構成です。
+
 ---
 
 ## 3. 主な機能
@@ -174,6 +213,19 @@ worker は 202 を即返して背景で `process_ocr`（OCR→構造化→エー
   アラートポリシー、メール通知チャネル。
 - **シークレット管理** — セッション署名鍵・許可メール・Firebase API key・worker トークンを
   Secret Manager から `--set-secrets` で注入。
+
+### 実績（数値）
+
+| 項目 | 実績 |
+|---|---|
+| 自動テスト（backend） | **pytest 253 件**（`backend/tests/`） |
+| 自動テスト（frontend E2E） | **Playwright 19 テスト / 4 spec**（`frontend/e2e/`） |
+| Infrastructure as Code | **Terraform 16 ファイル**（`infra/terraform/`） |
+| CI / CD | GitHub Actions 2 ワークフロー（`ci.yml` / `deploy-cloudrun.yml`）、**Workload Identity Federation**（キーレス認証） |
+| 監視 | Cloud Monitoring に **Cloud Run 5xx エラー率**・**p99 レイテンシ**の**アラートポリシー**＋メール通知チャネルを Terraform 定義（`infra/terraform/monitoring.tf`） |
+
+> 数値は実際のテスト収集数・ファイル数に基づきます。監視は「p99 レイテンシに対するアラートポリシーを
+> IaC で定義済み」という意味で、実測 SLO 値ではありません。
 
 ---
 
