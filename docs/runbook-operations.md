@@ -13,13 +13,65 @@
 ## 監視ダッシュボード / アラート
 
 - **ダッシュボード**: Cloud Monitoring の「おたよりナビ 運用ダッシュボード (SOT-1475)」
-  （`infra/terraform/monitoring.tf` の `google_monitoring_dashboard.ops`）。
-  リクエスト数 / 5xx率 / p99レイテンシ / インスタンス数 / LLM呼び出しのエラー・レイテンシを集約。
+  （`infra/terraform/dashboard.tf` の `google_monitoring_dashboard.ops`）。
+  Cloud Run のリクエスト数 / 5xx率 / p99レイテンシ / インスタンス数と、LLM・OCR・grounding の
+  log-based メトリクスを1画面に集約する。
 - **アラート**（`monitoring.tf`）:
   - Cloud Run 5xx error rate high (SOT-1400)
   - Cloud Run request latency high (SOT-1400)
   - LLM error rate high (SOT-1472)
 - 通知先メールは `var.alert_notification_email` を設定したときのみ有効。
+
+### ダッシュボードの使い方
+
+キャプチャ（レイアウトプレビュー）: [`docs/screenshots/SOT-1475-monitoring-dashboard.png`](./screenshots/SOT-1475-monitoring-dashboard.png)
+
+#### 開き方
+
+1. **Cloud Console から**: [Monitoring → Dashboards](https://console.cloud.google.com/monitoring/dashboards)
+   を開き、一覧から **「おたよりナビ 運用ダッシュボード (SOT-1475)」** を選択する。
+   URL 直接指定なら
+   `https://console.cloud.google.com/monitoring/dashboards?project=<PROJECT_ID>` で対象プロジェクトを開く。
+2. **gcloud から**（存在確認 / 定義の確認）:
+   ```bash
+   gcloud monitoring dashboards list --project <PROJECT_ID> \
+     --filter 'displayName:"おたよりナビ 運用ダッシュボード"'
+   ```
+3. 右上の期間セレクタ（既定 1 時間）で表示レンジを調整する。日次確認は 24 時間、
+   インシデント時は 1〜6 時間程度に絞ると異常の立ち上がりを追いやすい。
+
+#### タイルの見方（全8枚 / 2列 × 4行）
+
+| タイル | 意味 | 見方の目安 |
+| --- | --- | --- |
+| **Cloud Run request rate** | サービス別のリクエスト数（rate, 秒あたり） | ベースラインを把握。急増＝負荷、急減＝到達不可の兆候 |
+| **Cloud Run 5xx rate** | サービス別の 5xx 応答 rate | 常時ほぼ 0 が正常。継続的な立ち上がりはアラート（SOT-1400）と連動 |
+| **Cloud Run p99 latency** | サービス別の p99 レイテンシ | 通常レンジを把握し、跳ね上がりを検知。SOT-1400 のレイテンシアラートと対応 |
+| **Cloud Run instance count** | サービス別の稼働インスタンス数 | スケール挙動の確認。張り付き＝飽和、0 近辺＝コールドスタート要因 |
+| **LLM request rate** (SOT-1472) | LLM 呼び出し回数（log-based metric） | パイプライン稼働量の代理指標。ログ未出力時は無データ |
+| **LLM error rate** (SOT-1472) | LLM 呼び出しエラー rate（log-based metric） | 0 が正常。上昇はモデル/認証/クォータ異常。LLM error アラートと連動 |
+| **Grounding degradation rate** (SOT-1470 D3) | Search grounding 劣化（フォールバック）rate | 上昇＝grounding 品質低下。回答根拠の劣化を早期検知 |
+| **OCR empty-extraction rate** (SOT-1470 D3) | OCR 抽出が空になった rate | 上昇＝入力画像/PDF 品質 or OCR 経路の異常 |
+
+> LLM / grounding / OCR タイルは `monitoring.tf` の log-based メトリクスを参照する。対象ログが
+> まだ出ていない期間は「No data」表示になる（異常ではない）。
+
+#### 作成・更新（Terraform）
+
+ダッシュボード定義はコード管理（`infra/terraform/dashboard.tf`）。変更は必ず Terraform 経由で反映する。
+
+```bash
+cd infra/terraform
+terraform plan  -target=google_monitoring_dashboard.ops
+terraform apply -target=google_monitoring_dashboard.ops
+```
+
+#### 日常運用での使い方
+
+- **日次**: 5xx rate / p99 latency / LLM error rate を確認し、アラート発火の裏取りに使う。
+- **インシデント時**: request rate と instance count で影響範囲を、5xx / p99 で深刻度を、
+  LLM / grounding / OCR タイルで「どの段階（OCR / RAG / LLM）」かの当たりを付ける
+  （詳細は下記「インシデント対応」）。
 
 ## 定期運用サイクル
 
