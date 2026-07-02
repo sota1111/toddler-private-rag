@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.main import app
+from tests._images import PNG_BYTES
 from app.database import Base, get_db
 from app.routers.auth import get_current_user
 from app import storage, models, database
@@ -130,7 +131,7 @@ def test_attachment_file_access_is_owner_scoped():
     a_id = _create_info("A with photo")
     att_id = client.post(
         f"/api/info/{a_id}/attachments",
-        files={"file": ("photo.png", b"fake image", "image/png")},
+        files={"file": ("photo.png", PNG_BYTES, "image/png")},
     ).json()["id"]
 
     # ownerB は他 owner の添付ファイル/文字起こし/削除に触れない
