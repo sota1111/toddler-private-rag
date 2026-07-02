@@ -3,11 +3,16 @@ name: Security Scan
 # SOT-1469 A4: supply-chain security checks — dependency vulnerability audits,
 # a Trivy scan of dependencies + IaC misconfiguration, and SBOM generation.
 #
-# Gating policy (intentionally staged to avoid breaking on pre-existing findings):
+# Gating policy:
 #   - trivy-config (IaC/Dockerfile misconfig, CRITICAL) is BLOCKING.
-#   - dependency audits (pip-audit / npm audit) and the vuln scan run as
-#     reporting (continue-on-error) so they surface issues without blocking the
-#     first rollout; tighten to blocking once the backlog is triaged.
+#   - SOT-1487: dependency audits (pip-audit / npm audit) are now BLOCKING —
+#     a known-vulnerable dependency fails the scan so it cannot be silently
+#     carried. npm audit gates at HIGH+; pip-audit fails on any advisory.
+#     Known-unfixable advisories should be triaged and added to the explicit
+#     ignore list below (via pip-audit --ignore-vuln / npm audit config) rather
+#     than reverting the whole job to non-blocking.
+#   - the Trivy filesystem vuln scan stays reporting-only (noisier, overlaps
+#     the dependency audits).
 on:
   push:
     branches: [main]
@@ -32,19 +37,25 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: pip-audit (backend)
-        continue-on-error: true
+      # SOT-1487: BLOCKING (staged) — fails on any advisory NOT already triaged
+      # in backend/.pip-audit-ignore.txt. That file is the known backlog for the
+      # pinned deps; burn it down as Dependabot (cooldown-gated) updates land, so
+      # the gate tightens over time. A brand-new advisory (not in the file) fails.
+      - name: pip-audit (backend, blocking)
         run: |
           python -m pip install --upgrade pip pip-audit
-          pip-audit -r backend/requirements.txt --desc
+          IGNORES=$(grep -vE '^\s*(#|$)' backend/.pip-audit-ignore.txt \
+            | sed 's/^/--ignore-vuln /' | tr '\n' ' ')
+          echo "Ignoring triaged advisories: $IGNORES"
+          pip-audit -r backend/requirements.txt --desc $IGNORES
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: npm audit (frontend)
-        continue-on-error: true
+      # SOT-1487: BLOCKING — fails on HIGH+ advisories.
+      - name: npm audit (frontend, blocking)
         working-directory: frontend
         run: npm audit --audit-level=high
 
