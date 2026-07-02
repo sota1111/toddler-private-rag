@@ -286,6 +286,12 @@ def build_extraction(raw_text: str) -> "DocumentExtraction":
             else:
                 in_item_section = False
 
+    # SOT-1470 D3: extraction producing no text is a silent-degradation signal under
+    # never-throw. Emit an explicit token so a log-based metric / alert can track the
+    # extraction-0 rate (see infra/terraform/monitoring.tf).
+    if not raw_text.strip():
+        logger.warning("ocr_extraction_empty char_count=%d", len(raw_text))
+
     return DocumentExtraction(
         raw_text=raw_text,
         detected_dates=list(dict.fromkeys(detected_dates)), # Deduplicate

@@ -171,3 +171,75 @@ resource "google_monitoring_alert_policy" "llm_error_rate" {
 
   depends_on = [google_logging_metric.llm_error_count]
 }
+
+# SOT-1470 D3: degradation proxy metrics under never-throw. The backend emits an
+# explicit log token when a grounded request degrades to the non-grounded fallback
+# ("llm_grounding_degraded", ai_client.py) and when OCR extraction yields no text
+# ("ocr_extraction_empty", ocr.py). These log-based metrics make the silent-degradation
+# rates observable on the dashboard (dashboard.tf) and drive the alert below.
+resource "google_logging_metric" "llm_grounding_degraded_count" {
+  project     = var.project_id
+  name        = "llm_grounding_degraded_count"
+  description = "Count of grounding-degradation events (grounded -> non-grounded fallback) emitted by the backend (SOT-1470 D3)."
+  filter      = "resource.type=\"cloud_run_revision\" AND textPayload:\"llm_grounding_degraded\""
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+    unit        = "1"
+  }
+
+  depends_on = [google_project_service.services]
+}
+
+resource "google_logging_metric" "ocr_extraction_empty_count" {
+  project     = var.project_id
+  name        = "ocr_extraction_empty_count"
+  description = "Count of OCR extractions that produced no text emitted by the backend (SOT-1470 D3)."
+  filter      = "resource.type=\"cloud_run_revision\" AND textPayload:\"ocr_extraction_empty\""
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+    unit        = "1"
+  }
+
+  depends_on = [google_project_service.services]
+}
+
+# Alert: high grounding-degradation rate (SOT-1470 D3).
+resource "google_monitoring_alert_policy" "llm_grounding_degraded_rate" {
+  project      = var.project_id
+  display_name = "LLM grounding degradation rate high (SOT-1470 D3)"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Grounding degradation events per second"
+
+    condition_threshold {
+      filter          = "resource.type = \"cloud_run_revision\" AND metric.type = \"logging.googleapis.com/user/llm_grounding_degraded_count\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = var.llm_grounding_degraded_rate_threshold
+      duration        = "300s"
+
+      aggregations {
+        alignment_period     = "60s"
+        per_series_aligner   = "ALIGN_RATE"
+        cross_series_reducer = "REDUCE_SUM"
+      }
+
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  notification_channels = google_monitoring_notification_channel.email[*].id
+
+  documentation {
+    content   = "The backend's Google Search grounding is degrading to the non-grounded fallback at an elevated rate (filter: llm_grounding_degraded). Check Vertex AI grounding availability/quota and recent model/prompt changes (see docs/runbook-operations.md, docs/adr/0003-never-throw-degradation.md)."
+    mime_type = "text/markdown"
+  }
+
+  depends_on = [google_logging_metric.llm_grounding_degraded_count]
+}

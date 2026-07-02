@@ -183,3 +183,9 @@ variable "llm_error_rate_threshold" {
   type        = number
   default     = 0.05
 }
+
+variable "llm_grounding_degraded_rate_threshold" {
+  description = "SOT-1470 D3: rate (per second, aligned) of grounding-degradation events (grounded request falling back to non-grounded) above which the degradation alert fires."
+  type        = number
+  default     = 0.1
+}
