@@ -207,8 +207,16 @@ worker は 202 を即返して背景で `process_ocr`（OCR→構造化→エー
   Cloud Scheduler、Cloud Monitoring（アラート `monitoring.tf` / ダッシュボード `dashboard.tf`）、API 有効化。
   Terraform state は **GCS リモートバックエンド**（`versions.tf` の `backend "gcs"`）で共有・永続化します。
 - **CI** (`.github/workflows/ci.yml`) — 3 ジョブ構成: `backend-tests`（`pytest` +
-  **カバレッジゲート** `--cov-fail-under=70`）、`evaluation-gate`（OCR/RAG 精度の回帰ゲートを分離）、
+  **カバレッジゲート** `--cov-fail-under=70`）、`evaluation-gate`（後述のエージェント性能評価ゲート）、
   `frontend-checks`（`eslint` + `typecheck/build` + **Playwright e2e**）。
+- **エージェント性能評価ゲート** (`evaluation-gate`) — おたより先回りエージェント（OCR→抽出→RAG）の
+  **精度回帰を独立した必須ステータスチェック**として分離（`backend/tests/test_eval_ocr.py` /
+  `test_eval_rag.py`、golden dataset は `backend/tests/eval/dataset.py`）。閾値を割ると CI が落ち、
+  **CD（deploy-cloudrun）は CI 成功がゲート**のため本番デプロイもブロックされます。ゲートする指標:
+  - **OCR 精度** — 日付・持ち物の coverage（recall）に加え、**precision（誤検出ゼロ）** と **F1** を
+    集約平均で下限ゲート。
+  - **RAG 精度** — **top-source 正答率**・**keyword hit rate**・**groundedness**（回答語が取得ソースに
+    追跡可能か）・**refusal**（空インデックス時は出典なし＋拒否応答を返す）を下限ゲート。
 - **CD** (`.github/workflows/deploy-cloudrun.yml`) — **CI 成功を条件**に起動（`workflow_run`）し、
   **変更のあったサービスのみ**を Docker build → Artifact Registry push → Cloud Run deploy。
   backend は **canary デプロイ**（`--no-traffic --tag canary` で無トラフィック投入 → `/health`
@@ -231,7 +239,7 @@ worker は 202 を即返して背景で `process_ocr`（OCR→構造化→エー
 
 | 項目 | 実績 |
 |---|---|
-| 自動テスト（backend） | **pytest 284 件**（`backend/tests/`）、CI でカバレッジゲート（`--cov-fail-under=70`） |
+| 自動テスト（backend） | **pytest 284 件**（`backend/tests/`）、CI でカバレッジゲート（`--cov-fail-under=70`）＋**エージェント性能評価ゲート**（OCR precision/F1・RAG groundedness/refusal を独立チェックで回帰ゲート） |
 | 自動テスト（frontend E2E） | **Playwright 19 テスト / 4 spec**（`frontend/e2e/`） |
 | Infrastructure as Code | **Terraform 17 ファイル**（`infra/terraform/`）、state は GCS リモートバックエンドで永続化 |
 | CI / CD | GitHub Actions 4 ワークフロー（`ci.yml` / `deploy-cloudrun.yml` / `terraform-ci.yml` / `security-scan.yml`）、**Workload Identity Federation**（キーレス認証）、CD は CI 成功をゲートに canary デプロイ + 自動ロールバック |
