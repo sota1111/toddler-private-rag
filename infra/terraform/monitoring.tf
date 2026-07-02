@@ -25,6 +25,16 @@ resource "google_monitoring_notification_channel" "email" {
   depends_on = [google_project_service.services]
 }
 
+# Channels every Cloud Run alert notifies: the optional email channel plus, when autonomous
+# rollback is enabled (SOT-1480 P2, remediation.tf), the remediation webhook channel. Both are
+# count-gated, so the splats collapse to [] when not configured.
+locals {
+  alert_notification_channels = concat(
+    google_monitoring_notification_channel.email[*].id,
+    google_monitoring_notification_channel.remediation_webhook[*].id,
+  )
+}
+
 # Alert: high 5xx response rate on any Cloud Run service.
 resource "google_monitoring_alert_policy" "cloud_run_5xx" {
   project      = var.project_id
@@ -53,7 +63,7 @@ resource "google_monitoring_alert_policy" "cloud_run_5xx" {
     }
   }
 
-  notification_channels = google_monitoring_notification_channel.email[*].id
+  notification_channels = local.alert_notification_channels
 
   documentation {
     content   = "A Cloud Run service is returning 5xx responses above the configured rate. Check service logs in Cloud Logging and consider rolling back (see docs/runbook-rollback.md)."
@@ -91,7 +101,7 @@ resource "google_monitoring_alert_policy" "cloud_run_latency" {
     }
   }
 
-  notification_channels = google_monitoring_notification_channel.email[*].id
+  notification_channels = local.alert_notification_channels
 
   documentation {
     content   = "A Cloud Run service p99 latency exceeds the configured threshold. Inspect cold starts / Vertex AI calls; consider rolling back (see docs/runbook-rollback.md)."
@@ -162,7 +172,7 @@ resource "google_monitoring_alert_policy" "llm_error_rate" {
     }
   }
 
-  notification_channels = google_monitoring_notification_channel.email[*].id
+  notification_channels = local.alert_notification_channels
 
   documentation {
     content   = "The backend LLM (Gemini) call failure rate exceeds the configured threshold. Check backend logs (filter: llm_call_failed), Vertex AI quota, and consider rolling back (see docs/runbook-rollback.md, docs/runbook-operations.md)."
@@ -234,7 +244,7 @@ resource "google_monitoring_alert_policy" "llm_grounding_degraded_rate" {
     }
   }
 
-  notification_channels = google_monitoring_notification_channel.email[*].id
+  notification_channels = local.alert_notification_channels
 
   documentation {
     content   = "The backend's Google Search grounding is degrading to the non-grounded fallback at an elevated rate (filter: llm_grounding_degraded). Check Vertex AI grounding availability/quota and recent model/prompt changes (see docs/runbook-operations.md, docs/adr/0003-never-throw-degradation.md)."

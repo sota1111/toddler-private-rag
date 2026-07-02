@@ -49,21 +49,23 @@ jobs:
         id: changes
         run: |
           SHA="${{ steps.sha.outputs.sha }}"
-          BACKEND=true; UPLOAD=true; FRONTEND=true
+          BACKEND=true; UPLOAD=true; FRONTEND=true; REMEDIATION=true
           if [ "${{ github.event_name }}" = "workflow_run" ] && git rev-parse "${SHA}^" >/dev/null 2>&1; then
             CHANGED="$(git diff --name-only "${SHA}^" "${SHA}")"
             echo "Changed files:"; echo "$CHANGED"
-            BACKEND=false; UPLOAD=false; FRONTEND=false
+            BACKEND=false; UPLOAD=false; FRONTEND=false; REMEDIATION=false
             echo "$CHANGED" | grep -qE '^backend/upload_function/' && UPLOAD=true
-            # Any backend change outside upload_function/ (shared app code,
+            echo "$CHANGED" | grep -qE '^backend/remediation_function/' && REMEDIATION=true
+            # Any backend change outside the slim function packages (shared app code,
             # Dockerfile, requirements) rebuilds the backend service.
-            if echo "$CHANGED" | grep -E '^backend/' | grep -qvE '^backend/upload_function/'; then BACKEND=true; fi
+            if echo "$CHANGED" | grep -E '^backend/' | grep -qvE '^backend/(upload_function|remediation_function)/'; then BACKEND=true; fi
             echo "$CHANGED" | grep -qE '^frontend/' && FRONTEND=true
           fi
           echo "backend=$BACKEND" >> "$GITHUB_OUTPUT"
           echo "upload=$UPLOAD" >> "$GITHUB_OUTPUT"
           echo "frontend=$FRONTEND" >> "$GITHUB_OUTPUT"
-          echo "Deploy plan -> backend=$BACKEND upload=$UPLOAD frontend=$FRONTEND"
+          echo "remediation=$REMEDIATION" >> "$GITHUB_OUTPUT"
+          echo "Deploy plan -> backend=$BACKEND upload=$UPLOAD frontend=$FRONTEND remediation=$REMEDIATION"
 
       - name: Authenticate to Google Cloud (Workload Identity Federation)
         id: auth
@@ -219,6 +221,49 @@ jobs:
             --min-instances 1 \
             --max-instances 5 \
             --concurrency 40
+
+      # ----- Remediation service (SOT-1480 P2: autonomous runtime rollback) -----
+      # OPT-IN: only builds/deploys when the repo variable REMEDIATION_ENABLED == 'true'
+      # (a repo *variable*, usable in `if:` unlike secrets) AND the path changed. With the
+      # variable unset these steps are skipped, so the existing deploy pipeline is unaffected
+      # and no missing-secret failures occur.
+      - name: Build remediation image
+        if: steps.changes.outputs.remediation == 'true' && vars.REMEDIATION_ENABLED == 'true'
+        env:
+          IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_REMEDIATION }}
+        run: |
+          docker build -f backend/remediation_function/Dockerfile -t "$IMAGE:${{ steps.sha.outputs.sha }}" -t "$IMAGE:latest" backend/remediation_function
+
+      - name: Push remediation image
+        if: steps.changes.outputs.remediation == 'true' && vars.REMEDIATION_ENABLED == 'true'
+        env:
+          IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_REMEDIATION }}
+        run: |
+          docker push "$IMAGE:${{ steps.sha.outputs.sha }}"
+          docker push "$IMAGE:latest"
+
+      - name: Deploy remediation to Cloud Run
+        if: steps.changes.outputs.remediation == 'true' && vars.REMEDIATION_ENABLED == 'true'
+        env:
+          IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_REMEDIATION }}
+          REMEDIATION_SA: ${{ secrets.CLOUD_RUN_REMEDIATION_SA }}
+          REMEDIATION_TOKEN: ${{ secrets.REMEDIATION_TOKEN }}
+        run: |
+          SA_FLAG=""
+          [ -n "$REMEDIATION_SA" ] && SA_FLAG="--service-account=$REMEDIATION_SA"
+          gcloud run deploy ${{ secrets.CLOUD_RUN_SERVICE_REMEDIATION }} \
+            --image "$IMAGE:${{ steps.sha.outputs.sha }}" \
+            --region ${{ secrets.GCP_REGION }} \
+            --project ${{ secrets.GCP_PROJECT_ID }} \
+            --platform managed \
+            --allow-unauthenticated \
+            $SA_FLAG \
+            --set-env-vars "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},GCP_REGION=${{ secrets.GCP_REGION }},REMEDIATION_DRY_RUN=${{ vars.REMEDIATION_DRY_RUN || 'true' }},REMEDIATION_TOKEN=$REMEDIATION_TOKEN" \
+            --memory 256Mi \
+            --timeout 60 \
+            --min-instances 0 \
+            --max-instances 2 \
+            --concurrency 10
 
       # ----- Frontend -----
       - name: Build frontend image

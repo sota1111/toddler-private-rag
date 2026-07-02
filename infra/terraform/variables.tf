@@ -189,3 +189,57 @@ variable "llm_grounding_degraded_rate_threshold" {
   type        = number
   default     = 0.1
 }
+
+# --- SOT-1480 (P2): autonomous runtime rollback (remediation service). ---
+# Opt-in and safe by default: with enable_autonomous_rollback = false NOTHING new is created,
+# and the alert policies keep notifying only the email channel. Flip it on (plus set a token and
+# deploy the image via CI) to route alerts to the remediation service.
+
+variable "enable_autonomous_rollback" {
+  description = "SOT-1480 P2: create the remediation Cloud Run service + webhook notification channel and wire the Cloud Run alerts to it. Default false = nothing new is created (safe/opt-in)."
+  type        = bool
+  default     = false
+}
+
+variable "remediation_service_name" {
+  description = "SOT-1480: Cloud Run service name for the autonomous rollback remediation service."
+  type        = string
+  default     = "toddler-remediation"
+}
+
+variable "remediation_image" {
+  description = "SOT-1480: remediation container image. Overridden by CI pushes (ignored by Terraform); only used on first create."
+  type        = string
+  default     = ""
+}
+
+variable "remediation_token" {
+  description = "SOT-1480: shared token embedded in the webhook URL and required by the remediation service (?token=). Sensitive; supply via terraform.tfvars (gitignored)."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "remediation_dry_run" {
+  description = "SOT-1480: when true the remediation service computes and logs the rollback decision but never shifts traffic. Default true (safe)."
+  type        = bool
+  default     = true
+}
+
+variable "remediation_cooldown_seconds" {
+  description = "SOT-1480: minimum seconds between automatic rollbacks of the same service."
+  type        = number
+  default     = 3600
+}
+
+variable "remediation_deploy_window_seconds" {
+  description = "SOT-1480: only auto-roll-back when the currently-serving revision is younger than this many seconds (recent-deploy attribution)."
+  type        = number
+  default     = 3600
+}
+
+variable "remediation_allowed_services" {
+  description = "SOT-1480: optional comma-separated allowlist of Cloud Run services eligible for autonomous rollback. Empty = all services are eligible."
+  type        = string
+  default     = ""
+}
