@@ -1,0 +1,8 @@
+# SOT-1480: slim deps for the autonomous rollback remediation service
+# (backend/remediation_function/main.py). Deliberately excludes OCR/AI/FastAPI deps so the
+# service stays small and cold-starts quickly. It calls the Cloud Run Admin API v2 (google-auth)
+# and persists cooldown state in Firestore.
+functions-framework==3.*
+google-auth>=2.23.0
+requests>=2.31.0
+google-cloud-firestore>=2.11.0

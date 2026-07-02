@@ -100,8 +100,50 @@ terraform apply -target=google_monitoring_dashboard.ops
    gcloud run services logs read <service> --region asia-northeast1 --project <project> --limit 100
    ```
 3. **一次対応**: 直近デプロイ起因なら [`runbook-rollback.md`](./runbook-rollback.md) でロールバック。
+   自律ロールバック（下記）が有効なら、このステップは自動で試行される。
 4. **恒久対応**: 原因を修正 → eval 回帰スイート緑を確認 → 再デプロイ。
 5. **記録**: 事象・原因・対応を Linear に残し、再発防止（eval ケース追加等）を検討。
+
+### 自律ロールバック（P2, SOT-1480）
+
+デプロイ時の canary ロールバック（`deploy-cloudrun.yml`, SOT-1469 B2）の「ランタイム版」。
+Cloud Monitoring のアラート（5xx / レイテンシ / LLM エラー）が **webhook 通知チャネル** を発火し、
+小さな remediation Cloud Run サービス（`backend/remediation_function/`）が受け取って、
+**ガードレール付きで**直近デプロイ起因かを判定し、健全な前 revision へトラフィックを戻す。
+
+- **アーキテクチャ**: alert → `remediation_webhook` 通知チャネル（`?token=` 認証）→ remediation
+  サービス → Cloud Run Admin API v2 で `update-traffic`（前 revision へ 100%）。
+- **ガードレール**（`remediation_function/remediation.py`）:
+  - **token 認証**（設定なしなら全拒否＝fail-closed）
+  - **dry-run**（既定 ON）: 判定とログのみ出力し、トラフィックは変更しない
+  - **cooldown**: 同一サービスを `REMEDIATION_COOLDOWN_SECONDS`（既定 3600s）以内に再ロールバックしない
+    （状態は Firestore `remediation_state` に保存）
+  - **直近デプロイ判定**: 現行 revision が `REMEDIATION_DEPLOY_WINDOW_SECONDS`（既定 3600s）より
+    古い場合はスキップ（デプロイ起因でない可能性が高いため人手に委ねる）
+  - **監査ログ**: 全判定を `[remediation] action=... service=... reason=...` 形式で出力
+- **既定は無効（opt-in）**: Terraform は `var.enable_autonomous_rollback = false` の間、何も作成せず
+  アラートは email チャネルのみに通知する。
+
+#### 有効化手順
+
+1. `terraform.tfvars` に設定（機微値は gitignored）:
+   ```hcl
+   enable_autonomous_rollback = true
+   remediation_token          = "<ランダムな長い文字列>"
+   remediation_dry_run        = true   # まず dry-run で挙動を確認してから false に
+   ```
+2. `terraform apply`（remediation サービス・SA・IAM・webhook 通知チャネルを作成し、既存アラートに配線）。
+3. CI で remediation イメージをビルド/デプロイするため、リポジトリ変数/シークレットを設定:
+   - repo *variable* `REMEDIATION_ENABLED=true`（未設定ならデプロイ手順はスキップ＝既存パイプライン無影響）
+   - repo *variable* `REMEDIATION_DRY_RUN`（任意, 既定 `true`）
+   - secrets `CLOUD_RUN_SERVICE_REMEDIATION` / `CLOUD_RUN_REMEDIATION_SA` / `REMEDIATION_TOKEN`
+4. dry-run のログ（`[remediation] action=dry_run ... would roll back ...`）で妥当性を確認したら、
+   `remediation_dry_run = false` にして実ロールバックを有効化する。
+
+#### 無効化 / 停止
+
+- 即時停止は `remediation_dry_run = true`（apply）または repo variable `REMEDIATION_ENABLED=false`。
+- 完全撤去は `enable_autonomous_rollback = false` で apply（webhook チャネルとサービスを削除）。
 
 ## モデル / プロンプト変更フロー
 
