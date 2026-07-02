@@ -199,19 +199,31 @@ worker は 202 を即返して背景で `process_ocr`（OCR→構造化→エー
 
 ## 6. DevOps フルサイクル
 
-デプロイまでを見据え、Infrastructure as Code・CI/CD・監視まで整備しています。
+デプロイまでを見据え、Infrastructure as Code・CI/CD・サプライチェーン検査・監視まで整備しています。
 
-- **IaC (Terraform)** — `infra/terraform/`（16ファイル）で GCP をコード管理:
+- **IaC (Terraform)** — `infra/terraform/`（17ファイル）で GCP をコード管理:
   Cloud Run ×2（`cloud_run.tf` / `cloud_run_upload.tf`）、Firestore、Pub/Sub、Cloud Storage、
   Secret Manager、IAM、**Workload Identity Federation**（`wif.tf`）、Artifact Registry、
-  Cloud Scheduler、Cloud Monitoring、API 有効化。
-- **CI** (`.github/workflows/ci.yml`) — backend: `pytest`、frontend: `eslint` + `typecheck/build` +
-  **Playwright e2e**。
-- **CD** (`.github/workflows/deploy-cloudrun.yml`) — `main` への push / 手動実行で backend → upload-api を
-  Docker build → Artifact Registry push → Cloud Run deploy。認証は **Workload Identity Federation**（
-  JSON キーレス、`id-token: write`）。
-- **監視** (`infra/terraform/monitoring.tf`) — Cloud Run の **5xx エラー率**・**p99 レイテンシ**に
-  アラートポリシー、メール通知チャネル。
+  Cloud Scheduler、Cloud Monitoring（アラート `monitoring.tf` / ダッシュボード `dashboard.tf`）、API 有効化。
+  Terraform state は **GCS リモートバックエンド**（`versions.tf` の `backend "gcs"`）で共有・永続化します。
+- **CI** (`.github/workflows/ci.yml`) — 3 ジョブ構成: `backend-tests`（`pytest` +
+  **カバレッジゲート** `--cov-fail-under=70`）、`evaluation-gate`（OCR/RAG 精度の回帰ゲートを分離）、
+  `frontend-checks`（`eslint` + `typecheck/build` + **Playwright e2e**）。
+- **CD** (`.github/workflows/deploy-cloudrun.yml`) — **CI 成功を条件**に起動（`workflow_run`）し、
+  **変更のあったサービスのみ**を Docker build → Artifact Registry push → Cloud Run deploy。
+  backend は **canary デプロイ**（`--no-traffic --tag canary` で無トラフィック投入 → `/health`
+  チェック → 合格で 100% 昇格 / 失敗で旧リビジョン維持の**自動ロールバック**）。
+  認証は **Workload Identity Federation**（JSON キーレス、`id-token: write`）。
+- **Terraform CI** (`.github/workflows/terraform-ci.yml`) — `infra/terraform/**` 変更時に
+  `fmt -check` / `init -backend=false` / `validate` で IaC を静的検証。
+- **サプライチェーン検査** (`.github/workflows/security-scan.yml`) — `pip-audit`・`npm audit`・
+  **Trivy**（依存脆弱性スキャン + IaC/Dockerfile ミス設定は CRITICAL でブロッキング）・
+  **SBOM 生成**（CycloneDX）。依存更新は **Dependabot**（`.github/dependabot.yml`）で自動 PR 化。
+- **監視** — `infra/terraform/monitoring.tf` で Cloud Run の **5xx エラー率**・**p99 レイテンシ**・
+  **LLM エラー**（ログベースメトリクス）にアラートポリシー、`dashboard.tf` で運用ダッシュボードを
+  Terraform 定義。運用手順は `docs/runbook-operations.md` / `docs/runbook-rollback.md` を参照。
+- **設計判断の記録 (ADR)** — 主要な設計判断を `docs/adr/` に Architecture Decision Record として記録
+  （in-process エージェント / 自前 RAG / never-throw 劣化 / Firestore+SQLite 永続化）。
 - **シークレット管理** — セッション署名鍵・許可メール・Firebase API key・worker トークンを
   Secret Manager から `--set-secrets` で注入。
 
@@ -219,14 +231,16 @@ worker は 202 を即返して背景で `process_ocr`（OCR→構造化→エー
 
 | 項目 | 実績 |
 |---|---|
-| 自動テスト（backend） | **pytest 253 件**（`backend/tests/`） |
+| 自動テスト（backend） | **pytest 284 件**（`backend/tests/`）、CI でカバレッジゲート（`--cov-fail-under=70`） |
 | 自動テスト（frontend E2E） | **Playwright 19 テスト / 4 spec**（`frontend/e2e/`） |
-| Infrastructure as Code | **Terraform 16 ファイル**（`infra/terraform/`） |
-| CI / CD | GitHub Actions 2 ワークフロー（`ci.yml` / `deploy-cloudrun.yml`）、**Workload Identity Federation**（キーレス認証） |
-| 監視 | Cloud Monitoring に **Cloud Run 5xx エラー率**・**p99 レイテンシ**の**アラートポリシー**＋メール通知チャネルを Terraform 定義（`infra/terraform/monitoring.tf`） |
+| Infrastructure as Code | **Terraform 17 ファイル**（`infra/terraform/`）、state は GCS リモートバックエンドで永続化 |
+| CI / CD | GitHub Actions 4 ワークフロー（`ci.yml` / `deploy-cloudrun.yml` / `terraform-ci.yml` / `security-scan.yml`）、**Workload Identity Federation**（キーレス認証）、CD は CI 成功をゲートに canary デプロイ + 自動ロールバック |
+| サプライチェーン | `pip-audit` / `npm audit` / **Trivy**（依存 + IaC ミス設定）/ **SBOM**（CycloneDX）/ **Dependabot** 自動更新 |
+| 監視 | Cloud Monitoring に **5xx エラー率**・**p99 レイテンシ**・**LLM エラー**の**アラートポリシー**＋運用**ダッシュボード**を Terraform 定義（`monitoring.tf` / `dashboard.tf`） |
 
-> 数値は実際のテスト収集数・ファイル数に基づきます。監視は「p99 レイテンシに対するアラートポリシーを
-> IaC で定義済み」という意味で、実測 SLO 値ではありません。
+> 数値は実際のテスト収集数・ファイル数に基づきます。監視は「アラートポリシー／ダッシュボードを
+> IaC で定義済み」という意味で、実測 SLO 値ではありません。サプライチェーン検査は初期展開時の
+> 破綻を避けるため、Trivy の IaC ミス設定のみブロッキング、依存監査はレポーティング運用です。
 
 ---
 
@@ -254,7 +268,8 @@ worker は 202 を即返して背景で `process_ocr`（OCR→構造化→エー
 | RAG | インプロセス・ベクトルストア（純Pythonコサイン類似度）+ Provider抽象（fake / gemini） |
 | AI | `google-genai` 経由の Gemini。本番は Vertex AI（`GOOGLE_GENAI_USE_VERTEXAI=true`）、ローカルは APIキーも可 |
 | GCP | Cloud Run ×2, Cloud Build, Artifact Registry, Secret Manager, Firestore, Cloud Storage, Cloud Scheduler, Cloud Monitoring, Vertex AI, Vision AI |
-| IaC / CI/CD | Terraform, GitHub Actions（Workload Identity Federation） |
+| IaC / CI/CD | Terraform（GCS リモート state）, GitHub Actions（CI / CD / Terraform CI / Security Scan、Workload Identity Federation、canary デプロイ + 自動ロールバック） |
+| セキュリティ | pip-audit / npm audit / Trivy（依存 + IaC ミス設定）/ SBOM（CycloneDX）/ Dependabot |
 | 認証 | Firebase Identity Toolkit REST（サーバサイド照合）+ HMAC署名セッションcookie |
 
 ---
@@ -388,9 +403,13 @@ Secret Manager から注入されます。
 
 ### 3. GitHub Actions による自動デプロイ
 
-`main` への push（および `workflow_dispatch`）で `.github/workflows/deploy-cloudrun.yml` が
-backend → upload-api の順に Docker build → Artifact Registry push → Cloud Run deploy を実行します。
-認証は **Workload Identity Federation**（JSON キー不使用、`permissions: contents: read` / `id-token: write`）。
+`main` への **CI（`ci.yml`）成功を条件**に `.github/workflows/deploy-cloudrun.yml` が起動し
+（`workflow_run`、`workflow_dispatch` でも手動実行可）、**変更のあったサービスのみ** Docker build →
+Artifact Registry push → Cloud Run deploy を実行します。backend は **canary デプロイ**（無トラフィックの
+`--tag canary` リビジョンを投入 →`/health` チェック → 合格で 100% 昇格 / 失敗で旧リビジョンを維持する
+自動ロールバック）。認証は **Workload Identity Federation**（JSON キー不使用、`permissions: contents: read` /
+`id-token: write`）。あわせて `terraform-ci.yml`（IaC の fmt/validate）と `security-scan.yml`
+（依存監査・Trivy・SBOM）が PR / push で走ります。
 
 必要な GitHub Actions Secrets: `GCP_PROJECT_ID` / `GCP_PROJECT_NUMBER` / `GCP_REGION` /
 `GCP_WORKLOAD_IDENTITY_PROVIDER` / `GCP_SERVICE_ACCOUNT` / `ARTIFACT_REGISTRY_REPOSITORY` /
