@@ -2,6 +2,13 @@ import datetime
 from pydantic import BaseModel, ConfigDict, model_validator, field_validator
 from typing import Optional, List, Union
 
+# SOT-1470 D2: version of the LLM/OCR extraction output contract. Bump this on any
+# backward-incompatible change to the extraction output schemas below
+# (DocumentExtraction / ExtractedCategories / InfoExtractDraft). Consumers can read
+# ``schema_version`` to guard against a prompt/model update silently changing the
+# structured output. The human-readable contract lives in docs/agent-contract.md.
+EXTRACTION_SCHEMA_VERSION = "1.0.0"
+
 
 def _empty_str_to_none(value):
     """空文字・空白のみの文字列を None に正規化する。
@@ -230,11 +237,18 @@ class HybridSearchResponse(BaseModel):
 
 class DocumentExtraction(BaseModel):
     """OCR抽出結果を型安全に表す構造化スキーマ。"""
+    schema_version: str = EXTRACTION_SCHEMA_VERSION  # 抽出出力契約のバージョン (SOT-1470 D2)
     raw_text: str = ""                       # 抽出された生テキスト（既存 ocr_text 相当）
     char_count: int = 0                      # raw_text の文字数
     is_empty: bool = True                    # 抽出テキストが空（空白のみ含む）か
     detected_dates: List[str] = []           # テキストから検出した日付文字列（ISO等の正規化文字列）
     detected_items: List[str] = []           # テキストから検出した持ち物/箇条書き項目候補
+
+    @field_validator("schema_version")
+    @classmethod
+    def _default_schema_version(cls, v: str) -> str:
+        # 空文字/空白は現行バージョンに正規化する (SOT-1470 D2)。
+        return v.strip() if (v and v.strip()) else EXTRACTION_SCHEMA_VERSION
 
     @model_validator(mode="after")
     def derive_fields(self) -> "DocumentExtraction":
@@ -261,6 +275,7 @@ class ExtractedCategories(BaseModel):
 
 class InfoExtractDraft(BaseModel):
     """画像をOCR・構造化して得た登録フォーム用ドラフト（DB未保存）。"""
+    schema_version: str = EXTRACTION_SCHEMA_VERSION  # 抽出出力契約のバージョン (SOT-1470 D2)
     title: str
     info_type: str
     content: str
