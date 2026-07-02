@@ -79,3 +79,60 @@ def test_session_too_many_attempts_returns_429(client, monkeypatch):
         json={"email": "allowed@example.com", "password": "x"},
     )
     assert res.status_code == 429
+
+
+# --- SOT-1487: Google sign-in (Firebase ID token) ---
+
+def test_google_session_success_sets_cookie(client, monkeypatch):
+    def fake_post(url, params=None, json=None, timeout=None):
+        # accounts:lookup returns the verified user for a valid project token.
+        return FakeResponse(
+            200,
+            {"users": [{"email": "allowed@example.com", "emailVerified": True}]},
+        )
+
+    monkeypatch.setattr(auth.httpx, "post", fake_post)
+
+    res = client.post("/api/auth/session/google", json={"id_token": "valid.token"})
+    assert res.status_code == 200
+    assert res.json()["success"] is True
+    assert "auth_token" in res.cookies
+
+
+def test_google_session_invalid_token_returns_401(client, monkeypatch):
+    def fake_post(url, params=None, json=None, timeout=None):
+        return FakeResponse(400, {"error": {"message": "INVALID_ID_TOKEN"}})
+
+    monkeypatch.setattr(auth.httpx, "post", fake_post)
+
+    res = client.post("/api/auth/session/google", json={"id_token": "bad"})
+    assert res.status_code == 401
+    assert "auth_token" not in res.cookies
+
+
+def test_google_session_email_not_allowed_returns_403(client, monkeypatch):
+    def fake_post(url, params=None, json=None, timeout=None):
+        return FakeResponse(
+            200,
+            {"users": [{"email": "intruder@example.com", "emailVerified": True}]},
+        )
+
+    monkeypatch.setattr(auth.httpx, "post", fake_post)
+
+    res = client.post("/api/auth/session/google", json={"id_token": "valid.token"})
+    assert res.status_code == 403
+    assert "auth_token" not in res.cookies
+
+
+def test_google_session_unverified_email_returns_401(client, monkeypatch):
+    def fake_post(url, params=None, json=None, timeout=None):
+        return FakeResponse(
+            200,
+            {"users": [{"email": "allowed@example.com", "emailVerified": False}]},
+        )
+
+    monkeypatch.setattr(auth.httpx, "post", fake_post)
+
+    res = client.post("/api/auth/session/google", json={"id_token": "valid.token"})
+    assert res.status_code == 401
+    assert "auth_token" not in res.cookies
