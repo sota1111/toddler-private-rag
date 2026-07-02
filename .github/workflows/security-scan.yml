@@ -57,7 +57,7 @@ jobs:
       # Vulnerability scan of the repository (dependencies) — reporting only.
       - name: Trivy filesystem scan (vulnerabilities)
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.29.0
         with:
           scan-type: fs
           scan-ref: .
@@ -67,7 +67,7 @@ jobs:
 
       # IaC / Dockerfile misconfiguration scan — BLOCKING on CRITICAL.
       - name: Trivy config scan (IaC misconfig, blocking)
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.29.0
         with:
           scan-type: config
           scan-ref: .
