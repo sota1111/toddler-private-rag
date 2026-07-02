@@ -50,7 +50,8 @@ export const deleteChild = async (id: number | string): Promise<void> => {
 };
 
 // 既存の仮登録(draft)を部分更新する (SOT-1175: 写真アップ後の best-effort 補完用)
-export const updateInfo = async (id: number | string, data: Partial<NurseryInfoCreate>): Promise<NurseryInfo> => {
+// SOT-1468: 写真詳細画面から登録月(created_at)を変更できるよう、更新ペイロードに created_at を許可する。
+export const updateInfo = async (id: number | string, data: Partial<NurseryInfoCreate> & { created_at?: string }): Promise<NurseryInfo> => {
   const response = await api.put(`/info/${id}`, data);
   return response.data;
 };

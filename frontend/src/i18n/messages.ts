@@ -222,6 +222,10 @@ export const messages: Record<Lang, Messages> = {
     'records.rescheduleError': '提出目標日の変更に失敗しました。時間をおいて再度お試しください。',
     'records.notFound': 'データが見つかりませんでした。',
     'records.attachmentsHeading': '元の画像データ',
+    // SOT-1468: 写真詳細画面で登録月(created_at)を変更するUI。
+    'records.registeredMonth': '登録月',
+    'records.registeredMonthSave': '変更',
+    'records.registeredMonthSaved': '登録月を変更しました。',
     'records.eventDate': '日付',
     'records.status': 'ステータス',
     'records.content': '内容',
@@ -612,6 +616,10 @@ export const messages: Record<Lang, Messages> = {
     'records.rescheduleError': 'Failed to change the submission target date. Please try again later.',
     'records.notFound': 'Data not found.',
     'records.attachmentsHeading': 'Original image data',
+    // SOT-1468: UI to change the registered month (created_at) on the photo detail page.
+    'records.registeredMonth': 'Registered month',
+    'records.registeredMonthSave': 'Change',
+    'records.registeredMonthSaved': 'Registered month updated.',
     'records.eventDate': 'Date',
     'records.status': 'Status',
     'records.content': 'Details',

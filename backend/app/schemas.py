@@ -129,6 +129,10 @@ class NurseryInfoUpdate(BaseModel):
     priority: Optional[str] = None
     tags: Optional[str] = None
     memo: Optional[str] = None
+    # SOT-1468: 写真詳細画面から「登録月」を変更できるようにするため、登録日時(created_at)の
+    # 更新を許可する。写真一覧はこの created_at の年月でグルーピングするため、これを変更すると
+    # 一覧の月グループが変わる。
+    created_at: Optional[datetime.datetime] = None
 
     _normalize_dates = field_validator(
         "date", "event_date", "due_date", "deadline_base_date", mode="before"
