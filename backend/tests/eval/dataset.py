@@ -149,3 +149,13 @@ RAG_EVAL_CASES = [
         "expected_keywords": ["登園", "控えて"]
     }
 ]
+
+# Refusal Evaluation Cases (SOT-1471)
+# The agent must NOT fabricate an answer when nothing relevant is retrieved.
+# Evaluated against an EMPTY index: the answer must be a refusal (no sources,
+# a "見つかりませんでした" style message) rather than a hallucinated response.
+# Each case: { "id", "query" }
+REFUSAL_EVAL_CASES = [
+    {"id": "unrelated_stock", "query": "株価 の 予想 を 教えて"},
+    {"id": "out_of_scope_weather", "query": "明日 の 天気 は"},
+]

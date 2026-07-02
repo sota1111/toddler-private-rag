@@ -2,11 +2,15 @@ import os
 import pytest
 from app.rag.providers import FakeEmbeddingProvider, FakeLLMProvider
 from app.rag.service import RagService
-from tests.eval.dataset import RAG_CORPUS, RAG_EVAL_CASES
+from tests.eval.dataset import RAG_CORPUS, RAG_EVAL_CASES, REFUSAL_EVAL_CASES
 
 # Thresholds
 MIN_TOP_SOURCE_ACCURACY = 0.8
 MIN_AVG_KEYWORD_HIT_RATE = 0.8
+# SOT-1471: groundedness = answer keywords must be traceable to retrieved sources
+# (no hallucination). Refusal = no answer must be fabricated with no sources.
+MIN_GROUNDEDNESS = 0.8
+REFUSAL_MARKER = "見つかりませんでした"
 
 class FakeAttachment:
     def __init__(self, original_filename, ocr_text):
@@ -85,3 +89,44 @@ def test_rag_aggregate_scores(rag_service):
     
     assert accuracy >= MIN_TOP_SOURCE_ACCURACY
     assert avg_hit_rate >= MIN_AVG_KEYWORD_HIT_RATE
+
+
+def test_rag_groundedness(rag_service):
+    """SOT-1471: every keyword the answer states must be traceable to a source.
+
+    Guards against hallucination: a keyword appearing in the answer but not in any
+    retrieved source text is ungrounded.
+    """
+    grounded = 0
+    total = 0
+    for case in RAG_EVAL_CASES:
+        answer = rag_service.answer(case["query"], top_k=case["top_k"])
+        source_text = " ".join(s.text for s in answer.sources)
+        for kw in case["expected_keywords"]:
+            if kw in answer.answer:
+                total += 1
+                if kw in source_text:
+                    grounded += 1
+
+    groundedness = grounded / total if total else 1.0
+    print(f"\nGroundedness: {groundedness:.2f} ({grounded}/{total})")
+    assert groundedness >= MIN_GROUNDEDNESS
+
+
+def test_rag_refusal_on_empty_index():
+    """SOT-1471: with nothing indexed, the agent must refuse, not fabricate.
+
+    A fresh service with no documents must return no sources and a refusal
+    message for out-of-scope / unanswerable queries.
+    """
+    service = RagService(
+        embedding_provider=FakeEmbeddingProvider(),
+        llm_provider=FakeLLMProvider(),
+    )
+    # Intentionally no build_index: nothing can be retrieved.
+    for case in REFUSAL_EVAL_CASES:
+        answer = service.answer(case["query"], top_k=3)
+        assert not answer.sources, f"{case['id']}: expected no sources, got {len(answer.sources)}"
+        assert REFUSAL_MARKER in answer.answer, (
+            f"{case['id']}: expected a refusal answer, got {answer.answer!r}"
+        )
