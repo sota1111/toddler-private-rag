@@ -54,25 +54,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Install Trivy directly via the official script. This avoids the
+      # trivy-action composite action, whose pinned transitive setup-trivy tag
+      # has been unstable to resolve.
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin v0.58.0
+          trivy --version
+
       # Vulnerability scan of the repository (dependencies) — reporting only.
       - name: Trivy filesystem scan (vulnerabilities)
         continue-on-error: true
-        uses: aquasecurity/trivy-action@v0.29.0
-        with:
-          scan-type: fs
-          scan-ref: .
-          scanners: vuln
-          severity: HIGH,CRITICAL
-          exit-code: '0'
+        run: trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 0 --no-progress .
 
       # IaC / Dockerfile misconfiguration scan — BLOCKING on CRITICAL.
       - name: Trivy config scan (IaC misconfig, blocking)
-        uses: aquasecurity/trivy-action@v0.29.0
-        with:
-          scan-type: config
-          scan-ref: .
-          severity: CRITICAL
-          exit-code: '1'
+        run: trivy config --severity CRITICAL --exit-code 1 --no-progress .
 
   sbom:
     runs-on: ubuntu-latest
