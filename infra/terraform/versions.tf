@@ -12,11 +12,10 @@ terraform {
     }
   }
 
-  # Optional remote state. Recommended once you adopt this config: create a GCS
-  # bucket for state and uncomment the block below.
-  #
-  # backend "gcs" {
-  #   bucket = "gen-lang-client-0243034020-tfstate"
-  #   prefix = "toddler-private-rag/terraform"
-  # }
+  # Remote state in GCS (bucket created out-of-band with versioning enabled).
+  # State is shared and persisted across environments via this backend.
+  backend "gcs" {
+    bucket = "gen-lang-client-0243034020-tfstate"
+    prefix = "toddler-private-rag/terraform"
+  }
 }
