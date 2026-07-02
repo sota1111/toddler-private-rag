@@ -36,15 +36,48 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run pytest
+      - name: Run pytest (excluding eval suites)
         run: |
           mkdir -p data
-          python -m pytest -q
+          # Eval suites run in the dedicated evaluation-gate job (SOT-1469 B1)
+          # so accuracy regressions get their own required status check.
+          python -m pytest -q --ignore=tests/test_eval_ocr.py --ignore=tests/test_eval_rag.py
 
-      # SOT-1471: explicit evaluation regression gate. Runs the OCR/RAG eval
-      # suites on their own so accuracy regressions (coverage/precision/F1,
-      # groundedness, refusal) fail CI with clear attribution.
-      - name: Evaluation regression gate
+  # SOT-1469 B1: the OCR/RAG evaluation harness is a first-class release quality
+  # gate. It runs as its own CI job (a separately-named required status check),
+  # so an accuracy regression (coverage/precision/F1, groundedness, refusal)
+  # fails CI on its own. Because the Deploy workflow is triggered by CI success
+  # (SOT-1469 A1), a failing evaluation-gate blocks the production deploy.
+  evaluation-gate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            tesseract-ocr \
+            tesseract-ocr-jpn \
+            poppler-utils
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Evaluation regression gate (OCR + RAG accuracy thresholds)
         run: |
           mkdir -p data
           python -m pytest -q tests/test_eval_ocr.py tests/test_eval_rag.py
