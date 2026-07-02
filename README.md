@@ -8,8 +8,8 @@
 Google Cloud（Cloud Run / Vertex AI Gemini / Cloud Vision AI）上で、Terraform による IaC・
 Workload Identity Federation による CI/CD・Cloud Monitoring まで含めたフルサイクルで運用しています。
 
-- 🔗 **デモ（デプロイ済み Cloud Run URL）**: `TODO: 本番 Cloud Run の URL を記入`
-- 🎥 デモ動画: `TODO: 動画URLを記入`
+- 🎥 **紹介動画**: <https://www.youtube.com/channel/UC8u73I1rt1L3b4L5ZVfo-Ng>
+- 🖼️ **デモ**: 本 README のスクリーンショット（[7. スクリーンショット（UI/UX）](#7-スクリーンショットuiux)）と[締切逆算の実例（就労証明書）](#21-実例-就労証明書の準備を読む--調べる--逆算まで自動化)を参照してください。
 
 ---
 
