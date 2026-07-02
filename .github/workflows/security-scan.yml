@@ -1,0 +1,93 @@
+name: Security Scan
+
+# SOT-1469 A4: supply-chain security checks — dependency vulnerability audits,
+# a Trivy scan of dependencies + IaC misconfiguration, and SBOM generation.
+#
+# Gating policy (intentionally staged to avoid breaking on pre-existing findings):
+#   - trivy-config (IaC/Dockerfile misconfig, CRITICAL) is BLOCKING.
+#   - dependency audits (pip-audit / npm audit) and the vuln scan run as
+#     reporting (continue-on-error) so they surface issues without blocking the
+#     first rollout; tighten to blocking once the backlog is triaged.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly full scan to catch newly disclosed CVEs in unchanged deps.
+    - cron: '0 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: pip-audit (backend)
+        continue-on-error: true
+        run: |
+          python -m pip install --upgrade pip pip-audit
+          pip-audit -r backend/requirements.txt --desc
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: npm audit (frontend)
+        continue-on-error: true
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+  trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Install Trivy directly via the official script. This avoids the
+      # trivy-action composite action, whose pinned transitive setup-trivy tag
+      # has been unstable to resolve.
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin
+          trivy --version
+
+      # Vulnerability scan of the repository (dependencies) — reporting only.
+      - name: Trivy filesystem scan (vulnerabilities)
+        continue-on-error: true
+        run: trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 0 --quiet .
+
+      # IaC / Dockerfile misconfiguration scan — BLOCKING on CRITICAL.
+      - name: Trivy config scan (IaC misconfig, blocking)
+        run: trivy config --severity CRITICAL --exit-code 1 --quiet .
+
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate SBOM (CycloneDX)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          artifact-name: sbom.cyclonedx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: '**/sbom.cyclonedx.json'
+          if-no-files-found: warn

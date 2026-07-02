@@ -1,0 +1,46 @@
+# SOT-1469 A4: automated dependency-update PRs across the stack. Keeping deps
+# current is the cheapest supply-chain control; Dependabot opens PRs that then run
+# through CI (and the security-scan workflow) before they can reach main.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - backend
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - frontend
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+      - ci
+
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+      - docker
+
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+      - docker
