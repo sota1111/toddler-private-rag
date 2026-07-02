@@ -145,3 +145,54 @@ def test_extract_empty_ocr_returns_fallback(monkeypatch):
     assert data["items"] is None
     assert data["detected_dates"] == []
     assert data["detected_items"] == []
+
+
+# --- SOT-1464: 画像だけでなく PDF 入力もシナリオとして検証する ---
+
+
+def test_extract_accepts_pdf_and_returns_valid_draft(monkeypatch):
+    # PDF (application/pdf) が受理され、正しく PDF 経路として OCR に渡ることを検証する。
+    seen = {}
+
+    def stub(path, ct):
+        seen["ct"] = ct
+        return "おしらせ\n本文です"
+
+    monkeypatch.setattr(info_router.ocr, "extract_text", stub)
+    response = client.post(
+        "/api/info/extract",
+        files={"file": ("otayori.pdf", b"%PDF-1.4 fake", "application/pdf")},
+    )
+    assert response.status_code == 200
+    # content_type が application/pdf として OCR に渡っている
+    assert seen["ct"] == "application/pdf"
+    data = response.json()
+    assert REQUIRED_KEYS.issubset(data.keys())
+    assert isinstance(data["title"], str) and data["title"]
+    assert data["info_type"] in INFO_TYPES
+
+
+def test_extract_pdf_parses_date_and_items(monkeypatch):
+    text = "運動会のお知らせ\n2026-05-01\n持ち物\n・体操着\n・水筒"
+    monkeypatch.setattr(info_router.ocr, "extract_text", lambda path, ct: text)
+    response = client.post(
+        "/api/info/extract",
+        files={"file": ("otayori.pdf", b"%PDF-1.4 fake", "application/pdf")},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["date"] == "2026-05-01"
+    assert "2026-05-01" in data["detected_dates"]
+    assert data["items"] is not None
+    assert "・体操着" in data["items"]
+    assert data["info_type"] == "持ち物"
+
+
+def test_extract_pdf_rejects_oversize_file(monkeypatch):
+    monkeypatch.setattr(info_router.ocr, "extract_text", lambda path, ct: "")
+    big = b"0" * (10 * 1024 * 1024 + 1)
+    response = client.post(
+        "/api/info/extract",
+        files={"file": ("big.pdf", big, "application/pdf")},
+    )
+    assert response.status_code == 413
