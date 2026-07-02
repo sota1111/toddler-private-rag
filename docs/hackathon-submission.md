@@ -2,7 +2,7 @@
 
 > 本ファイルは提出フォームへの記入用テキストです。記載内容はすべて本リポジトリの実装
 > （README / `backend/app/` / `infra/terraform/` / `.github/workflows/`）に基づく事実で、捏造はありません。
-> ライブURL・デモ動画URLは未確定のため `TODO` プレースホルダとしています（人間が記入してください）。
+> ライブURL・デモ動画URLは記入済みです（下記「デモ / 動作確認」を参照）。
 
 ---
 
@@ -175,7 +175,7 @@ Vertex AI 上の in-process 実装を採用（設計決定は `submission_agent.
 
 ---
 
-## デモ / 動作確認（人間が記入）
+## デモ / 動作確認
 
-- 🔗 デモ（デプロイ済み Cloud Run URL）: `TODO: 本番 Cloud Run の URL を記入`
-- 🎥 デモ動画: `TODO: 動画URLを記入`
+- 🔗 デモ（デプロイ済み Cloud Run URL）: <https://toddler-private-rag-frontend-iqrm6wvhfq-an.a.run.app/tasks>
+- 🎥 デモ動画: <https://www.youtube.com/channel/UC8u73I1rt1L3b4L5ZVfo-Ng>
