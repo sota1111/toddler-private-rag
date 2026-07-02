@@ -177,3 +177,9 @@ variable "cloud_run_latency_threshold_ms" {
   type        = number
   default     = 2000
 }
+
+variable "llm_error_rate_threshold" {
+  description = "SOT-1472: LLM (Gemini) call failure rate (failures/second, aligned) above which the LLM-error alert fires."
+  type        = number
+  default     = 0.05
+}

@@ -12,6 +12,7 @@ Environment variables:
 - ``GEMINI_API_KEY`` / ``GOOGLE_API_KEY`` — only used in local API-key fallback.
 """
 
+import json
 import logging
 import os
 import time
@@ -24,6 +25,44 @@ DEFAULT_LOCATION = "global"
 DEFAULT_MODEL = "gemini-3.5-flash"
 
 _logged_init = False
+
+
+def log_llm_call(
+    operation: str,
+    model: str,
+    latency_ms: float,
+    ok: bool,
+    *,
+    grounded: Optional[bool] = None,
+    error: Optional[object] = None,
+) -> None:
+    """Emit one structured log line per LLM call (SOT-1472).
+
+    Feeds the log-based metrics ``llm_request_count`` / ``llm_error_count`` and the
+    ops dashboard (``infra/terraform``). Each line contains the token ``llm_call``
+    (all calls) and, on failure, ``llm_call_failed`` — the exact substrings the
+    log-based metric filters match. Best-effort: never raises, never breaks a request.
+    """
+    try:
+        payload = {
+            "event": "llm_call",
+            "operation": operation,
+            "model": model,
+            "latency_ms": round(latency_ms, 1),
+            "ok": ok,
+        }
+        if grounded is not None:
+            payload["grounded"] = grounded
+        if error is not None:
+            payload["error"] = str(error)[:300]
+        status = "ok" if ok else "llm_call_failed"
+        line = f"llm_call {status} {json.dumps(payload, ensure_ascii=False)}"
+        if ok:
+            logger.info(line)
+        else:
+            logger.error(line)
+    except Exception:  # pragma: no cover - logging must never break the request
+        pass
 
 
 def use_vertex() -> bool:
@@ -193,10 +232,11 @@ def generate_grounded_with_sources(
     grounding metadata is present, ``sources`` is ``[]``. Never raises; mirrors
     ``generate_grounded``'s graceful degradation.
     """
+    model = get_model_name()
     # 1) grounded attempt
+    start = time.monotonic()
     try:
         client = get_genai_client()
-        model = get_model_name()
         cfg = _grounded_config(max_output_tokens)
         if cfg is not None:
             def _gen():
@@ -207,14 +247,20 @@ def generate_grounded_with_sources(
             response = with_retry(_gen)
             text = (getattr(response, "text", "") or "").strip()
             if text:
-                return text, _extract_grounding_sources(response)
+                sources = _extract_grounding_sources(response)
+                log_llm_call(
+                    "grounded", model, (time.monotonic() - start) * 1000, True,
+                    grounded=bool(sources),
+                )
+                return text, sources
     except Exception as e:  # noqa: BLE001 - grounding best-effort
+        log_llm_call("grounded", model, (time.monotonic() - start) * 1000, False, error=e)
         logger.warning("generate_grounded: grounded request failed, falling back: %s", e)
 
     # 2) non-grounded fallback (LLM known-knowledge) — no grounding sources available
+    start = time.monotonic()
     try:
         client = get_genai_client()
-        model = get_model_name()
         cfg = default_generate_config(max_output_tokens)
 
         def _gen_plain():
@@ -225,8 +271,12 @@ def generate_grounded_with_sources(
             return client.models.generate_content(model=model, contents=prompt)
 
         response = with_retry(_gen_plain)
+        log_llm_call(
+            "fallback", model, (time.monotonic() - start) * 1000, True, grounded=False,
+        )
         return (getattr(response, "text", "") or "").strip(), []
     except Exception as e:  # noqa: BLE001 - graceful degradation
+        log_llm_call("fallback", model, (time.monotonic() - start) * 1000, False, error=e)
         logger.warning("generate_grounded: fallback request failed, returning empty: %s", e)
         return "", []
 
