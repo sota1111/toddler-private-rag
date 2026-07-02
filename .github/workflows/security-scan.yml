@@ -66,11 +66,11 @@ jobs:
       # Vulnerability scan of the repository (dependencies) — reporting only.
       - name: Trivy filesystem scan (vulnerabilities)
         continue-on-error: true
-        run: trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 0 --no-progress .
+        run: trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 0 --quiet .
 
       # IaC / Dockerfile misconfiguration scan — BLOCKING on CRITICAL.
       - name: Trivy config scan (IaC misconfig, blocking)
-        run: trivy config --severity CRITICAL --exit-code 1 --no-progress .
+        run: trivy config --severity CRITICAL --exit-code 1 --quiet .
 
   sbom:
     runs-on: ubuntu-latest
