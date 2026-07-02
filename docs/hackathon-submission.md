@@ -178,4 +178,4 @@ Vertex AI 上の in-process 実装を採用（設計決定は `submission_agent.
 ## デモ / 動作確認
 
 - 🔗 デモ（デプロイ済み Cloud Run URL）: <https://toddler-private-rag-frontend-iqrm6wvhfq-an.a.run.app/tasks>
-- 🎥 デモ動画: <https://www.youtube.com/channel/UC8u73I1rt1L3b4L5ZVfo-Ng>
+- 🎥 デモ動画: <https://www.youtube.com/watch?v=yt0ke4QzjhE>
