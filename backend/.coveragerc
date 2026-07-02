@@ -1,0 +1,11 @@
+# SOT-1470 I3: coverage config for the CI coverage gate.
+[run]
+source = app
+omit =
+    tests/*
+    */__pycache__/*
+
+[report]
+# Show lines missing coverage in the CI log.
+show_missing = True
+skip_covered = False

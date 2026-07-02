@@ -3,9 +3,16 @@ __pycache__/
 *.py[cod]
 *.pyo
 venv/
+.venv/
 .env
 *.db
 backend/data/uploads/
+
+# Coverage artifacts (SOT-1470 I3)
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 
 # Node
 node_modules/
