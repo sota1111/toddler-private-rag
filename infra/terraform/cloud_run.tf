@@ -39,6 +39,31 @@ resource "google_cloud_run_v2_service" "backend" {
         }
       }
 
+      # SOT-1486 B4: startup + liveness probes on /health. The backend exposes a
+      # lightweight GET /health (backend/app/main.py) that returns static ok with
+      # no external calls, so it is safe to poll. The startup probe gates traffic
+      # until the container is ready (cold-start / warm-up tolerance); the liveness
+      # probe restarts a hung container. CI (deploy-cloudrun.yml) only sets the
+      # image/env, so gcloud preserves these Terraform-managed probes across deploys.
+      startup_probe {
+        http_get {
+          path = "/health"
+        }
+        initial_delay_seconds = 0
+        timeout_seconds       = 5
+        period_seconds        = 10
+        failure_threshold     = 6
+      }
+      liveness_probe {
+        http_get {
+          path = "/health"
+        }
+        initial_delay_seconds = 10
+        timeout_seconds       = 5
+        period_seconds        = 30
+        failure_threshold     = 3
+      }
+
       env {
         name  = "APP_ENV"
         value = "production"

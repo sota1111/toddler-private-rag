@@ -190,6 +190,26 @@ variable "llm_grounding_degraded_rate_threshold" {
   default     = 0.1
 }
 
+# --- SOT-1486 (SRE first wave): SLOs + error budget. ---
+
+variable "slo_availability_goal" {
+  description = "SOT-1486 A1: target fraction of backend requests that are non-5xx over the rolling 28-day window (availability SLO)."
+  type        = number
+  default     = 0.995
+}
+
+variable "slo_latency_goal" {
+  description = "SOT-1486 A1: target fraction of backend requests served under slo_latency_threshold_ms over the rolling 28-day window (latency SLO)."
+  type        = number
+  default     = 0.95
+}
+
+variable "slo_latency_threshold_ms" {
+  description = "SOT-1486 A1: request latency (milliseconds) that defines a 'good' (fast enough) request for the latency SLO."
+  type        = number
+  default     = 2000
+}
+
 # --- SOT-1480 (P2): autonomous runtime rollback (remediation service). ---
 # Opt-in and safe by default: with enable_autonomous_rollback = false NOTHING new is created,
 # and the alert policies keep notifying only the email channel. Flip it on (plus set a token and
