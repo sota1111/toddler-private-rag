@@ -97,6 +97,30 @@ const AttachmentBlock: React.FC<{ att: Attachment }> = ({ att }) => {
   );
 };
 
+// SOT-1468: 登録日時(created_at)から「登録月」入力(<input type="month">)用の YYYY-MM を作る。
+// 一覧の月グルーピング(RegisteredListPage の monthKey)と同じくローカル時刻の年月を使う。
+const toMonthInput = (iso: string): string => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+
+// SOT-1468: 選択した YYYY-MM を created_at に反映する。日・時刻は元の値を維持し、
+// 対象月の末日を超える日はクランプする（例: 1/31 → 2月選択で 2/28）。戻り値は送信用 ISO 文字列。
+const applyMonthToCreatedAt = (iso: string, ym: string): string | null => {
+  const m = ym.match(/^(\d{4})-(\d{2})$/);
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]); // 1-12
+  const base = new Date(iso);
+  const src = Number.isNaN(base.getTime()) ? new Date() : base;
+  const daysInTarget = new Date(year, month, 0).getDate();
+  const day = Math.min(src.getDate(), daysInTarget);
+  const next = new Date(src);
+  next.setFullYear(year, month - 1, day);
+  return next.toISOString();
+};
+
 // SOT-1309: データ一覧の詳細ページ。タイトルと写真（添付）のみを表示し、削除できる。
 // 編集・ステータス変更などは廃止し、表示と削除に役割を絞った。
 // id ごとに key 付きで再マウントすることで、別レコードへ遷移したときに状態を確実にリセットする。
@@ -125,6 +149,10 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
   const [baseDateInput, setBaseDateInput] = useState<string | null>(null);
   const [rescheduleMessage, setRescheduleMessage] = useState<string | null>(null);
   const [rescheduleError, setRescheduleError] = useState<string | null>(null);
+  // SOT-1468: 写真詳細画面で「登録月」(created_at)を変更する入力値・結果表示。
+  const [monthInput, setMonthInput] = useState<string | null>(null);
+  const [monthMessage, setMonthMessage] = useState<string | null>(null);
+  const [monthError, setMonthError] = useState<string | null>(null);
 
   const { data: item, isLoading, isError } = useQuery({
     queryKey: ['info-detail', id],
@@ -228,6 +256,33 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
     rescheduleMutation.mutate(baseDate);
   };
 
+  // SOT-1468: 写真の登録月(created_at)を変更する。既存の更新API (PUT /info/{id}) を再利用し、
+  // 成功後に一覧(['info'])を無効化して月グループへ即時反映する。
+  const monthMutation = useMutation({
+    mutationFn: (createdAt: string) => updateInfo(id, { created_at: createdAt }),
+    onSuccess: () => {
+      setMonthError(null);
+      setMonthMessage(t('records.registeredMonthSaved'));
+      setMonthInput(null);
+      queryClient.invalidateQueries({ queryKey: ['info-detail', id] });
+      queryClient.invalidateQueries({ queryKey: ['info'] });
+    },
+    onError: () => {
+      setMonthMessage(null);
+      setMonthError(t('records.saveError'));
+    },
+  });
+
+  const handleSaveMonth = () => {
+    if (!item || monthMutation.isPending) return;
+    const ym = monthInput ?? toMonthInput(item.created_at);
+    const nextCreatedAt = applyMonthToCreatedAt(item.created_at, ym);
+    if (!nextCreatedAt) return;
+    setMonthMessage(null);
+    setMonthError(null);
+    monthMutation.mutate(nextCreatedAt);
+  };
+
   const handleDelete = async () => {
     if (deleteMutation.isPending || !item) return;
     if (await confirm(t('records.confirmDelete', { title: item.title }))) {
@@ -322,6 +377,47 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
           {deleteError && (
             <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
               {deleteError}
+            </div>
+          )}
+
+          {/* SOT-1468: 写真ありレコードでは登録月(created_at)を変更できる。
+              写真一覧はこの登録月でグルーピングされるため、ここでの変更が一覧の月グループに反映される。 */}
+          {hasPhoto && (
+            <div className="mb-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <label htmlFor="registered-month" className="text-sm font-medium text-foreground">
+                  {t('records.registeredMonth')}
+                </label>
+                <input
+                  id="registered-month"
+                  type="month"
+                  value={monthInput ?? toMonthInput(item.created_at)}
+                  onChange={(e) => {
+                    setMonthInput(e.target.value);
+                    setMonthMessage(null);
+                  }}
+                  disabled={monthMutation.isPending}
+                  className="border border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2 disabled:opacity-60"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveMonth}
+                  disabled={monthMutation.isPending || !(monthInput ?? toMonthInput(item.created_at))}
+                  className="text-sm font-medium text-brand-strong border border-accent-border bg-accent-bg hover:opacity-90 px-3 py-1.5 rounded-md disabled:opacity-60 transition-colors"
+                >
+                  {monthMutation.isPending ? t('records.rescheduling') : t('records.registeredMonthSave')}
+                </button>
+              </div>
+              {monthMessage && (
+                <div className="mt-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">
+                  {monthMessage}
+                </div>
+              )}
+              {monthError && (
+                <div className="mt-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                  {monthError}
+                </div>
+              )}
             </div>
           )}
 
