@@ -1,6 +1,11 @@
 # SOT-1469 A4: automated dependency-update PRs across the stack. Keeping deps
 # current is the cheapest supply-chain control; Dependabot opens PRs that then run
 # through CI (and the security-scan workflow) before they can reach main.
+#
+# SOT-1487: `cooldown` delays update PRs for newly published releases so a
+# compromised/tampered release is not pulled in the moment it is published. We
+# wait longer on major bumps (more likely to be a hijack target and higher blast
+# radius) and less on patches. This narrows the supply-chain window at no cost.
 version: 2
 updates:
   - package-ecosystem: pip
@@ -8,6 +13,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
     labels:
       - dependencies
       - backend
@@ -17,6 +27,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
     labels:
       - dependencies
       - frontend
@@ -25,6 +40,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 5
     labels:
       - dependencies
       - ci
@@ -33,6 +50,8 @@ updates:
     directory: /backend
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 5
     labels:
       - dependencies
       - docker
@@ -41,6 +60,8 @@ updates:
     directory: /frontend
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 5
     labels:
       - dependencies
       - docker
