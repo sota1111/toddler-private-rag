@@ -180,6 +180,11 @@ export const messages: Record<Lang, Messages> = {
     'ask.sample1': '来週の予定を教えて',
     'ask.sample2': '持ち物の準備はある？',
     'ask.sample3': '提出物の締め切りは？',
+    // feedback (SOT-1473)
+    'ask.feedbackPrompt': 'この回答は役に立ちましたか？',
+    'ask.feedbackUp': '役に立った',
+    'ask.feedbackDown': '役に立たなかった',
+    'ask.feedbackThanks': 'フィードバックありがとうございます。',
 
     // list
     'list.title': '情報一覧',
@@ -574,6 +579,11 @@ export const messages: Record<Lang, Messages> = {
     'ask.sample1': 'What is the schedule for next week?',
     'ask.sample2': 'Is there anything I need to prepare?',
     'ask.sample3': 'When are submissions due?',
+    // feedback (SOT-1473)
+    'ask.feedbackPrompt': 'Was this answer helpful?',
+    'ask.feedbackUp': 'Helpful',
+    'ask.feedbackDown': 'Not helpful',
+    'ask.feedbackThanks': 'Thanks for your feedback!',
 
     // list
     'list.title': 'Information list',

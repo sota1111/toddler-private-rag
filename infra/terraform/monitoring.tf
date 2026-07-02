@@ -100,3 +100,74 @@ resource "google_monitoring_alert_policy" "cloud_run_latency" {
 
   depends_on = [google_project_service.services]
 }
+
+# SOT-1472: log-based metrics for LLM (Gemini) calls. The backend emits one log
+# line per LLM call containing the token "llm_call" (all calls) and, on failure,
+# "llm_call_failed" (see backend/app/ai_client.py:log_llm_call). These metrics
+# feed the ops dashboard (dashboard.tf) and the LLM error-rate alert below.
+resource "google_logging_metric" "llm_request_count" {
+  project     = var.project_id
+  name        = "llm_request_count"
+  description = "Count of LLM (Gemini) calls emitted by the backend (SOT-1472)."
+  filter      = "resource.type=\"cloud_run_revision\" AND textPayload:\"llm_call\""
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+    unit        = "1"
+  }
+
+  depends_on = [google_project_service.services]
+}
+
+resource "google_logging_metric" "llm_error_count" {
+  project     = var.project_id
+  name        = "llm_error_count"
+  description = "Count of failed LLM (Gemini) calls emitted by the backend (SOT-1472)."
+  filter      = "resource.type=\"cloud_run_revision\" AND textPayload:\"llm_call_failed\""
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+    unit        = "1"
+  }
+
+  depends_on = [google_project_service.services]
+}
+
+# Alert: high LLM error rate (SOT-1472).
+resource "google_monitoring_alert_policy" "llm_error_rate" {
+  project      = var.project_id
+  display_name = "LLM error rate high (SOT-1472)"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "LLM call failures per second"
+
+    condition_threshold {
+      filter          = "resource.type = \"cloud_run_revision\" AND metric.type = \"logging.googleapis.com/user/llm_error_count\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = var.llm_error_rate_threshold
+      duration        = "300s"
+
+      aggregations {
+        alignment_period     = "60s"
+        per_series_aligner   = "ALIGN_RATE"
+        cross_series_reducer = "REDUCE_SUM"
+      }
+
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  notification_channels = google_monitoring_notification_channel.email[*].id
+
+  documentation {
+    content   = "The backend LLM (Gemini) call failure rate exceeds the configured threshold. Check backend logs (filter: llm_call_failed), Vertex AI quota, and consider rolling back (see docs/runbook-rollback.md, docs/runbook-operations.md)."
+    mime_type = "text/markdown"
+  }
+
+  depends_on = [google_logging_metric.llm_error_count]
+}

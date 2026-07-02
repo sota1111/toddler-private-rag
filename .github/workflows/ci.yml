@@ -41,6 +41,14 @@ jobs:
           mkdir -p data
           python -m pytest -q
 
+      # SOT-1471: explicit evaluation regression gate. Runs the OCR/RAG eval
+      # suites on their own so accuracy regressions (coverage/precision/F1,
+      # groundedness, refusal) fail CI with clear attribution.
+      - name: Evaluation regression gate
+        run: |
+          mkdir -p data
+          python -m pytest -q tests/test_eval_ocr.py tests/test_eval_rag.py
+
   frontend-checks:
     runs-on: ubuntu-latest
     defaults:

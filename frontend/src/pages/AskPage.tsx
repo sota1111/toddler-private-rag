@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { askInfo, askInfoStream } from '../api';
+import { askInfo, askInfoStream, sendAnswerFeedback } from '../api';
 import type { RagAnswer } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import MarkdownText from '../components/MarkdownText';
@@ -26,6 +26,8 @@ const AskPage: React.FC = () => {
   const [result, setResult] = useState<RagAnswer | null>(() => readSaved()?.result ?? null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // SOT-1473: 回答フィードバック（👍/👎）を一度送ったかどうか。
+  const [feedbackSent, setFeedbackSent] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // query / result が変わるたびに sessionStorage へ保存する（error / isLoading は一時状態なので保存しない）。
@@ -43,6 +45,7 @@ const AskPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     setResult(null);
+    setFeedbackSent(false);
     try {
       // SOT-1374 / C: まずストリーミングで回答を逐次表示し、体感待ち時間を縮める。
       let streamed = '';
@@ -82,6 +85,17 @@ const AskPage: React.FC = () => {
   const handleSample = (sample: string) => {
     setQuery(sample);
     textareaRef.current?.focus();
+  };
+
+  // SOT-1473: 回答へのフィードバックを送る（best-effort: 失敗しても謝辞表示は維持）。
+  const handleFeedback = async (rating: 'up' | 'down') => {
+    if (!result || feedbackSent) return;
+    setFeedbackSent(true);
+    try {
+      await sendAnswerFeedback(query, result.answer, rating);
+    } catch {
+      // best-effort: フィードバック送信失敗はユーザー体験を止めない
+    }
   };
 
   const SAMPLE_KEYS = ['ask.sample1', 'ask.sample2', 'ask.sample3'];
@@ -160,6 +174,36 @@ const AskPage: React.FC = () => {
           <div className="bg-surface rounded-lg shadow-sm border border-border p-5">
             <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2">{t('ask.answer')}</h2>
             <MarkdownText text={result.answer} className="text-foreground" />
+            {/* SOT-1473: 回答フィードバック（👍/👎） */}
+            {hasAnswer && !isLoading && (
+              <div className="mt-4 pt-3 border-t border-border">
+                {feedbackSent ? (
+                  <p className="text-xs text-muted-foreground">{t('ask.feedbackThanks')}</p>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">{t('ask.feedbackPrompt')}</span>
+                    <button
+                      type="button"
+                      onClick={() => void handleFeedback('up')}
+                      aria-label={t('ask.feedbackUp')}
+                      title={t('ask.feedbackUp')}
+                      className="rounded-full border border-border px-3 py-1 text-sm hover:bg-brand-soft transition-colors"
+                    >
+                      👍
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleFeedback('down')}
+                      aria-label={t('ask.feedbackDown')}
+                      title={t('ask.feedbackDown')}
+                      className="rounded-full border border-border px-3 py-1 text-sm hover:bg-brand-soft transition-colors"
+                    >
+                      👎
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="bg-surface rounded-lg shadow-sm border border-border p-5">

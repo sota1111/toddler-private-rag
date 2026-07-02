@@ -281,6 +281,15 @@ export const askInfo = async (query: string, top_k = 4): Promise<RagAnswer> => {
   return response.data;
 };
 
+// SOT-1473: 回答へのフィードバック（👍/👎）を送る。精度改善の一次データ収集用。
+export const sendAnswerFeedback = async (
+  question: string,
+  answer: string,
+  rating: 'up' | 'down',
+): Promise<void> => {
+  await api.post('/feedback', { question, answer, rating });
+};
+
 // SOT-1374 / C: ストリーミング版の質問。回答トークンを逐次受け取り、体感待ち時間を縮める。
 // SSE(text/event-stream)を fetch で読み、token を onToken に流す。非対応環境では呼び出し側が
 // askInfo(/info/ask) にフォールバックできるよう、失敗時は例外を投げる。

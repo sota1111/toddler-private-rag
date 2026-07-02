@@ -152,6 +152,7 @@ class GeminiLLMProvider(LLMProvider):
 
     def _build_prompt(self, question: str, contexts: List[str]) -> str:
         from .. import clock
+        from ..prompt_registry import render_prompt  # SOT-1474: central registry
 
         context_block = "\n\n".join(f"- {c}" for c in contexts)
         # SOT-1297: 今日の日付(JST)を注入し、相対的な日付の質問に答えられるようにする。
@@ -161,11 +162,11 @@ class GeminiLLMProvider(LLMProvider):
             f"今日の日付は {today.isoformat()}（{_weekdays_ja[today.weekday()]}曜日）です。"
             "「今日」「明日」「今週」「来週」などの相対的な日付はこれを基準に解釈してください。"
         )
-        return (
-            "あなたはおたよりナビです。以下のコンテキストのみに基づいて、"
-            "日本語で簡潔に質問へ回答してください。コンテキストに無いことは推測しないでください。\n\n"
-            f"{today_line}\n\n"
-            f"# コンテキスト\n{context_block}\n\n# 質問\n{question}\n\n# 回答"
+        return render_prompt(
+            "rag_answer",
+            today_line=today_line,
+            context_block=context_block,
+            question=question,
         )
 
     def generate(self, question: str, contexts: List[str]) -> str:
