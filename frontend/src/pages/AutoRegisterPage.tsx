@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createInfo, uploadAttachmentSmart, getInfoById, getChildren } from '../api';
+import { createInfo, uploadAttachmentSmart, getInfoById, getChildren, deleteInfo } from '../api';
 import type { Child, NurseryInfo, NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import { useSettings } from '../settings/useSettings';
@@ -139,6 +139,10 @@ const AutoRegisterPage: React.FC = () => {
     // SOT-1175: 「画像アップ完了をトリガーに画像変換と仮登録を始める」。
     // 重い画像変換(OCR/AI抽出)を待たずに、まず最小限の仮登録(processing)と写真添付を保存する。
     let created: NurseryInfo;
+    // SOT-1476: createInfo で作った processing 番兵の id を控える。写真アップロードが
+    // 失敗した場合、この番兵だけがサーバに残り「文字起こし中(1件)」が仮登録画面に出たままに
+    // なるため、失敗時に掃除(削除)する。
+    let createdId: number | string | null = null;
     try {
       const initial: NurseryInfoCreate = {
         title: '',
@@ -163,6 +167,7 @@ const AutoRegisterPage: React.FC = () => {
       // 仮登録を保存し、写真を添付する（ここまで成功＝データは失われない）。
       // 写真アップロードがサーバ側 enrich→draft 昇格のトリガーになる。
       created = await createInfo(initial);
+      createdId = created.id;
       // SOT-1315: 設定言語(lang)を渡し、文字起こし後のタスク登録をその言語で生成させる。
       // SOT-1377: 画像本体は Cloud Run を経由せず GCS へ直接アップロードする(session方式)。
       // session 未対応(ローカル等)時は従来の multipart に自動フォールバックする。
@@ -182,6 +187,17 @@ const AutoRegisterPage: React.FC = () => {
       });
     } catch (error) {
       console.error('Failed to save draft/photo on upload', error);
+      // SOT-1476: 写真アップロードが失敗すると、createInfo で作った processing 番兵だけが
+      // サーバに残り、OCR トリガー(=アップロード)が発火しないため永久に processing のままになる。
+      // すると count_processing() が減らず、仮登録画面の「写真を文字起こし中です（1件）」が
+      // 消えなくなる。写真は保存されておらず失うデータは無いため、この番兵を掃除する。
+      if (createdId !== null) {
+        try {
+          await deleteInfo(createdId);
+        } catch (cleanupError) {
+          console.warn('Failed to clean up processing draft after upload failure', cleanupError);
+        }
+      }
       applyIfCurrent(() => {
         setExtractError(t('create.autoSaveFail'));
         setPhase('idle');
