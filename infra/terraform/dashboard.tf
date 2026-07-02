@@ -162,6 +162,52 @@ resource "google_monitoring_dashboard" "ops" {
             }
           }
         },
+        {
+          xPos   = 0
+          yPos   = 12
+          width  = 6
+          height = 4
+          widget = {
+            title = "Grounding degradation rate (SOT-1470 D3)"
+            xyChart = {
+              dataSets = [{
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "resource.type=\"cloud_run_revision\" AND metric.type=\"logging.googleapis.com/user/llm_grounding_degraded_count\""
+                    aggregation = {
+                      alignmentPeriod    = "60s"
+                      perSeriesAligner   = "ALIGN_RATE"
+                      crossSeriesReducer = "REDUCE_SUM"
+                    }
+                  }
+                }
+              }]
+            }
+          }
+        },
+        {
+          xPos   = 6
+          yPos   = 12
+          width  = 6
+          height = 4
+          widget = {
+            title = "OCR empty-extraction rate (SOT-1470 D3)"
+            xyChart = {
+              dataSets = [{
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "resource.type=\"cloud_run_revision\" AND metric.type=\"logging.googleapis.com/user/ocr_extraction_empty_count\""
+                    aggregation = {
+                      alignmentPeriod    = "60s"
+                      perSeriesAligner   = "ALIGN_RATE"
+                      crossSeriesReducer = "REDUCE_SUM"
+                    }
+                  }
+                }
+              }]
+            }
+          }
+        },
       ]
     }
   })

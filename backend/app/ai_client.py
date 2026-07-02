@@ -257,7 +257,11 @@ def generate_grounded_with_sources(
         log_llm_call("grounded", model, (time.monotonic() - start) * 1000, False, error=e)
         logger.warning("generate_grounded: grounded request failed, falling back: %s", e)
 
-    # 2) non-grounded fallback (LLM known-knowledge) — no grounding sources available
+    # 2) non-grounded fallback (LLM known-knowledge) — no grounding sources available.
+    # Reaching here means the grounded attempt did not yield a grounded answer, i.e.
+    # grounding degraded (SOT-1470 D3). Emit an explicit token so a log-based metric /
+    # alert can track the grounding-degradation rate (see infra/terraform/monitoring.tf).
+    logger.warning("llm_grounding_degraded model=%s", model)
     start = time.monotonic()
     try:
         client = get_genai_client()
