@@ -17,7 +17,11 @@
 ## システム構成
 
 ```
-[保護者/ブラウザ]
+[保護者/スマートフォンのブラウザ]
+   │  SPA配信（HTML/JS/CSS）
+   ▼
+[Cloud Run: frontend（nginx / React 19 + TypeScript SPA）]
+   │  fetch + HMAC署名セッションcookie（TanStack Query）
    │  写真・PDF
    ▼
 [Cloud Run: upload-api（軽量アップロード受付）] ──GCS保存──▶ [Cloud Storage]
@@ -39,8 +43,12 @@
 ```
 
 - **フロントエンド**: React 19 + TypeScript の SPA（Vite / Tailwind CSS / TanStack Query / React Router 7）。
-- **アプリ実行基盤**: **Cloud Run ×2 サービス構成**。重処理を担う `backend` と、アップロードを即受領して
-  背景処理に回す軽量 `upload-api` を分離し、アップロード体験をブロックしない実運用志向の非同期取り込み。
+  Vite で静的ビルド（`dist/`）し、**nginx を載せた専用 Cloud Run サービス（`frontend`）で配信**します
+  （`frontend/Dockerfile` + `nginx.conf`）。ブラウザからは TanStack Query 経由で backend / upload-api の
+  API を呼び出し、認証は HMAC 署名セッション cookie、CORS は Cloud Storage / API 側で frontend URL を許可します。
+- **アプリ実行基盤**: **Cloud Run による 3 サービス構成**（配信の `frontend`（nginx）+ 重処理の `backend` +
+  アップロード即受領の軽量 `upload-api`）。特に AI 重処理を担う `backend` とアップロード受付の `upload-api` を
+  分離し、アップロード体験をブロックしない実運用志向の非同期取り込みを実現しています。
 - **AI処理**: Vertex AI 上の Gemini（`google-genai` SDK）で構造化抽出・RAG回答・提出書類調査、
   Cloud Vision AI で画像OCR、Google Search grounding で公式手順の自律調査。
 - **データ**: 本番は Firestore（メタデータ）+ Cloud Storage（添付）、ローカルは SQLite。
@@ -80,7 +88,7 @@ React Router 7）で、保護者がスマートフォンで片手操作するこ
 ## 開発素材（使用しているAPI・ツール）
 
 **Google Cloud**
-- Cloud Run（×2: backend / upload-api）— アプリ実行プロダクト（必須要件①）
+- Cloud Run（×3: frontend(nginx) / backend / upload-api）— アプリ実行プロダクト（必須要件①）
 - Vertex AI（Gemini）— 構造化抽出・RAG回答・提出書類調査（必須要件②）
 - Cloud Vision AI — 画像おたよりのOCR
 - Google Search grounding（Vertex AI Gemini の機能）— 公式手順の自律調査
@@ -94,6 +102,7 @@ React Router 7）で、保護者がスマートフォンで片手操作するこ
 
 **フロントエンド**
 - React 19 / TypeScript / Vite / Tailwind CSS / TanStack Query / React Router 7
+- 配信: nginx（`frontend/nginx.conf`）を載せた専用 Cloud Run サービスで静的 SPA を配信
 
 **IaC / CI-CD / テスト**
 - Terraform（`infra/terraform/`）/ GitHub Actions（Workload Identity Federation）
