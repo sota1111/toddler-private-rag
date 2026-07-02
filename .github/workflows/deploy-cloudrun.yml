@@ -1,8 +1,15 @@
 name: Deploy to Cloud Run
 
+# SOT-1469 A1: production deploy is gated on CI success. Instead of triggering
+# directly on push to main, this workflow runs only after the "CI" workflow
+# completes successfully on main (pytest + evaluation-gate + frontend checks).
+# A failing test or evaluation regression therefore blocks the deploy.
+# workflow_dispatch remains for manual/emergency deploys.
 on:
-  push:
-    branches: [ main ]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -12,9 +19,51 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # A1: only deploy when the triggering CI run succeeded (or on a manual dispatch).
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' ||
+          github.event.workflow_run.conclusion == 'success' }}
     steps:
+      - name: Resolve deploy commit
+        id: sha
+        run: |
+          # For workflow_run the checkout/tags must use the SHA that CI validated,
+          # not the default-branch head. Fall back to github.sha for dispatch.
+          SHA="${{ github.event.workflow_run.head_sha }}"
+          [ -z "$SHA" ] && SHA="${{ github.sha }}"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.sha.outputs.sha }}
+          # fetch-depth 2 so the change-detection step (A2) can diff the deploy
+          # commit against its first parent; depth 1 would omit that parent and
+          # force the safe deploy-everything fallback on every run.
+          fetch-depth: 2
+
+      # SOT-1469 A2: only build/deploy the services whose paths changed. Compare
+      # the deploy commit against its first parent; on manual dispatch (or when
+      # the diff can't be computed) deploy everything to stay safe.
+      - name: Detect changed services
+        id: changes
+        run: |
+          SHA="${{ steps.sha.outputs.sha }}"
+          BACKEND=true; UPLOAD=true; FRONTEND=true
+          if [ "${{ github.event_name }}" = "workflow_run" ] && git rev-parse "${SHA}^" >/dev/null 2>&1; then
+            CHANGED="$(git diff --name-only "${SHA}^" "${SHA}")"
+            echo "Changed files:"; echo "$CHANGED"
+            BACKEND=false; UPLOAD=false; FRONTEND=false
+            echo "$CHANGED" | grep -qE '^backend/upload_function/' && UPLOAD=true
+            # Any backend change outside upload_function/ (shared app code,
+            # Dockerfile, requirements) rebuilds the backend service.
+            if echo "$CHANGED" | grep -E '^backend/' | grep -qvE '^backend/upload_function/'; then BACKEND=true; fi
+            echo "$CHANGED" | grep -qE '^frontend/' && FRONTEND=true
+          fi
+          echo "backend=$BACKEND" >> "$GITHUB_OUTPUT"
+          echo "upload=$UPLOAD" >> "$GITHUB_OUTPUT"
+          echo "frontend=$FRONTEND" >> "$GITHUB_OUTPUT"
+          echo "Deploy plan -> backend=$BACKEND upload=$UPLOAD frontend=$FRONTEND"
 
       - name: Authenticate to Google Cloud (Workload Identity Federation)
         id: auth
@@ -34,21 +83,24 @@ jobs:
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
 
-      # ----- Backend -----
+      # ----- Backend (SOT-1469 B2: canary deploy + automatic rollback) -----
       - name: Build backend image
+        if: steps.changes.outputs.backend == 'true'
         env:
           IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_BACKEND }}
         run: |
-          docker build -f backend/Dockerfile -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" backend
+          docker build -f backend/Dockerfile -t "$IMAGE:${{ steps.sha.outputs.sha }}" -t "$IMAGE:latest" backend
 
       - name: Push backend image
+        if: steps.changes.outputs.backend == 'true'
         env:
           IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_BACKEND }}
         run: |
-          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:${{ steps.sha.outputs.sha }}"
           docker push "$IMAGE:latest"
 
-      - name: Deploy backend to Cloud Run
+      - name: Deploy backend to Cloud Run (canary, no traffic)
+        if: steps.changes.outputs.backend == 'true'
         env:
           IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_BACKEND }}
           RUNTIME_SA: ${{ secrets.CLOUD_RUN_RUNTIME_SA }}
@@ -56,12 +108,16 @@ jobs:
           # SOT-1366 item A: adopt the least-privilege runtime SA when configured.
           SA_FLAG=""
           [ -n "$RUNTIME_SA" ] && SA_FLAG="--service-account=$RUNTIME_SA"
+          # B2: deploy the new revision with NO traffic and a "canary" tag so we
+          # can health-check it on its dedicated tag URL before promoting.
           gcloud run deploy ${{ secrets.CLOUD_RUN_SERVICE_BACKEND }} \
-            --image "$IMAGE:${{ github.sha }}" \
+            --image "$IMAGE:${{ steps.sha.outputs.sha }}" \
             --region ${{ secrets.GCP_REGION }} \
             --project ${{ secrets.GCP_PROJECT_ID }} \
             --platform managed \
             --allow-unauthenticated \
+            --no-traffic \
+            --tag canary \
             $SA_FLAG \
             --set-secrets "AUTH_SECRET=rag-auth-secret:latest,ALLOWED_USER_EMAILS=rag-allowed-emails:latest,FIREBASE_API_KEY=rag-firebase-api-key:latest,WORKER_INVOKE_TOKEN=rag-worker-invoke-token:latest" \
             --set-env-vars "APP_ENV=production,CORS_ORIGINS=https://${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }}-${{ secrets.GCP_PROJECT_NUMBER }}.${{ secrets.GCP_REGION }}.run.app,GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=gen-lang-client-0243034020,GOOGLE_CLOUD_LOCATION=global,GEMINI_MODEL=gemini-3.5-flash,DATABASE_TYPE=firestore,STORAGE_BACKEND=gcs,GCS_BUCKET_NAME=gen-lang-client-0243034020-toddler-private-rag,GCS_SIGNER_SA_EMAIL=$RUNTIME_SA" \
@@ -71,24 +127,69 @@ jobs:
             --max-instances 5 \
             --concurrency 40
 
+      - name: Canary health check + promote or rollback
+        if: steps.changes.outputs.backend == 'true'
+        env:
+          RUNTIME_SA: ${{ secrets.CLOUD_RUN_RUNTIME_SA }}
+        run: |
+          set -euo pipefail
+          SERVICE=${{ secrets.CLOUD_RUN_SERVICE_BACKEND }}
+          REGION=${{ secrets.GCP_REGION }}
+          PROJECT=${{ secrets.GCP_PROJECT_ID }}
+
+          # Newly deployed (no-traffic) revision + its canary tag URL.
+          CANARY_REV=$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" \
+            --format='value(status.latestCreatedRevisionName)')
+          CANARY_URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" \
+            --format='value(status.traffic[].url)' --filter='status.traffic.tag=canary' | head -n1)
+          if [ -z "$CANARY_URL" ]; then
+            CANARY_URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" \
+              --format="value(status.url)" | sed 's#https://#https://canary---#')
+          fi
+          echo "Canary revision: $CANARY_REV"
+          echo "Canary URL: $CANARY_URL"
+
+          # B2: health-check the canary. Retry to absorb cold-start.
+          OK=0
+          for i in 1 2 3 4 5 6; do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$CANARY_URL/health" || echo 000)
+            echo "Attempt $i: /health -> $CODE"
+            if [ "$CODE" = "200" ]; then OK=1; break; fi
+            sleep 10
+          done
+
+          if [ "$OK" = "1" ]; then
+            echo "Canary healthy -> promoting to 100% traffic."
+            gcloud run services update-traffic "$SERVICE" --region "$REGION" --project "$PROJECT" \
+              --to-latest
+            # Drop the canary tag now that it serves all traffic.
+            gcloud run services update-traffic "$SERVICE" --region "$REGION" --project "$PROJECT" \
+              --remove-tags canary || true
+          else
+            echo "::error::Canary health check FAILED. Production traffic stays on the previous revision (automatic rollback). Removing failed canary revision from routing."
+            gcloud run services update-traffic "$SERVICE" --region "$REGION" --project "$PROJECT" \
+              --remove-tags canary || true
+            exit 1
+          fi
+
       # ----- Upload Cloud Run service (SOT-1376: upload-api, slim, always-warm, upload-only) -----
-      # Replaces the SOT-1359 gen2 Cloud Function. Same functions-framework app
-      # (backend/upload_function/main.py), now packaged as a Cloud Run container with
-      # --min-instances 1 so the upload entrypoint stays warm (cold-start mitigation).
       - name: Build upload-api image
+        if: steps.changes.outputs.upload == 'true'
         env:
           IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }}
         run: |
-          docker build -f backend/upload_function/Dockerfile -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" backend/upload_function
+          docker build -f backend/upload_function/Dockerfile -t "$IMAGE:${{ steps.sha.outputs.sha }}" -t "$IMAGE:latest" backend/upload_function
 
       - name: Push upload-api image
+        if: steps.changes.outputs.upload == 'true'
         env:
           IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }}
         run: |
-          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:${{ steps.sha.outputs.sha }}"
           docker push "$IMAGE:latest"
 
       - name: Deploy upload-api to Cloud Run
+        if: steps.changes.outputs.upload == 'true'
         env:
           IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }}
           RUNTIME_SA: ${{ secrets.CLOUD_RUN_RUNTIME_SA }}
@@ -105,7 +206,7 @@ jobs:
           SA_FLAG=""
           [ -n "$RUNTIME_SA" ] && SA_FLAG="--service-account=$RUNTIME_SA"
           gcloud run deploy ${{ secrets.CLOUD_RUN_SERVICE_UPLOAD }} \
-            --image "$IMAGE:${{ github.sha }}" \
+            --image "$IMAGE:${{ steps.sha.outputs.sha }}" \
             --region ${{ secrets.GCP_REGION }} \
             --project ${{ secrets.GCP_PROJECT_ID }} \
             --platform managed \
@@ -121,19 +222,22 @@ jobs:
 
       # ----- Frontend -----
       - name: Build frontend image
+        if: steps.changes.outputs.frontend == 'true'
         env:
           IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }}
         run: |
-          docker build -f frontend/Dockerfile -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" frontend
+          docker build -f frontend/Dockerfile -t "$IMAGE:${{ steps.sha.outputs.sha }}" -t "$IMAGE:latest" frontend
 
       - name: Push frontend image
+        if: steps.changes.outputs.frontend == 'true'
         env:
           IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }}
         run: |
-          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:${{ steps.sha.outputs.sha }}"
           docker push "$IMAGE:latest"
 
       - name: Deploy frontend to Cloud Run
+        if: steps.changes.outputs.frontend == 'true'
         env:
           IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }}
           FRONTEND_SA: ${{ secrets.CLOUD_RUN_FRONTEND_SA }}
@@ -158,7 +262,7 @@ jobs:
           SA_FLAG=""
           [ -n "$FRONTEND_SA" ] && SA_FLAG="--service-account=$FRONTEND_SA"
           gcloud run deploy ${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }} \
-            --image "$IMAGE:${{ github.sha }}" \
+            --image "$IMAGE:${{ steps.sha.outputs.sha }}" \
             --region ${{ secrets.GCP_REGION }} \
             --project ${{ secrets.GCP_PROJECT_ID }} \
             --platform managed \
