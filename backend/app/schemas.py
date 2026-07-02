@@ -304,3 +304,31 @@ class ReminderDigest(BaseModel):
     horizon_days: int
     total: int
     digest: str
+
+
+# SOT-1473: 回答フィードバック（👍/👎）
+class AnswerFeedbackCreate(BaseModel):
+    question: str
+    answer: str
+    rating: str  # 'up' | 'down'
+
+    @field_validator("rating")
+    @classmethod
+    def _validate_rating(cls, v):
+        if v not in ("up", "down"):
+            raise ValueError("rating must be 'up' or 'down'")
+        return v
+
+
+class AnswerFeedbackResponse(BaseModel):
+    id: Union[int, str]
+    rating: str
+    created_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AnswerFeedbackSummary(BaseModel):
+    up: int
+    down: int
+    total: int

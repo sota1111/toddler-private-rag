@@ -77,3 +77,21 @@ class Child(Base):
     owner_id = Column(String(64), nullable=True, index=True)
     name = Column(String(100), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AnswerFeedback(Base):
+    """SOT-1473: ユーザーからの回答フィードバック（👍/👎）。
+
+    RAG 回答の質改善（eval データセットの育成・精度トレンド把握）の一次データを収集する。
+    新規テーブルなので ``Base.metadata.create_all`` で自動作成される。
+    """
+    __tablename__ = "answer_feedback"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # データ所有者(マルチテナント分離, SOT-1431 と同方式)。
+    owner_id = Column(String(64), nullable=True, index=True)
+    question = Column(Text, nullable=False)
+    answer = Column(Text, nullable=False)
+    # 'up' = 👍 / 'down' = 👎
+    rating = Column(String(8), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
