@@ -42,15 +42,14 @@ jobs:
           # Eval suites run in the dedicated evaluation-gate job (SOT-1469 B1)
           # so accuracy regressions get their own required status check.
           #
-          # SOT-1470 I3: coverage is now visible in CI (term-missing) and guarded by a
-          # regression floor (--cov-fail-under). The floor is an intentionally
-          # conservative INITIAL baseline; read the "TOTAL ... %" line in this job's log
-          # and ratchet --cov-fail-under upward toward the actual number over time.
-          # Coverage config: backend/.coveragerc.
+          # SOT-1470 I3: coverage is visible in CI (term-missing) and guarded by a
+          # regression floor (--cov-fail-under). Floor set at 70% (current TOTAL is
+          # ~74%, see the "TOTAL ... %" line in this job's log). Ratchet it upward as
+          # coverage improves. Coverage config: backend/.coveragerc.
           python -m pytest -q \
             --ignore=tests/test_eval_ocr.py --ignore=tests/test_eval_rag.py \
             --cov=app --cov-config=.coveragerc \
-            --cov-report=term-missing --cov-fail-under=45
+            --cov-report=term-missing --cov-fail-under=70
 
   # SOT-1469 B1: the OCR/RAG evaluation harness is a first-class release quality
   # gate. It runs as its own CI job (a separately-named required status check),
