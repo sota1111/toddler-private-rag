@@ -12,6 +12,7 @@ import logging
 import functions_framework
 from flask import Response, jsonify
 
+import postmortem as PM
 import remediation as R
 
 logging.basicConfig(level=logging.INFO)
@@ -56,4 +57,25 @@ def remediate(req):
         store = R.InMemoryCooldownStore()
 
     result = R.decide_and_rollback(incident, client, store, cfg)
-    return _json(result.as_dict(), 200)
+
+    # SOT-1484 follow-up: deterministically analyse the incident (root cause + improvement
+    # proposals) and emit it alongside the rollback decision. Rule-based, so no generative step
+    # is added to the failure path. Never let postmortem generation break the webhook response.
+    postmortem_dict = None
+    try:
+        pm = PM.analyze_incident(incident, result)
+        postmortem_dict = pm.as_dict()
+        logger.info(
+            "[postmortem] signal=%s severity=%s service=%s causes=%d proposals=%d",
+            pm.signal,
+            pm.severity,
+            pm.service,
+            len(pm.probable_causes),
+            len(pm.improvement_proposals),
+        )
+    except Exception as exc:  # pragma: no cover - defensive; analyze_incident is pure/never-raises
+        logger.warning("[postmortem] generation failed: %s", exc)
+
+    body = result.as_dict()
+    body["postmortem"] = postmortem_dict
+    return _json(body, 200)

@@ -145,6 +145,21 @@ Cloud Monitoring のアラート（5xx / レイテンシ / LLM エラー）が *
 - 即時停止は `remediation_dry_run = true`（apply）または repo variable `REMEDIATION_ENABLED=false`。
 - 完全撤去は `enable_autonomous_rollback = false` で apply（webhook チャネルとサービスを削除）。
 
+### 自動 原因分析・改善提案（RCA, SOT-1484）
+
+remediation サービスは、ロールバック判定に加えて**インシデントの原因分析（RCA）と改善提案を
+自動生成**する（`backend/remediation_function/postmortem.py`）。生成は **決定的（ルールベース）** で、
+障害経路に生成 AI（幻覚リスク）を足さない設計を維持している。
+
+- **入力**: アラートの policy / condition を signal（`5xx` / `latency` / `llm_error` /
+  `grounding_degraded` / `unknown`）に分類し、ロールバック結果（`RemediationResult`）を取り込む。
+- **出力**: signal ごとに **probable root causes**・**improvement proposals**・関連 runbook を
+  対応付けた構造化ポストモーテムを、webhook レスポンス JSON の `postmortem` フィールドと
+  `[postmortem] signal=... severity=... ...` 監査ログ行として出力する。
+- **人手の判断は残す**: 生成物はあくまで一次分析。恒久対応・再発防止の意思決定と説明責任は人間が担う
+  （上記「インシデント対応」5. の記録・再発防止と接続する）。
+- `never raises`: 未分類のアラートも `unknown` signal で必ずポストモーテムを返す。
+
 ## モデル / プロンプト変更フロー
 
 1. `ai_client.py` / プロンプトレジストリ（SOT-1474）で設定を変更し、バージョン/履歴を更新。
