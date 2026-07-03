@@ -3,7 +3,13 @@
 // 初期化は loginWithGoogle が呼ばれたときだけ遅延実行する。VITE_FIREBASE_* が
 // 未設定でもモジュール読み込みやアプリ描画は壊れず、ボタンを押したときだけエラーになる。
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app'
-import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+} from 'firebase/auth'
 
 let app: FirebaseApp | null = null
 
@@ -40,10 +46,45 @@ function getFirebaseAuth() {
   return getAuth(app)
 }
 
+// SOT-1494: Safari など、ユーザー操作から少しでも非同期に離れると signInWithPopup を
+// ブロックするブラウザがある（`auth/popup-blocked`）。ポップアップが使えないケースでは
+// リダイレクト方式にフォールバックする。redirect はページ遷移するため、戻ってきたときに
+// getGoogleRedirectIdToken() で結果を回収する（AuthContext のマウント時に呼ぶ）。
+function isPopupUnavailableError(err: unknown): boolean {
+  const code = (err as { code?: string } | null)?.code
+  return (
+    code === 'auth/popup-blocked' ||
+    code === 'auth/cancelled-popup-request' ||
+    code === 'auth/operation-not-supported-in-this-environment'
+  )
+}
+
 /** Google サインインを行い、Firebase の ID トークンを返す。 */
 export async function signInWithGoogleIdToken(): Promise<string> {
   const auth = getFirebaseAuth()
   const provider = new GoogleAuthProvider()
-  const result = await signInWithPopup(auth, provider)
+  try {
+    const result = await signInWithPopup(auth, provider)
+    return await result.user.getIdToken()
+  } catch (err) {
+    if (isPopupUnavailableError(err)) {
+      // リダイレクトに切り替える。ここでページ遷移するのでこの Promise は解決しない。
+      await signInWithRedirect(auth, provider)
+      return await new Promise<string>(() => {})
+    }
+    throw err
+  }
+}
+
+/**
+ * リダイレクト方式でサインインした後にアプリへ戻ってきたときの ID トークンを回収する。
+ * リダイレクト結果が無い（通常のページ読み込み）場合や Google 認証が未設定の場合は null。
+ */
+export async function getGoogleRedirectIdToken(): Promise<string | null> {
+  // apiKey 未設定ならリダイレクト結果もあり得ないので Firebase を初期化せず抜ける。
+  if (!import.meta.env.VITE_FIREBASE_API_KEY) return null
+  const auth = getFirebaseAuth()
+  const result = await getRedirectResult(auth)
+  if (!result?.user) return null
   return await result.user.getIdToken()
 }
