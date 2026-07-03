@@ -238,4 +238,30 @@ test.describe('toddler-private-rag シナリオ', () => {
       page.getByText('仮登録はありません。自動登録から写真をアップすると、ここに表示されます。'),
     ).toBeVisible()
   })
+
+  test('S13: 自動登録で複数枚の写真を同時に選んでまとめて登録できる (SOT-1498)', async ({ page }) => {
+    await installApiMocks(page, { authed: true })
+    await login(page)
+
+    await page.locator('nav a[href="/create/auto"]').first().click()
+    await expect(page).toHaveURL(/\/create\/auto/)
+
+    // 2枚の 1x1 PNG を file input へまとめて投入する
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      'base64',
+    )
+    await page.locator('input[type="file"]').setInputFiles([
+      { name: 'photo1.png', mimeType: 'image/png', buffer: png },
+      { name: 'photo2.png', mimeType: 'image/png', buffer: png },
+    ])
+
+    // 複数枚選択時は確認見出しが枚数入りになり、まとめて登録できる
+    await expect(page.getByText('この2枚の写真でよろしいですか？')).toBeVisible()
+    await page.getByRole('button', { name: 'この2枚を登録' }).click()
+
+    // 完了カードで登録枚数が表示される（個別本文は仮登録一覧で確認）
+    await expect(page.getByText('アップ完了（登録しました）')).toBeVisible()
+    await expect(page.getByText('2枚の写真を登録しました', { exact: false })).toBeVisible()
+  })
 })
