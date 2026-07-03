@@ -142,12 +142,15 @@ jobs:
           # Newly deployed (no-traffic) revision + its canary tag URL.
           CANARY_REV=$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" \
             --format='value(status.latestCreatedRevisionName)')
+          # SOT-1494: `gcloud run services describe` does NOT support --filter (only `list`
+          # does). The previous `describe ... --filter='status.traffic.tag=canary'` aborted the
+          # whole step under `set -e` before the fallback ran, so the healthy canary revision was
+          # never promoted — production kept serving the previous revision and newly added routes
+          # (e.g. /api/auth/session/google) 404'd in prod. Derive the `--tag canary` URL
+          # deterministically from the service base URL instead: Cloud Run tag URLs are always
+          # `https://<tag>---<base-host>`.
           CANARY_URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" \
-            --format='value(status.traffic[].url)' --filter='status.traffic.tag=canary' | head -n1)
-          if [ -z "$CANARY_URL" ]; then
-            CANARY_URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" \
-              --format="value(status.url)" | sed 's#https://#https://canary---#')
-          fi
+            --format="value(status.url)" | sed 's#https://#https://canary---#')
           echo "Canary revision: $CANARY_REV"
           echo "Canary URL: $CANARY_URL"
 
