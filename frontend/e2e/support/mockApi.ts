@@ -329,15 +329,13 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
   return store
 }
 
-// ログインフォームから認証してダッシュボードへ遷移する（auth/me 解決前に /login へ
-// 一度バウンスするため、実フローでログインするのが最も確実）。
+// 認証済み(installApiMocks の既定 authed=true = auth/me が 200)状態でダッシュボードへ入る。
+// ProtectedRoute は auth/me の解決までローディング表示で待ってから本体を描画するので、
+// 直接 / へ遷移すればログイン画面にバウンスせずダッシュボードに入れる。
+// SOT-1508: LoginPage は認証済みなら / へリダイレクトするため、/login 経由でフォームを
+// 操作する旧フローは認証済みモックでは成立しない（フォームが出る前に / へ送られる）。
 export async function login(page: Page) {
-  await page.goto('/login')
-  // 方式選択画面で「メールアドレスでログイン」を選ぶとフォームが表示される。
-  await page.getByRole('button', { name: 'メールアドレスでログイン' }).click()
-  await page.locator('input[type="email"]').fill('test@example.com')
-  await page.locator('input[type="password"]').fill('password123')
-  await page.locator('button[type="submit"]').click()
+  await page.goto('/')
   // 認証後はボトムナビ（登録リンク）が表示される。
   await expect(page.locator('a[href="/create/auto"]')).toBeVisible()
 }
