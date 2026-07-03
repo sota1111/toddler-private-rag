@@ -10,7 +10,8 @@ test.describe('toddler-private-rag シナリオ', () => {
     // SOT-1312: データ一覧 /data は廃止。詳細 /data/:id は引き続き保護ページ。
     await page.goto('/data/1')
     await expect(page).toHaveURL(/\/login/)
-    await expect(page.locator('input[type="email"]')).toBeVisible()
+    // ログイン画面は方式選択（メール/Google）を表示する。
+    await expect(page.getByRole('button', { name: 'メールアドレスでログイン' })).toBeVisible()
   })
 
   test('S2: ログイン後、主要メニューを辿って各画面へ遷移できる（データメニューは廃止） (SOT-1312)', async ({ page }) => {

@@ -127,6 +127,8 @@ export const messages: Record<Lang, Messages> = {
     'login.failed': 'ログインに失敗しました',
     'login.or': 'または',
     'login.google': 'Googleでログイン',
+    'login.methodEmail': 'メールアドレスでログイン',
+    'login.back': '戻る',
 
     // dashboard
     'dashboard.today': '今日やること',
@@ -528,6 +530,8 @@ export const messages: Record<Lang, Messages> = {
     'login.failed': 'Login failed',
     'login.or': 'or',
     'login.google': 'Sign in with Google',
+    'login.methodEmail': 'Log in with email',
+    'login.back': 'Back',
 
     // dashboard
     'dashboard.today': 'Today’s to-dos',
