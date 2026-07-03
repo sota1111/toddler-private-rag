@@ -229,9 +229,13 @@ worker は 202 を即返して背景で `process_ocr`（OCR→構造化→エー
   認証は **Workload Identity Federation**（JSON キーレス、`id-token: write`）。
 - **Terraform CI** (`.github/workflows/terraform-ci.yml`) — `infra/terraform/**` 変更時に
   `fmt -check` / `init -backend=false` / `validate` で IaC を静的検証。
-- **サプライチェーン検査** (`.github/workflows/security-scan.yml`) — `pip-audit`・`npm audit`・
+- **サプライチェーン検査** (`.github/workflows/security-scan.yml`) — **`pip-audit` / `npm audit` を
+  ブロッキング**（既知脆弱依存で CI を失敗させる。`pip-audit` は任意の advisory、`npm audit` は HIGH+ で
+  ゲート。既知・未修正のものは `backend/.pip-audit-ignore.txt` にトリアージ登録して段階的に縮小）・
   **Trivy**（依存脆弱性スキャン + IaC/Dockerfile ミス設定は CRITICAL でブロッキング）・
-  **SBOM 生成**（CycloneDX）。依存更新は **Dependabot**（`.github/dependabot.yml`）で自動 PR 化。
+  **SBOM 生成**（CycloneDX）。依存更新は **Dependabot**（`.github/dependabot.yml`）で自動 PR 化し、
+  **`cooldown` で新規公開リリースの即時取り込みを遅延**（major=14 日 / minor=7 日 / patch=3 日）して
+  改ざんリリース混入のサプライチェーン窓を狭める。
 - **監視** — `infra/terraform/monitoring.tf` で Cloud Run の **5xx エラー率**・**p99 レイテンシ**・
   **LLM エラー**（ログベースメトリクス）にアラートポリシー、`dashboard.tf` で運用ダッシュボードを
   Terraform 定義。運用手順は `docs/runbook-operations.md` / `docs/runbook-rollback.md` を参照。
@@ -239,6 +243,34 @@ worker は 202 を即返して背景で `process_ocr`（OCR→構造化→エー
   （in-process エージェント / 自前 RAG / never-throw 劣化 / Firestore+SQLite 永続化）。
 - **シークレット管理** — セッション署名鍵・許可メール・Firebase API key・worker トークンを
   Secret Manager から `--set-secrets` で注入。
+- **アプリ層のセキュリティ** — Google 認証（Firebase）でのサインインに対応（`ALLOWED_USER_EMAILS`
+  allowlist 制のメール/パスワードに加え、メール検証済み Google アカウントを許可。詳細は [12. 認証](#12-認証)）。
+  アップロード画像は**申告 content-type を信用せず先頭バイトでマジックバイト検証**し、不一致は 400 で拒否、
+  画像は **Pillow で再エンコードして EXIF/不正ペイロードを除去**（`backend/app/upload_security.py`）。
+
+### 障害対応サイクル（検知 → 原因特定 → 処置 → 回復確認 → ポストモーテム）
+
+監視で異常を検知したあとの一連の対応を、runbook と実装（自律ロールバック / 自動 RCA）に整合する形で
+運用します。詳細手順は `docs/runbook-operations.md` /
+`docs/runbook-rollback.md`、実装は `backend/remediation_function/` を参照してください。
+
+1. **検知** — Cloud Monitoring のアラート（5xx エラー率 / p99 レイテンシ / LLM エラー率）または運用
+   ダッシュボードの異常で検知。通知先メール（`var.alert_notification_email`）と、opt-in の webhook
+   通知チャネルへ配信されます。
+2. **原因特定** — どのサービス・どの段階（OCR / RAG / LLM / grounding）かをダッシュボードのタイルと
+   Cloud Run ログで切り分け。あわせて remediation サービスが**アラートを signal に分類し、確からしい
+   原因と改善提案を決定論的（ルールベース）に自動生成**します（`remediation_function/postmortem.py`,
+   障害経路に生成 AI の幻覚を持ち込まない設計）。
+3. **処置** — 直近デプロイ起因なら前 revision へロールバック。**デプロイ時は canary 自動ロールバック**
+   （`/health` 失敗で旧 revision 維持）、**ランタイム時は自律ロールバック（opt-in）**
+   がガードレール付き（token 認証 / dry-run 既定 ON / cooldown / 直近デプロイ判定）でトラフィックを
+   健全な前 revision へ戻します（`backend/remediation_function/`）。
+4. **回復確認** — 5xx / p99 / LLM エラー率がベースラインへ戻ったことをダッシュボードで確認し、恒久対応を
+   入れた場合は**エージェント性能評価ゲート（eval 回帰スイート）が緑**であることを確認してから再デプロイ。
+5. **ポストモーテム作成** — 事象・原因・対応・再発防止を記録。remediation サービスが構造化ポストモーテム
+   （probable root causes / improvement proposals / 関連 runbook）を webhook レスポンスと
+   `[postmortem] ...` 監査ログに自動出力し、**恒久対応と再発防止（eval ケース追加等）の意思決定・
+   説明責任は人間が担う**運用です。
 
 ### 実績（数値）
 
@@ -248,12 +280,13 @@ worker は 202 を即返して背景で `process_ocr`（OCR→構造化→エー
 | 自動テスト（frontend E2E） | **Playwright 19 テスト / 4 spec**（`frontend/e2e/`） |
 | Infrastructure as Code | **Terraform 17 ファイル**（`infra/terraform/`）、state は GCS リモートバックエンドで永続化 |
 | CI / CD | GitHub Actions 4 ワークフロー（`ci.yml` / `deploy-cloudrun.yml` / `terraform-ci.yml` / `security-scan.yml`）、**Workload Identity Federation**（キーレス認証）、CD は CI 成功をゲートに canary デプロイ + 自動ロールバック |
-| サプライチェーン | `pip-audit` / `npm audit` / **Trivy**（依存 + IaC ミス設定）/ **SBOM**（CycloneDX）/ **Dependabot** 自動更新 |
+| サプライチェーン | `pip-audit` / `npm audit`（**ブロッキング**）/ **Trivy**（依存 + IaC ミス設定）/ **SBOM**（CycloneDX）/ **Dependabot** 自動更新（`cooldown` 付き） |
 | 監視 | Cloud Monitoring に **5xx エラー率**・**p99 レイテンシ**・**LLM エラー**の**アラートポリシー**＋運用**ダッシュボード**を Terraform 定義（`monitoring.tf` / `dashboard.tf`） |
 
 > 数値は実際のテスト収集数・ファイル数に基づきます。監視は「アラートポリシー／ダッシュボードを
-> IaC で定義済み」という意味で、実測 SLO 値ではありません。サプライチェーン検査は初期展開時の
-> 破綻を避けるため、Trivy の IaC ミス設定のみブロッキング、依存監査はレポーティング運用です。
+> IaC で定義済み」という意味で、実測 SLO 値ではありません。サプライチェーン検査は、依存監査
+> （`pip-audit` / `npm audit`）を **ブロッキング**（既知・未修正のものは `backend/.pip-audit-ignore.txt`
+> にトリアージ登録）とし、Trivy は IaC ミス設定をブロッキングします。
 
 ---
 
@@ -282,8 +315,8 @@ worker は 202 を即返して背景で `process_ocr`（OCR→構造化→エー
 | AI | `google-genai` 経由の Gemini。本番は Vertex AI（`GOOGLE_GENAI_USE_VERTEXAI=true`）、ローカルは APIキーも可 |
 | GCP | Cloud Run ×2, Cloud Build, Artifact Registry, Secret Manager, Firestore, Cloud Storage, Cloud Scheduler, Cloud Monitoring, Vertex AI, Vision AI |
 | IaC / CI/CD | Terraform（GCS リモート state）, GitHub Actions（CI / CD / Terraform CI / Security Scan、Workload Identity Federation、canary デプロイ + 自動ロールバック） |
-| セキュリティ | pip-audit / npm audit / Trivy（依存 + IaC ミス設定）/ SBOM（CycloneDX）/ Dependabot |
-| 認証 | Firebase Identity Toolkit REST（サーバサイド照合）+ HMAC署名セッションcookie |
+| セキュリティ | pip-audit / npm audit（ブロッキング）/ Trivy（依存 + IaC ミス設定）/ SBOM（CycloneDX）/ Dependabot（cooldown）/ アップロード マジックバイト検証 + 画像再エンコード |
+| 認証 | Firebase Identity Toolkit REST（メール/パスワード + Google サインイン）+ HMAC署名セッションcookie |
 
 ---
 
@@ -442,6 +475,10 @@ GCP Secret Manager: `rag-auth-secret` / `rag-allowed-emails` / `rag-firebase-api
 ## 14. プライバシー・セキュリティ
 
 - 保育園資料・個人メモなどのプライベートデータを扱う前提で、認証・Secret 管理・owner 単位のデータ分離を設計。
+- **アップロード検証**: 申告 content-type を信用せず先頭バイトでマジックバイト検証（不一致は 400）、画像は
+  Pillow で再エンコードして EXIF/不正ペイロードを除去（`backend/app/upload_security.py`）。
+- **サプライチェーン**: 依存監査（`pip-audit` / `npm audit`）をブロッキング化、Dependabot に `cooldown` を設定して
+  改ざんリリースの即時取り込みを抑止（詳細は [6. DevOps フルサイクル](#6-devops-フルサイクル)）。
 - 外部 LLM API（`gemini` プロバイダ等）使用時はデータ送信範囲を確認すること。
 - 実データなしでもデプロイ準備状態を確認可能（空状態で起動可）。本番（`APP_ENV=production`）では seed を行いません。
 - 実際の `.env` は Git 管理対象外（`.gitignore` 済み）。個人情報・保育園資料はコードに直書きしないこと。
