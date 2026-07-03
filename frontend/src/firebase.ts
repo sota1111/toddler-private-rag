@@ -59,10 +59,26 @@ function isPopupUnavailableError(err: unknown): boolean {
   )
 }
 
+// SOT-1494: モバイルブラウザは signInWithPopup を「新しいタブ」として開く。認証後にその
+// タブを確実に閉じて元タブへ戻せないため、ユーザーがログイン済みの新規タブに取り残され、
+// 元タブが放置される（＝「ログイン後に別の新規タブに移動している」）。popup がブロック
+// されるわけではないので isPopupUnavailableError のフォールバックも発火しない。Firebase
+// 公式推奨に従い、モバイルでは最初から同一タブ遷移の signInWithRedirect を使う。
+function shouldUseRedirect(): boolean {
+  if (typeof navigator === 'undefined') return false
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+}
+
 /** Google サインインを行い、Firebase の ID トークンを返す。 */
 export async function signInWithGoogleIdToken(): Promise<string> {
   const auth = getFirebaseAuth()
   const provider = new GoogleAuthProvider()
+  // モバイルでは popup が新規タブ化して取り残されるため、同一タブの redirect を使う。
+  // ページ遷移するのでこの Promise は解決せず、戻ってきたマウント時に結果を回収する。
+  if (shouldUseRedirect()) {
+    await signInWithRedirect(auth, provider)
+    return await new Promise<string>(() => {})
+  }
   try {
     const result = await signInWithPopup(auth, provider)
     return await result.user.getIdToken()
