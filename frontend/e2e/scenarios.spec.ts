@@ -421,4 +421,24 @@ test.describe('toddler-private-rag シナリオ', () => {
     const scrollBox = page.locator('div.overflow-y-auto').filter({ hasText: '2026年10月' })
     await expect(scrollBox.first()).toBeVisible()
   })
+
+  test('S18: 認証確認中は /login でログインフォームを表示せず、確認完了後に点滅なくダッシュボードへ遷移する (SOT-1508)', async ({ page }) => {
+    await installApiMocks(page, { authed: true })
+    // 認証確認(/auth/me)を遅延させ、Google redirect 復帰直後の「確認中」ウィンドウを再現する。
+    // installApiMocks の後に登録することで、この route が優先される（Playwright は後勝ち）。
+    await page.route('**/api/auth/me', async route => {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
+    })
+
+    await page.goto('/login')
+    // SOT-1508: 確認中はローディング表示（aria-busy）にし、ログインフォームは描画しない。
+    // 修正前はここでログインフォームが一瞬表示され、数秒後に遷移していた。
+    await expect(page.locator('[aria-busy="true"]')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'メールアドレスでログイン' })).toHaveCount(0)
+
+    // 確認完了後はダッシュボードへ遷移する（点滅なし）。
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.locator('a[href="/create/auto"]')).toBeVisible()
+  })
 })

@@ -47,8 +47,20 @@ export default function LoginPage() {
   // SOT-1508: Google ログインを redirect 方式（モバイル）で行うと、認証後にアプリへ戻ったとき
   // `/login` に着地する。AuthProvider がマウント時にセッションを確立し isAuthenticated=true に
   // なる（ナビは表示される）が、ここで遷移しないとログイン画面のまま取り残される。認証済みなら
-  // ダッシュボードへ送る（ProtectedRoute の逆）。loading 中は AuthProvider の確認完了を待つ。
-  if (!authLoading && isAuthenticated) {
+  // ダッシュボードへ送る（ProtectedRoute の逆）。
+  //
+  // SOT-1508 (再オープン): 認証確認(authLoading)中はログインフォームを描画しない。解決前に
+  // フォームを見せると、redirect 復帰直後に一瞬ログイン画面が表示され、確認完了後に遷移する
+  // （「ログイン画面に戻ってから数秒後に遷移する」）不整合が起きる。ProtectedRoute と同じく
+  // 確認中はローディング表示にして点滅をなくす。
+  if (authLoading) {
+    return (
+      <div className="flex justify-center py-16 text-muted-foreground text-sm" aria-busy="true">
+        {t('common.loading')}
+      </div>
+    )
+  }
+  if (isAuthenticated) {
     return <Navigate to="/" replace />
   }
 
