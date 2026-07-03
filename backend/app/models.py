@@ -82,6 +82,19 @@ class Child(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class SeededOwner(Base):
+    """SOT-1507: 初回ログイン時に初期データをコピー配布したオーナーを記録する冪等マーカー。
+
+    新規ユーザーが初めてログインした際に既定オーナー（sota.moro@gmail.com）の初期データを
+    コピーする（案B）。一度シードしたオーナーには再コピーしないよう、ここに owner_id を残す。
+    新規テーブルなので ``Base.metadata.create_all`` で自動作成される。
+    """
+    __tablename__ = "seeded_owners"
+
+    owner_id = Column(String(64), primary_key=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class AnswerFeedback(Base):
     """SOT-1473: ユーザーからの回答フィードバック（👍/👎）。
 

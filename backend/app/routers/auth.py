@@ -1,6 +1,7 @@
 import os
 import hmac
 import hashlib
+import logging
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Cookie, status
 from fastapi.responses import JSONResponse
@@ -9,6 +10,8 @@ from pydantic import BaseModel
 from ..identity import owner_id_for_email, DEFAULT_OWNER_ID  # noqa: F401 (re-exported)
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 _APP_NAME = "toddler-private-rag"
 
@@ -181,7 +184,18 @@ def _issue_session_response(
         )
 
     # SOT-1431: 検証済みメールから安定した owner_id を導出し、署名付きセッションに格納する。
-    token = _build_session_token(owner_id_for_email(email), auth_secret)
+    owner_id = owner_id_for_email(email)
+
+    # SOT-1507: 新規ユーザーの初回ログイン時に、既定オーナーの初期データをコピー配布する（案B）。
+    # ベストエフォート（seeding 失敗でログインを止めない。関数内で例外は握り潰される）。
+    try:
+        from ..user_seed import ensure_user_seeded
+
+        ensure_user_seeded(owner_id)
+    except Exception:  # pragma: no cover - ログインを止めない保険
+        logger.exception("initial-data seeding hook failed")
+
+    token = _build_session_token(owner_id, auth_secret)
     is_production = os.getenv("APP_ENV", "local") == "production"
 
     response = JSONResponse(content={"success": True, "email": email})
