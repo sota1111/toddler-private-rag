@@ -38,10 +38,19 @@ interface DatedInfoListProps {
   // 一覧本文(p-4)の先頭、ローディング/リストより前に差し込む内容
   // （SchedulePage の絞り込み中インジケータ用）。
   beforeList?: React.ReactNode;
+  // SOT-1502: やることリストを月ごとの見出しでグループ表示し、期限なしを末尾グループにまとめる。
+  // 既定 false（SchedulePage は従来どおりのフラット表示のまま）。
+  groupByMonth?: boolean;
 }
 
-const DatedInfoList: React.FC<DatedInfoListProps> = ({ items, isLoading, namespace, beforeList }) => {
-  const { t } = useI18n();
+const DatedInfoList: React.FC<DatedInfoListProps> = ({
+  items,
+  isLoading,
+  namespace,
+  beforeList,
+  groupByMonth = false,
+}) => {
+  const { t, lang } = useI18n();
   // 種別ラベル（保存値は日本語のまま、表示は設定言語に合わせて翻訳）
   const optLabel = (group: string, value: string) => {
     const key = `options.${group}.${value}`;
@@ -112,6 +121,89 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({ items, isLoading, namespa
     });
   }, [items, statusFilter]);
 
+  // SOT-1502: 月ごとの見出しでグループ化する（groupByMonth のときだけ使用）。
+  // listItems は日付昇順＋期限なし末尾で並んでいるため、初出順に辿るだけで
+  // 月グループは昇順・期限なしグループは末尾になる。
+  const monthHeading = (yyyymm: string) => {
+    const year = Number(yyyymm.slice(0, 4));
+    const month1 = Number(yyyymm.slice(5, 7)); // 1-12
+    if (lang === 'ja') return `${year}年${month1}月`;
+    return new Date(year, month1 - 1, 1).toLocaleDateString('en', {
+      year: 'numeric',
+      month: 'long',
+    });
+  };
+  const NO_DEADLINE_KEY = '__no_deadline__';
+  const groups = useMemo(() => {
+    const result: { key: string; heading: string; items: NurseryInfo[] }[] = [];
+    const index = new Map<string, number>();
+    for (const item of listItems) {
+      const date = item.event_date ?? '';
+      const dated = /^\d{4}-\d{2}/.test(date);
+      const key = dated ? date.slice(0, 7) : NO_DEADLINE_KEY;
+      const heading = dated ? monthHeading(key) : t('common.noDeadline');
+      let i = index.get(key);
+      if (i === undefined) {
+        i = result.length;
+        index.set(key, i);
+        result.push({ key, heading, items: [] });
+      }
+      result[i].items.push(item);
+    }
+    return result;
+    // monthHeading は lang に依存するため lang を依存に含める。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listItems, lang, t]);
+
+  const renderItem = (item: NurseryInfo) => (
+    <li key={item.id}>
+      <Link
+        to={`/data/${item.id}`}
+        className="block py-2 -mx-2 px-2 rounded-lg transition-colors hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand/40"
+      >
+        <div className="flex justify-between items-center gap-3">
+          <span className="font-medium text-foreground truncate">{item.title}</span>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* SOT-1368 follow-up: 紐づけた子どもの名前タグ（子どもごとの色）。未指定/未解決は非表示。 */}
+            {(() => {
+              if (!item.child_id) return null;
+              const child = childList.find((c) => String(c.id) === String(item.child_id));
+              if (!child) return null;
+              return (
+                <span
+                  className={`text-xs px-2 py-1 rounded-full max-w-[6rem] truncate ${getChildColorClasses(item.child_id, childList).chip}`}
+                >
+                  {child.name}
+                </span>
+              );
+            })()}
+            <span className={`text-xs px-2 py-1 rounded-full ${getStatusDateChipClass(item.status)}`}>
+              {item.event_date ? item.event_date : t('common.noDeadline')}
+            </span>
+            <span className="text-xs text-muted-foreground">{optLabel('infoType', item.info_type)}</span>
+            {/* SOT-1428: お気に入りトグル。行リンク内なので遷移を抑止する。お気に入り時は黄色塗り潰し。 */}
+            {showFavorite && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  favoriteMutation.mutate({ id: item.id, value: !item.is_favorite });
+                }}
+                aria-pressed={!!item.is_favorite}
+                aria-label={t(item.is_favorite ? 'favorite.remove' : 'favorite.add')}
+                title={t(item.is_favorite ? 'favorite.remove' : 'favorite.add')}
+                className="flex-shrink-0 rounded-full p-0.5 transition-colors hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand/40"
+              >
+                <FavoriteStar filled={!!item.is_favorite} />
+              </button>
+            )}
+          </div>
+        </div>
+      </Link>
+    </li>
+  );
+
   return (
     <>
       {/* ステータス絞り込み（すべて / 未確認 / 未対応 / 対応済）。未選択時は全ピル共通デザイン。 */}
@@ -137,57 +229,16 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({ items, isLoading, namespa
           <p className="text-muted-foreground">{t('common.loading')}</p>
         ) : listItems.length === 0 ? (
           <p className="text-muted-foreground text-sm">{t('common.noData')}</p>
+        ) : groupByMonth ? (
+          // SOT-1502: 月ごとの見出し（期限あり）＋末尾の「期限なし」グループで表示する。
+          groups.map((group) => (
+            <div key={group.key} className="mb-4 last:mb-0">
+              <h3 className="mb-1 text-sm font-bold text-muted-foreground">{group.heading}</h3>
+              <ul className="divide-y divide-border">{group.items.map(renderItem)}</ul>
+            </div>
+          ))
         ) : (
-          <ul className="divide-y divide-border">
-            {listItems.map((item) => (
-              <li key={item.id}>
-                <Link
-                  to={`/data/${item.id}`}
-                  className="block py-2 -mx-2 px-2 rounded-lg transition-colors hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand/40"
-                >
-                  <div className="flex justify-between items-center gap-3">
-                    <span className="font-medium text-foreground truncate">{item.title}</span>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {/* SOT-1368 follow-up: 紐づけた子どもの名前タグ（子どもごとの色）。未指定/未解決は非表示。 */}
-                      {(() => {
-                        if (!item.child_id) return null;
-                        const child = childList.find((c) => String(c.id) === String(item.child_id));
-                        if (!child) return null;
-                        return (
-                          <span
-                            className={`text-xs px-2 py-1 rounded-full max-w-[6rem] truncate ${getChildColorClasses(item.child_id, childList).chip}`}
-                          >
-                            {child.name}
-                          </span>
-                        );
-                      })()}
-                      <span className={`text-xs px-2 py-1 rounded-full ${getStatusDateChipClass(item.status)}`}>
-                        {item.event_date ? item.event_date : t('common.noDeadline')}
-                      </span>
-                      <span className="text-xs text-muted-foreground">{optLabel('infoType', item.info_type)}</span>
-                      {/* SOT-1428: お気に入りトグル。行リンク内なので遷移を抑止する。お気に入り時は黄色塗り潰し。 */}
-                      {showFavorite && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            favoriteMutation.mutate({ id: item.id, value: !item.is_favorite });
-                          }}
-                          aria-pressed={!!item.is_favorite}
-                          aria-label={t(item.is_favorite ? 'favorite.remove' : 'favorite.add')}
-                          title={t(item.is_favorite ? 'favorite.remove' : 'favorite.add')}
-                          className="flex-shrink-0 rounded-full p-0.5 transition-colors hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand/40"
-                        >
-                          <FavoriteStar filled={!!item.is_favorite} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <ul className="divide-y divide-border">{listItems.map(renderItem)}</ul>
         )}
       </div>
     </>

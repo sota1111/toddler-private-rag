@@ -166,6 +166,9 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(eventLink).toBeVisible()
     await expect(page.getByText('2026-10-15')).toBeVisible()
 
+    // SOT-1502: やることリストは月ごとの見出しでグループ表示される（2026-10-15 → 2026年10月）
+    await expect(page.getByRole('heading', { name: '2026年10月' })).toBeVisible()
+
     // SOT-1355: ステータス絞り込み。対応済では未対応の予定が消え、未対応で再表示される。
     await page.getByRole('button', { name: '対応済', exact: true }).click()
     await expect(page.getByRole('link', { name: /運動会のお知らせ/ })).toHaveCount(0)
