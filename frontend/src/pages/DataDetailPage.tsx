@@ -456,7 +456,9 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
 
           {/* SOT-1415: 編集モードでは日付(event_date)を変更できる（空にして日付なしにもできる）。
               SOT-1503: 表示画面の日付バッジ(bg-emerald-100 text-emerald-800)と同じ緑(emerald)基調の
-              デザインに揃える（ラベルに📅アイコン＋emerald文字色、入力欄をemerald枠・薄緑背景・緑フォーカス）。 */}
+              デザインに揃える（ラベルに📅アイコン＋emerald文字色、入力欄をemerald枠・薄緑背景・緑フォーカス）。
+              SOT-1503(再オープン): 入力欄の「四角」の大きさをステータス変更欄(select, text-sm p-2)と揃えるため、
+              フォント指定を sm:text-sm → text-sm に統一する（余白は両方 p-2 で同一）。 */}
           {!hasPhoto && isEditing && (
             <div className="mb-3">
               <div className="flex items-center gap-2">
@@ -469,7 +471,7 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
                   value={editDate}
                   onChange={(e) => setEditDate(e.target.value)}
                   disabled={editMutation.isPending}
-                  className="border border-emerald-300 bg-emerald-50 text-emerald-900 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm p-2 disabled:opacity-60"
+                  className="border border-emerald-300 bg-emerald-50 text-emerald-900 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500 text-sm p-2 disabled:opacity-60"
                 />
               </div>
             </div>
