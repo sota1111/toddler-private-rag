@@ -225,7 +225,7 @@ const TasksPage: React.FC = () => {
             </button>
           )}
         </div>
-        <DatedInfoList items={events} isLoading={isLoading} namespace="tasks" />
+        <DatedInfoList items={events} isLoading={isLoading} namespace="tasks" groupByMonth />
       </div>
     </div>
   );
