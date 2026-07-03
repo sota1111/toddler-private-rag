@@ -466,12 +466,14 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
             </div>
           )}
 
-          {/* SOT-1415: 編集モードでは日付(event_date)を変更できる（空にして日付なしにもできる）。 */}
+          {/* SOT-1415: 編集モードでは日付(event_date)を変更できる（空にして日付なしにもできる）。
+              SOT-1503: 表示画面の日付バッジ(bg-emerald-100 text-emerald-800)と同じ緑(emerald)基調の
+              デザインに揃える（ラベルに📅アイコン＋emerald文字色、入力欄をemerald枠・薄緑背景・緑フォーカス）。 */}
           {!hasPhoto && isEditing && (
             <div className="mb-3">
               <div className="flex items-center gap-2">
-                <label htmlFor="edit-event-date" className="text-sm font-medium text-foreground">
-                  {t('records.eventDate')}
+                <label htmlFor="edit-event-date" className="inline-flex items-center gap-1 text-sm font-medium text-emerald-800">
+                  📅 {t('records.eventDate')}
                 </label>
                 <input
                   id="edit-event-date"
@@ -479,7 +481,7 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
                   value={editDate}
                   onChange={(e) => setEditDate(e.target.value)}
                   disabled={editMutation.isPending}
-                  className="border border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2 disabled:opacity-60"
+                  className="border border-emerald-300 bg-emerald-50 text-emerald-900 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm p-2 disabled:opacity-60"
                 />
               </div>
             </div>
