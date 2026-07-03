@@ -138,3 +138,24 @@ def test_hybrid_search_date_range_facet():
     titles = [r["info"]["title"] for r in resp.json()["results"]]
     assert "5月行事" in titles
     assert "3月行事" not in titles
+
+
+# --- SOT-1504: 検索(hybrid-search)の対象にアーカイブ済み項目も含める ---
+
+def test_hybrid_search_includes_archived():
+    created = _create({"title": "去年の遠足のしおり", "content": "遠足の持ち物", "info_type": "行事"})
+    info_id = created["id"]
+
+    # アーカイブする（通常一覧からは消える）
+    resp = client.put(f"/api/info/{info_id}", json={"is_archived": True})
+    assert resp.status_code == 200, resp.text
+
+    # 通常一覧(GET /info/)からは除外されている（アーカイブ機能は維持）
+    active_titles = [r["title"] for r in client.get("/api/info/").json()]
+    assert "去年の遠足のしおり" not in active_titles
+
+    # 検索(hybrid-search)ではアーカイブ済みでもヒットする
+    resp = client.get("/api/info/hybrid-search", params={"q": "遠足"})
+    assert resp.status_code == 200, resp.text
+    titles = [r["info"]["title"] for r in resp.json()["results"]]
+    assert "去年の遠足のしおり" in titles

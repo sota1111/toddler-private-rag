@@ -270,6 +270,23 @@ def test_ask_endpoint_sources_include_text_snippet():
     assert any(s["snippet"] for s in sources)
 
 
+# --- SOT-1504: 質問(ask)の対象にアーカイブ済み項目も含める ---
+
+def test_ask_endpoint_includes_archived_source():
+    archived_id = _seed_with_ocr(
+        "去年の遠足のしおり", "行事",
+        "来週の遠足では お弁当 水筒 レジャーシート を持参してください",
+    )
+    # アーカイブする（通常一覧からは消えるが、質問の根拠には残す）
+    resp = client.put(f"/api/info/{archived_id}", json={"is_archived": True})
+    assert resp.status_code == 200, resp.text
+
+    resp = client.post("/api/info/ask", json={"query": "遠足に持っていくものは？", "top_k": 3})
+    assert resp.status_code == 200
+    source_ids = [s["info_id"] for s in resp.json()["sources"]]
+    assert archived_id in source_ids
+
+
 # --- SOT-1304: 相対日付クエリで登録済み行事をコンテキストに補う ---
 
 def test_upcoming_event_contexts_includes_dated_event_with_date_label():

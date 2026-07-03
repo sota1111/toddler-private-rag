@@ -168,10 +168,13 @@ def get_rag_service(repo, *, ocr_only: bool = False, **kwargs) -> RagService:
     """Build a RagService indexed over all infos in the given repository.
 
     ``ocr_only`` で写真の文字起こし（添付OCR）のみをインデックス対象にできる (SOT-1357)。
+
+    SOT-1504: 質問(ask)の検索対象コーパスにはアーカイブ済み(is_archived=True)の項目も含める。
+    アーカイブした過去のお便り等も回答の根拠として引けるようにするため、include_archived=True で取得する。
     """
     service = RagService(**kwargs)
     try:
-        infos = repo.list()
+        infos = repo.list(include_archived=True)
     except Exception:  # pragma: no cover - defensive
         logger.exception("Failed to list infos for RAG index")
         infos = []
