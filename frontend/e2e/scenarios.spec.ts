@@ -385,4 +385,23 @@ test.describe('toddler-private-rag シナリオ', () => {
     await page.getByRole('button', { name: '2026年10月を展開する' }).click()
     await expect(eventLink).toBeVisible()
   })
+
+  test('S17: やることリストは凡例（絞り込み）を固定表示し、本体をスクロールできる (SOT-1506)', async ({ page }) => {
+    await installApiMocks(page, { authed: true })
+    await login(page)
+
+    await page.locator('nav a[href="/tasks"]').first().click()
+    await expect(page).toHaveURL(/\/tasks/)
+
+    // 凡例（すべて / 未確認 / 未対応 / 対応済）が常に表示される
+    await expect(page.getByRole('button', { name: 'すべて', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '未確認', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '未対応', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '対応済', exact: true })).toBeVisible()
+
+    // 本体はスクロール可能な領域に入り、現在月起点で月グループが表示される
+    await expect(page.getByRole('heading', { name: '2026年10月' })).toBeVisible()
+    const scrollBox = page.locator('div.overflow-y-auto').filter({ hasText: '2026年10月' })
+    await expect(scrollBox.first()).toBeVisible()
+  })
 })

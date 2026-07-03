@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import type { NurseryInfo } from '../types';
@@ -118,6 +118,12 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({
     });
   };
 
+  // SOT-1506: 凡例（ステータス絞り込み行）を固定し、その下の月グループ本体だけをスクロール
+  // 可能にする。初回データ表示時に一度だけスクロール位置を現在月のグループへ合わせ、上下スクロールで
+  // 前後の月を確認できるようにする。以降の再描画（お気に入りトグル等）ではユーザーのスクロール位置を尊重する。
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const didInitialScroll = useRef(false);
+
   // ステータス絞り込み（'all' 以外は該当ステータスのみ）→ event_date 昇順ソート。
   // SOT-1365: event_date が空（日付不明 = 期限なし）の項目は末尾に回す。
   const listItems = useMemo<NurseryInfo[]>(() => {
@@ -166,6 +172,27 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({
     // monthHeading は lang に依存するため lang を依存に含める。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listItems, lang, t]);
+
+  // SOT-1506: 初回データ表示時に一度だけ、現在月（無ければ現在月以降で最も近い月、それも無ければ
+  // 末尾の月）のグループ見出しをスクロール先頭に合わせる。
+  useLayoutEffect(() => {
+    if (!groupByMonth || didInitialScroll.current || isLoading || groups.length === 0) return;
+    const container = scrollRef.current;
+    if (!container) return;
+    const now = new Date();
+    const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const dated = groups.filter((g) => g.key !== NO_DEADLINE_KEY);
+    const target =
+      dated.find((g) => g.key === currentKey) ??
+      dated.find((g) => g.key >= currentKey) ??
+      dated[dated.length - 1] ??
+      groups[0];
+    const el = target
+      ? container.querySelector<HTMLElement>(`[data-month-key="${target.key}"]`)
+      : null;
+    if (el) container.scrollTop = el.offsetTop;
+    didInitialScroll.current = true;
+  }, [groupByMonth, isLoading, groups]);
 
   const renderItem = (item: NurseryInfo) => (
     <li key={item.id}>
@@ -216,27 +243,9 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({
     </li>
   );
 
-  return (
-    <>
-      {/* ステータス絞り込み（すべて / 未確認 / 未対応 / 対応済）。未選択時は全ピル共通デザイン。 */}
-      <div className="flex flex-wrap gap-2 px-4 pt-3" role="group" aria-label={t(`${namespace}.listTitle`)}>
-        {STATUS_FILTERS.map(({ key, suffix }) => {
-          const active = statusFilter === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setStatusFilter(key)}
-              aria-pressed={active}
-              className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-brand/40 ${getStatusFilterPillClass(key, active)}`}
-            >
-              {t(`${namespace}.${suffix}`)}
-            </button>
-          );
-        })}
-      </div>
-      <div className="p-4">
-        {beforeList}
+  const body = (
+    <div className="p-4">
+      {beforeList}
         {isLoading ? (
           <p className="text-muted-foreground">{t('common.loading')}</p>
         ) : listItems.length === 0 ? (
@@ -247,7 +256,7 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({
           groups.map((group) => {
             const collapsed = collapsedMonths.has(group.key);
             return (
-              <div key={group.key} className="mb-4 last:mb-0">
+              <div key={group.key} data-month-key={group.key} className="mb-4 last:mb-0">
                 <div className="mb-1 flex items-center gap-2">
                   <h3 className="text-sm font-bold text-muted-foreground">{group.heading}</h3>
                   <button
@@ -279,7 +288,38 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({
         ) : (
           <ul className="divide-y divide-border">{listItems.map(renderItem)}</ul>
         )}
+    </div>
+  );
+
+  return (
+    <>
+      {/* ステータス絞り込み（すべて / 未確認 / 未対応 / 対応済）。未選択時は全ピル共通デザイン。 */}
+      {/* SOT-1506: この凡例行はスクロール領域の外に置き、常に固定表示する。 */}
+      <div className="flex flex-wrap gap-2 px-4 pt-3" role="group" aria-label={t(`${namespace}.listTitle`)}>
+        {STATUS_FILTERS.map(({ key, suffix }) => {
+          const active = statusFilter === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setStatusFilter(key)}
+              aria-pressed={active}
+              className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-brand/40 ${getStatusFilterPillClass(key, active)}`}
+            >
+              {t(`${namespace}.${suffix}`)}
+            </button>
+          );
+        })}
       </div>
+      {/* SOT-1506: やることリスト（groupByMonth）は本体だけをスクロール可能にし、初期は現在月へ位置づける。
+          SchedulePage（groupByMonth 無し）は従来どおりスクロール枠なしで表示する。 */}
+      {groupByMonth ? (
+        <div ref={scrollRef} className="relative max-h-[60vh] overflow-y-auto">
+          {body}
+        </div>
+      ) : (
+        body
+      )}
     </>
   );
 };
