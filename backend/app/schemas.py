@@ -100,6 +100,8 @@ class NurseryInfoBase(BaseModel):
     needs_deadline_investigation: Optional[bool] = False
     # SOT-1428: お気に入りフラグ。
     is_favorite: Optional[bool] = False
+    # SOT-1500: アーカイブフラグ。
+    is_archived: Optional[bool] = False
     # SOT-1411: 締切調査が生成した手順タスク群のグループ識別子・基準日からの日数オフセット・基準日。
     deadline_group_id: Optional[str] = None
     deadline_offset_days: Optional[int] = None
@@ -129,6 +131,8 @@ class NurseryInfoUpdate(BaseModel):
     needs_deadline_investigation: Optional[bool] = None
     # SOT-1428: お気に入りフラグ。
     is_favorite: Optional[bool] = None
+    # SOT-1500: アーカイブフラグ。
+    is_archived: Optional[bool] = None
     # SOT-1411
     deadline_group_id: Optional[str] = None
     deadline_offset_days: Optional[int] = None

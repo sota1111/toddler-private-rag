@@ -20,6 +20,7 @@ import RegisteredListPage from './pages/RegisteredListPage';
 import DataDetailPage from './pages/DataDetailPage';
 import SchedulePage from './pages/SchedulePage';
 import TasksPage from './pages/TasksPage';
+import ArchivePage from './pages/ArchivePage';
 import SettingsPage from './pages/SettingsPage';
 import HowToPage from './pages/HowToPage';
 
@@ -184,6 +185,7 @@ const App: React.FC = () => {
                 <Route path="/registered" element={<ProtectedRoute><RegisteredListPage /></ProtectedRoute>} />
                 <Route path="/schedule" element={<ProtectedRoute><SchedulePage /></ProtectedRoute>} />
                 <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
+                <Route path="/archive" element={<ProtectedRoute><ArchivePage /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
                 <Route path="/howto" element={<ProtectedRoute><HowToPage /></ProtectedRoute>} />
                 <Route path="/ask" element={<Navigate to="/info?tab=ask" replace />} />

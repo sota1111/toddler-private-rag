@@ -70,7 +70,13 @@ class InfoRepository(abc.ABC):
     @abc.abstractmethod
     def list(self, q: Optional[str] = None, info_type: Optional[str] = None,
              status: Optional[str] = None, priority: Optional[str] = None,
-             tag: Optional[str] = None, include_attachments: bool = True) -> List[Any]:
+             tag: Optional[str] = None, include_attachments: bool = True,
+             include_archived: bool = False) -> List[Any]:
+        pass
+
+    @abc.abstractmethod
+    def list_archived(self) -> List[Any]:
+        """SOT-1500: アーカイブ済み(is_archived=True)の本登録項目のみを返す。"""
         pass
 
     @abc.abstractmethod
@@ -208,6 +214,15 @@ def _sqlite_registered_only():
     )
 
 
+def _sqlite_not_archived():
+    """SOT-1500: 非アーカイブ(is_archived が False/NULL)のみを対象にする SQLAlchemy フィルタ。
+    既存(未設定)データは NULL = 非アーカイブ扱いで残す。"""
+    return or_(
+        models.NurseryInfo.is_archived == False,  # noqa: E712 (SQLAlchemy 列比較)
+        models.NurseryInfo.is_archived.is_(None),
+    )
+
+
 class SqliteInfoRepository(InfoRepository):
     def __init__(self, db: Session, owner_id: Optional[str] = None):
         self.db = db
@@ -240,8 +255,13 @@ class SqliteInfoRepository(InfoRepository):
 
     def list(self, q: Optional[str] = None, info_type: Optional[str] = None,
              status: Optional[str] = None, priority: Optional[str] = None,
-             tag: Optional[str] = None, include_attachments: bool = True) -> List[models.NurseryInfo]:
+             tag: Optional[str] = None, include_attachments: bool = True,
+             include_archived: bool = False) -> List[models.NurseryInfo]:
         query = self._scoped(self.db.query(models.NurseryInfo).filter(_sqlite_registered_only()))
+
+        # SOT-1500: 既定ではアーカイブ済みを一覧から除外する（NULL/False は非アーカイブ扱い）。
+        if not include_archived:
+            query = query.filter(_sqlite_not_archived())
 
         if q:
             search = f"%{q}%"
@@ -272,6 +292,13 @@ class SqliteInfoRepository(InfoRepository):
             for info in results:
                 info.attachments = []
         return results
+
+    def list_archived(self) -> List[models.NurseryInfo]:
+        # SOT-1500: アーカイブ済みの本登録項目のみ。やることリストと同様に扱えるよう新しい順で返す。
+        return self._scoped(self.db.query(models.NurseryInfo).filter(
+            _sqlite_registered_only(),
+            models.NurseryInfo.is_archived == True,  # noqa: E712
+        )).order_by(models.NurseryInfo.created_at.desc()).all()
 
     def list_today(self) -> List[models.NurseryInfo]:
         # 今日やること: 本日が日付/行事日/提出期限のいずれかに該当する情報 (SOT-1093)
@@ -584,6 +611,8 @@ class FirestoreNurseryInfo:
     needs_deadline_investigation: bool = False
     # SOT-1428: お気に入りフラグ。
     is_favorite: bool = False
+    # SOT-1500: アーカイブフラグ。
+    is_archived: bool = False
     # SOT-1411: 締切調査タスク群のグループ識別子・基準日からの日数オフセット・基準日。
     deadline_group_id: Optional[str] = None
     deadline_offset_days: Optional[int] = None
@@ -634,6 +663,7 @@ def _info_doc_to_obj(doc_id: str, data: dict, attachments: List[FirestoreAttachm
         child_id=data.get("child_id"),
         needs_deadline_investigation=bool(data.get("needs_deadline_investigation")),
         is_favorite=bool(data.get("is_favorite")),
+        is_archived=bool(data.get("is_archived")),
         deadline_group_id=data.get("deadline_group_id"),
         deadline_offset_days=data.get("deadline_offset_days"),
         deadline_base_date=_to_date(data.get("deadline_base_date")),
@@ -748,7 +778,8 @@ class FirestoreInfoRepository(InfoRepository):
 
     def list(self, q: Optional[str] = None, info_type: Optional[str] = None,
              status: Optional[str] = None, priority: Optional[str] = None,
-             tag: Optional[str] = None, include_attachments: bool = True) -> List[FirestoreNurseryInfo]:
+             tag: Optional[str] = None, include_attachments: bool = True,
+             include_archived: bool = False) -> List[FirestoreNurseryInfo]:
         query = self.db.collection("nursery_info")
         
         if info_type:
@@ -771,6 +802,9 @@ class FirestoreInfoRepository(InfoRepository):
             # 仮登録(draft)は通常一覧に含めない (SOT-1113)
             if not _is_registered_data(doc_data):
                 continue
+            # SOT-1500: 既定ではアーカイブ済みを一覧から除外する。
+            if not include_archived and bool(doc_data.get("is_archived")):
+                continue
             # Fetch attachments if q is present (needed for OCR search)
             attachments = []
             if q:
@@ -787,7 +821,25 @@ class FirestoreInfoRepository(InfoRepository):
                     att_refs = self.db.collection("attachments").where("info_id", "==", doc.id).stream()
                     info_obj.attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
                 results.append(info_obj)
-                
+
+        return results
+
+    def list_archived(self) -> List[FirestoreNurseryInfo]:
+        # SOT-1500: アーカイブ済みの本登録項目のみ。owner 絞り(アプリ側)は list と同方式。
+        results: List[FirestoreNurseryInfo] = []
+        for doc in self.db.collection("nursery_info").stream():
+            doc_data = doc.to_dict()
+            if not self._owner_ok(doc_data):
+                continue
+            if not _is_registered_data(doc_data):
+                continue
+            if not bool(doc_data.get("is_archived")):
+                continue
+            att_refs = self.db.collection("attachments").where("info_id", "==", doc.id).stream()
+            attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
+            results.append(_info_doc_to_obj(doc.id, doc_data, attachments))
+        # 新しい順（created_at 降順）で返す。
+        results.sort(key=lambda r: r.created_at, reverse=True)
         return results
 
     def list_today(self) -> List[FirestoreNurseryInfo]:

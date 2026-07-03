@@ -23,6 +23,12 @@ export const getInfoList = async (params?: { q?: string; info_type?: string; sta
   return response.data;
 };
 
+// アーカイブ済み一覧取得 (SOT-1500)。is_archived=true の本登録項目のみを返す。
+export const getArchivedList = async (): Promise<NurseryInfo[]> => {
+  const response = await api.get('/info/archived');
+  return response.data;
+};
+
 // 本登録データ1件取得 (SOT-1217: データ一覧の詳細ページ用)
 export const getInfoById = async (id: number | string): Promise<NurseryInfo> => {
   const response = await api.get(`/info/${id}`);

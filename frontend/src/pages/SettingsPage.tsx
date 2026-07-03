@@ -217,6 +217,18 @@ const SettingsPage: React.FC = () => {
         {childError && <p className="mt-2 text-sm text-red-600">{childError}</p>}
       </div>
 
+      {/* アーカイブ一覧への導線 SOT-1500。「全データ削除」の上に配置する。 */}
+      <div className="mt-6 bg-surface rounded-2xl shadow-card p-4 sm:p-6">
+        <h2 className="text-base font-bold text-foreground mb-1">{t('settings.archiveTitle')}</h2>
+        <p className="text-sm text-muted-foreground mb-4">{t('settings.archiveDescription')}</p>
+        <Link
+          to="/archive"
+          className="inline-flex items-center gap-1 rounded-lg border border-brand/40 px-4 py-2 text-sm font-semibold text-brand-strong hover:bg-brand/10"
+        >
+          🗄️ {t('settings.archiveButton')}
+        </Link>
+      </div>
+
       {/* 全データ削除（危険操作） SOT-1356 */}
       <div className="mt-6 bg-surface rounded-2xl shadow-card border border-red-200 p-4 sm:p-6">
         <h2 className="text-base font-bold text-red-600 mb-1">{t('settings.deleteAllTitle')}</h2>
