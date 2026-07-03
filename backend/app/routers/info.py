@@ -400,6 +400,13 @@ def count_processing_drafts(repo: InfoRepository = Depends(get_info_repository),
     return {"count": repo.count_processing()}
 
 
+# 文字起こし(読み取り)中の項目一覧 (SOT-1499)。追加で自動登録した写真を、完了を待たず
+# 仮登録画面に「読み取り中」カードとして表示するために使う。"/{id}" より前に宣言する。
+@router.get("/drafts/processing", response_model=List[schemas.NurseryInfoResponse])
+def list_processing_drafts(repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
+    return repo.list_processing()
+
+
 @router.get("/", response_model=List[schemas.NurseryInfoResponse])
 def list_info(
     q: Optional[str] = None,

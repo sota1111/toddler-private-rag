@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getDrafts, finalizeInfo, deleteInfo, updateInfo, getAttachmentFileUrl, getProcessingCount } from '../api';
+import { getDrafts, finalizeInfo, deleteInfo, updateInfo, getAttachmentFileUrl, getProcessingDrafts } from '../api';
 import type { NurseryInfo, NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import { useConfirm } from '../components/confirmDialogContext';
@@ -19,13 +19,17 @@ const DraftsPage: React.FC = () => {
     queryKey: ['drafts'],
     queryFn: getDrafts,
   });
-  // SOT-1380: 写真アップ後、OCR(文字起こし)中のレコード(processing)は仮登録一覧にまだ出ない。
-  // その件数を取得し、「文字起こし中」インジケータを表示する。完了すると 0 になり自動的に消える。
-  const { data: processingCount = 0 } = useQuery({
-    queryKey: ['drafts', 'processing-count'],
-    queryFn: getProcessingCount,
+  // SOT-1380 / SOT-1499: 写真アップ後、OCR(文字起こし=読み取り)中のレコード(processing)は
+  // enrich が終わるまで仮登録(draft)一覧には出ない。追加で自動登録した写真を完了前でも確認できる
+  // よう、読み取り中の項目を取得して「読み取り中」カードとして表示する。完了すると draft に昇格し
+  // 通常の仮登録カードへ置き換わる。5秒ごとにポーリングし自動更新する。
+  const { data: processingDrafts } = useQuery({
+    queryKey: ['drafts', 'processing'],
+    queryFn: getProcessingDrafts,
     refetchInterval: 5000,
   });
+  const processingItems = processingDrafts ?? [];
+  const processingCount = processingItems.length;
   // SOT-1380 follow-up: processingCount(=サーバ側OCR処理中件数)だけだと、
   // 写真アップ完了画面→仮登録画面へ移動した時点では OCR が既に終わっている／5秒ポーリングの
   // 谷間で 0 になりやすく、「写真アップ直後」に文字起こし中メッセージが出ないことがあった。
@@ -220,10 +224,11 @@ const DraftsPage: React.FC = () => {
       {isLoading && <p className="text-sm text-muted-foreground">{t('common.loading')}</p>}
       {isError && <p className="text-sm text-red-600">{t('drafts.loadError')}</p>}
 
-      {!isLoading && !isError && (!drafts || drafts.length === 0) && (
+      {/* SOT-1499: 読み取り中の項目はカードで下に表示する（processingCount > 0）。
+          一覧も読み取り中も無い場合のみ空表示。写真アップ直後(recentUpload)でまだ processing が
+          サーバに現れていない谷間だけ、従来の「文字起こし中」テキストで補う。 */}
+      {!isLoading && !isError && (!drafts || drafts.length === 0) && processingCount === 0 && (
         <div className="bg-surface border border-border rounded-lg p-8 text-center text-muted-foreground">
-          {/* SOT-1380: 文字起こし中(processing)、または写真アップ直後(=showProcessing)は、
-              一覧がまだ空でも進行中だと分かる説明にする。 */}
           {showProcessing ? t('drafts.emptyProcessing') : t('drafts.empty')}
         </div>
       )}
@@ -242,6 +247,39 @@ const DraftsPage: React.FC = () => {
       )}
 
       <div className="space-y-4">
+        {/* SOT-1499: 追加で自動登録した写真のうち、まだ文字起こし(読み取り)中の項目を
+            「読み取り中」カードとして表示する。内容確認・本登録は昇格後の仮登録カードで行うため、
+            ここでは写真と読み取り中バッジのみの読み取り専用カードにする。 */}
+        {processingItems.map((p: NurseryInfo) => {
+          const imageAtt = p.attachments?.find((a) => a.mime_type?.startsWith('image/'));
+          return (
+            <div
+              key={`processing-${p.id}`}
+              className="bg-surface shadow-sm border border-dashed border-brand rounded-lg p-5"
+              aria-busy="true"
+            >
+              <div className="flex flex-col sm:flex-row items-center gap-4">
+                {imageAtt && (
+                  <img
+                    src={getAttachmentFileUrl(imageAtt.id)}
+                    alt={p.title || t('drafts.processingCardTitle')}
+                    className="w-full sm:w-40 h-40 object-cover rounded-md border border-border flex-shrink-0 opacity-70"
+                  />
+                )}
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-accent-bg px-3 py-1 text-xs font-medium text-brand-strong">
+                    <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-brand" aria-hidden="true" />
+                    {t('drafts.processingBadge')}
+                  </div>
+                  <h2 className="text-lg font-semibold text-foreground break-words">
+                    {p.title || t('drafts.processingCardTitle')}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">{t('drafts.processingCardHint')}</p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
         {drafts?.map((d: NurseryInfo) => {
           const imageAtt = d.attachments?.find((a) => a.mime_type?.startsWith('image/'));
           const busy = busyId === d.id;

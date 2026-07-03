@@ -279,4 +279,58 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page.getByText('アップ完了（登録しました）')).toBeVisible()
     await expect(page.getByText('2枚の写真を登録しました', { exact: false })).toBeVisible()
   })
+
+  test('S14: 仮登録画面で追加自動登録した読み取り中の写真が「読み取り中」カードとして既存の仮登録と並んで表示される (SOT-1499)', async ({ page }) => {
+    // 既存の仮登録(draft)に加え、読み取り中(processing)の項目が1件ある状態を用意する。
+    const NOW = new Date().toISOString()
+    await installApiMocks(page, {
+      authed: true,
+      records: [
+        {
+          id: 3,
+          title: '遠足のしおり（仮）',
+          info_type: '資料',
+          content: '遠足は来週月曜です。持ち物を確認してください。',
+          status: '未対応',
+          priority: '普通',
+          registration_state: 'draft',
+          created_at: NOW,
+          updated_at: NOW,
+        },
+        {
+          id: 4,
+          title: '',
+          info_type: '資料',
+          content: '',
+          status: '未確認',
+          priority: '普通',
+          registration_state: 'processing',
+          created_at: NOW,
+          updated_at: NOW,
+          attachments: [
+            {
+              id: 94,
+              info_id: 4,
+              original_filename: 'reading.png',
+              mime_type: 'image/png',
+              file_size: 1024,
+              created_at: NOW,
+            },
+          ],
+        },
+      ],
+    })
+    await login(page)
+
+    await page.locator('nav a[href="/create/auto"]').first().click()
+    await expect(page).toHaveURL(/\/create\/auto/)
+    await page.locator('a[href="/drafts"]').first().click()
+    await expect(page).toHaveURL(/\/drafts/)
+
+    // 既存の仮登録タスクは従来どおり表示される
+    await expect(page.getByRole('heading', { name: '遠足のしおり（仮）' })).toBeVisible()
+    // 読み取り中の追加登録は「読み取り中」カードとして表示される（読み取り中表示だけにならない）
+    await expect(page.getByText('読み取り中', { exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '写真を読み取り中' })).toBeVisible()
+  })
 })
