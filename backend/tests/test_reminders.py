@@ -18,7 +18,7 @@ from sqlalchemy.pool import StaticPool
 from app.main import app
 from app.database import Base, get_db
 from app.routers.auth import get_current_user
-from app import database, reminders
+from app import database, reminders, clock
 
 SQLALCHEMY_DATABASE_URL = "sqlite://"
 engine = create_engine(
@@ -59,7 +59,10 @@ def _create(**kwargs):
 
 
 def _iso(days: int) -> str:
-    return (datetime.date.today() + datetime.timedelta(days=days)).isoformat()
+    # サーバ実装(clock.today, JST基準)と同じ基準で相対日付を作る。
+    # 素の datetime.date.today()(UTC基準)を使うと UTC/JST の日付境界をまたぐ時間帯で
+    # サーバの「今日」とズレ、urgency 分類がフレークする (SOT-1493)。
+    return (clock.today() + datetime.timedelta(days=days)).isoformat()
 
 
 def _by_title(items, title):

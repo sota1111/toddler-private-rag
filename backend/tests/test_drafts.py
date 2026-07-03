@@ -6,8 +6,6 @@
 - registration_state 省略時は registered 扱い（後方互換）
 """
 
-import datetime
-
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -17,7 +15,7 @@ from sqlalchemy.pool import StaticPool
 from app.main import app
 from app.database import Base, get_db
 from app.routers.auth import get_current_user
-from app import database
+from app import database, clock
 
 SQLALCHEMY_DATABASE_URL = "sqlite://"
 engine = create_engine(
@@ -78,7 +76,10 @@ def test_default_create_is_registered():
 
 
 def test_draft_excluded_from_today():
-    today = datetime.date.today().isoformat()
+    # /api/info/today はサーバの clock.today()(JST基準) で判定するため、
+    # テストも同じ基準で「今日」を作る。素の date.today()(UTC) だと
+    # UTC/JST 境界時間帯でフレークする (SOT-1493)。
+    today = clock.today().isoformat()
     _create(title="draft-today", registration_state="draft", due_date=today)
     _create(title="reg-today", due_date=today)
 
