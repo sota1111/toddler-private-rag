@@ -394,18 +394,6 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
                   {t('records.edit')}
                 </button>
               )}
-              {/* SOT-1500: 「アーカイブ」ボタン。編集ボタンの下に配置する。
-                  非写真タスクレコードのみ・編集モード以外で表示する。 */}
-              {!hasPhoto && !isEditing && (
-                <button
-                  type="button"
-                  onClick={handleArchive}
-                  disabled={archiveMutation.isPending}
-                  className="text-sm font-medium text-amber-600 hover:text-amber-700 hover:bg-amber-50 px-3 py-1 rounded-md disabled:text-muted-foreground disabled:hover:bg-transparent transition-colors"
-                >
-                  {archiveMutation.isPending ? t('records.archiving') : t('records.archive')}
-                </button>
-              )}
             </div>
           </div>
 
@@ -559,6 +547,24 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
             <div className="mb-4">
               <h2 className="text-sm font-semibold text-muted-foreground mb-1">{t('records.content')}</h2>
               <LinkifiedText text={item.content} className="whitespace-pre-wrap break-words text-foreground" />
+            </div>
+          )}
+
+          {/* SOT-1500: 「アーカイブ」ボタン。再オープン対応で、内容の下・右下に配置し、
+              日付バッジ(rounded-full ピル)と同じデザインで色を紫(purple)基調にする。
+              非写真タスクレコードのみ・編集モード以外で表示する。 */}
+          {!hasPhoto && !isEditing && (
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={handleArchive}
+                disabled={archiveMutation.isPending}
+                aria-label={t('records.archive')}
+                className="inline-flex items-center gap-1 text-sm font-medium bg-purple-100 text-purple-800 px-3 py-1 rounded-full hover:bg-purple-200 disabled:opacity-60 transition-colors"
+              >
+                <span aria-hidden="true">🗄️</span>
+                {archiveMutation.isPending ? t('records.archiving') : t('records.archive')}
+              </button>
             </div>
           )}
 
