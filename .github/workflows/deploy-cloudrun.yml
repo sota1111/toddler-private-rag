@@ -271,7 +271,15 @@ jobs:
         env:
           IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPOSITORY }}/${{ secrets.CLOUD_RUN_SERVICE_FRONTEND }}
         run: |
-          docker build -f frontend/Dockerfile -t "$IMAGE:${{ steps.sha.outputs.sha }}" -t "$IMAGE:latest" frontend
+          # SOT-1487: bake the PUBLIC Firebase Web config into the frontend bundle at
+          # build time so Google sign-in works in production. Sourced from repo
+          # *variables* (not secrets — these are client-side identifiers). Unset
+          # variables pass empty strings and the Google button degrades gracefully.
+          docker build -f frontend/Dockerfile \
+            --build-arg VITE_FIREBASE_API_KEY="${{ vars.VITE_FIREBASE_API_KEY }}" \
+            --build-arg VITE_FIREBASE_AUTH_DOMAIN="${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}" \
+            --build-arg VITE_FIREBASE_PROJECT_ID="${{ vars.VITE_FIREBASE_PROJECT_ID }}" \
+            -t "$IMAGE:${{ steps.sha.outputs.sha }}" -t "$IMAGE:latest" frontend
 
       - name: Push frontend image
         if: steps.changes.outputs.frontend == 'true'
