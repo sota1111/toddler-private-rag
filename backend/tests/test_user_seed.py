@@ -179,3 +179,53 @@ def test_default_owner_is_not_seeded():
 def test_empty_owner_id_is_ignored():
     _seed_default_owner_data()
     assert ensure_user_seeded("") is False
+
+
+def test_existing_user_without_data_is_resynced():
+    """SOT-1507 再同期: マーカーは持つがデータが無い既存ユーザーにも配布する。
+
+    マーカーではなく「本登録タスクを持つか」で判定するため、旧仕様でシード済み扱いだった
+    （マーカーだけ存在する）既存ユーザーでも、データが無ければ次回ログイン時に配布される。
+    """
+    _seed_default_owner_data()
+
+    # 既にマーカーだけ存在する既存ユーザー（データは未保有）を用意する。
+    db = TestingSessionLocal()
+    try:
+        db.add(models.SeededOwner(owner_id="existingEmpty"))
+        db.commit()
+    finally:
+        db.close()
+
+    assert ensure_user_seeded("existingEmpty") is True
+
+    titles = sorted(i.title for i in _infos_for("existingEmpty"))
+    assert titles == ["健康診断票の提出", "遠足のお知らせ"]
+    assert [c.name for c in _children_for("existingEmpty")] == ["あお"]
+
+
+def test_existing_user_with_own_data_is_not_overwritten():
+    """SOT-1507 再同期: 既に自分のデータを持つユーザーは上書きしない（編集を保護）。"""
+    _seed_default_owner_data()
+
+    # 自分で作成した本登録タスクを1件持つ既存ユーザー。
+    db = TestingSessionLocal()
+    try:
+        db.add(
+            models.NurseryInfo(
+                owner_id="ownerWithData",
+                title="自分で作ったタスク",
+                info_type="メモ",
+                content="ユーザー固有データ",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    assert ensure_user_seeded("ownerWithData") is False
+
+    # 既定オーナーのデータは配布されず、自分のデータだけが残っている。
+    titles = [i.title for i in _infos_for("ownerWithData")]
+    assert titles == ["自分で作ったタスク"]
+    assert _children_for("ownerWithData") == []
