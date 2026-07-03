@@ -106,6 +106,18 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({
 
   const [statusFilter, setStatusFilter] = useState<DatedInfoStatusFilter>('all');
 
+  // SOT-1505: 月グループごとに折りたたみ（表示/非表示）できるようにする。
+  // 既定は全月展開。逆三角ボタンで各月の項目リストの表示/非表示を切り替える。
+  const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(() => new Set());
+  const toggleMonth = (key: string) => {
+    setCollapsedMonths((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   // ステータス絞り込み（'all' 以外は該当ステータスのみ）→ event_date 昇順ソート。
   // SOT-1365: event_date が空（日付不明 = 期限なし）の項目は末尾に回す。
   const listItems = useMemo<NurseryInfo[]>(() => {
@@ -231,12 +243,39 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({
           <p className="text-muted-foreground text-sm">{t('common.noData')}</p>
         ) : groupByMonth ? (
           // SOT-1502: 月ごとの見出し（期限あり）＋末尾の「期限なし」グループで表示する。
-          groups.map((group) => (
-            <div key={group.key} className="mb-4 last:mb-0">
-              <h3 className="mb-1 text-sm font-bold text-muted-foreground">{group.heading}</h3>
-              <ul className="divide-y divide-border">{group.items.map(renderItem)}</ul>
-            </div>
-          ))
+          // SOT-1505: 見出しと同じ高さに逆三角ボタンを置き、その月の表示/非表示を切り替える。
+          groups.map((group) => {
+            const collapsed = collapsedMonths.has(group.key);
+            return (
+              <div key={group.key} className="mb-4 last:mb-0">
+                <div className="mb-1 flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-muted-foreground">{group.heading}</h3>
+                  <button
+                    type="button"
+                    onClick={() => toggleMonth(group.key)}
+                    aria-expanded={!collapsed}
+                    aria-label={t(collapsed ? 'tasks.expandMonth' : 'tasks.collapseMonth', {
+                      month: group.heading,
+                    })}
+                    title={t(collapsed ? 'tasks.expandMonth' : 'tasks.collapseMonth', {
+                      month: group.heading,
+                    })}
+                    className="flex-shrink-0 rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand/40"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`inline-block text-xs leading-none transition-transform ${collapsed ? '-rotate-90' : ''}`}
+                    >
+                      ▼
+                    </span>
+                  </button>
+                </div>
+                {!collapsed && (
+                  <ul className="divide-y divide-border">{group.items.map(renderItem)}</ul>
+                )}
+              </div>
+            );
+          })
         ) : (
           <ul className="divide-y divide-border">{listItems.map(renderItem)}</ul>
         )}

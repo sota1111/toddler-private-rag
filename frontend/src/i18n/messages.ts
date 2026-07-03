@@ -94,6 +94,9 @@ export const messages: Record<Lang, Messages> = {
     'tasks.showUnconfirmed': '未確認',
     'tasks.showPending': '未対応',
     'tasks.showDone': '対応済',
+    // tasks: 月グループの折りたたみ（SOT-1505）
+    'tasks.collapseMonth': '{month}を折りたたむ',
+    'tasks.expandMonth': '{month}を展開する',
     // tasks: manual add (SOT-1358)
     'tasks.addButton': 'リスト追加',
     'tasks.formTitle': 'タスク追加',
@@ -515,6 +518,9 @@ export const messages: Record<Lang, Messages> = {
     'tasks.showUnconfirmed': 'Unconfirmed',
     'tasks.showPending': 'Pending',
     'tasks.showDone': 'Done',
+    // tasks: month group collapse (SOT-1505)
+    'tasks.collapseMonth': 'Collapse {month}',
+    'tasks.expandMonth': 'Expand {month}',
     // tasks: manual add (SOT-1358)
     'tasks.addButton': 'Add task',
     'tasks.formTitle': 'Add task',
