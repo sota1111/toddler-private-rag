@@ -190,6 +190,13 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
     if (path === '/info/drafts') {
       return json(route, 200, store.filter(r => r.registration_state === 'draft'))
     }
+    // SOT-1499: 読み取り中(processing)の項目一覧。仮登録画面の「読み取り中」カード用。
+    if (path === '/info/drafts/processing') {
+      return json(route, 200, store.filter(r => r.registration_state === 'processing'))
+    }
+    if (path === '/info/drafts/processing-count') {
+      return json(route, 200, { count: store.filter(r => r.registration_state === 'processing').length })
+    }
     if (path === '/info/reminders') return json(route, 200, { items: [] })
     if (['/info/today', '/info/tomorrow', '/info/weekly', '/info/next-week', '/info/pending'].includes(path)) {
       return json(route, 200, [])

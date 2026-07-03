@@ -334,6 +334,10 @@ export const messages: Record<Lang, Messages> = {
     'drafts.desc': '自動登録した写真の仮登録一覧です。内容を確認のうえ本登録してください。',
     'drafts.empty': '仮登録はありません。自動登録から写真をアップすると、ここに表示されます。',
     'drafts.emptyProcessing': '写真を文字起こし中です。完了すると、ここに表示されます。',
+    // SOT-1499: 追加で自動登録した、まだ読み取り中の項目カード用。
+    'drafts.processingBadge': '読み取り中',
+    'drafts.processingCardTitle': '写真を読み取り中',
+    'drafts.processingCardHint': '文字起こしが完了すると、内容を確認できるようになります。',
     'drafts.loadError': '仮登録の読み込みに失敗しました。',
     'drafts.untitled': '（タイトルなし）',
     'drafts.type': '種別',
@@ -741,6 +745,10 @@ export const messages: Record<Lang, Messages> = {
     'drafts.desc': 'These are draft registrations created from auto-uploaded photos. Review and finalize them.',
     'drafts.empty': 'No drafts yet. Upload a photo from auto registration and it will appear here.',
     'drafts.emptyProcessing': 'Transcribing photo(s)… They will appear here when done.',
+    // SOT-1499: cards for additionally auto-registered photos that are still being read.
+    'drafts.processingBadge': 'Reading…',
+    'drafts.processingCardTitle': 'Reading the photo…',
+    'drafts.processingCardHint': 'You can review the details once transcription finishes.',
     'drafts.loadError': 'Failed to load drafts.',
     'drafts.untitled': '(untitled)',
     'drafts.type': 'Type',

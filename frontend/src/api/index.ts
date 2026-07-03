@@ -78,6 +78,12 @@ export const getProcessingCount = async (): Promise<number> => {
   return response.data?.count ?? 0;
 };
 
+// 文字起こし(読み取り)中の項目一覧 (SOT-1499)。仮登録画面に「読み取り中」カードとして表示する。
+export const getProcessingDrafts = async (): Promise<NurseryInfo[]> => {
+  const response = await api.get('/info/drafts/processing');
+  return response.data;
+};
+
 // 仮登録を本登録(registered)に確定する (SOT-1113)
 export const finalizeInfo = async (id: number | string): Promise<NurseryInfo> => {
   const response = await api.post(`/info/${id}/finalize`);

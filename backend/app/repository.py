@@ -102,6 +102,10 @@ class InfoRepository(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def list_processing(self) -> List[Any]:
+        pass
+
+    @abc.abstractmethod
     def finalize(self, id: Union[int, str]) -> Optional[Any]:
         pass
 
@@ -335,6 +339,13 @@ class SqliteInfoRepository(InfoRepository):
         return self._scoped(self.db.query(models.NurseryInfo).filter(
             models.NurseryInfo.registration_state == "processing"
         )).count()
+
+    def list_processing(self) -> List[models.NurseryInfo]:
+        # SOT-1499: 文字起こし(読み取り)中の項目。追加で自動登録した写真を、
+        # 完了を待たず仮登録画面に「読み取り中」カードとして表示するため、写真付きで新しい順に返す。
+        return self._scoped(self.db.query(models.NurseryInfo).filter(
+            models.NurseryInfo.registration_state == "processing"
+        )).order_by(models.NurseryInfo.created_at.desc()).all()
 
     def finalize(self, id: Union[int, str]) -> Optional[models.NurseryInfo]:
         db_info = self.get(id)
@@ -931,6 +942,23 @@ class FirestoreInfoRepository(InfoRepository):
             if (data.get("registration_state") or "registered") == "processing":
                 count += 1
         return count
+
+    def list_processing(self) -> List[FirestoreNurseryInfo]:
+        # SOT-1499: 文字起こし(読み取り)中の項目を写真付きで返す。仮登録画面に「読み取り中」
+        # カードとして表示するため、attachments も読み込む（list_drafts と同形）。
+        docs = self.db.collection("nursery_info").stream()
+        results = []
+        for doc in docs:
+            doc_data = doc.to_dict()
+            if not self._owner_ok(doc_data):  # SOT-1431: owner 絞り
+                continue
+            if (doc_data.get("registration_state") or "registered") != "processing":
+                continue
+            att_refs = self.db.collection("attachments").where("info_id", "==", doc.id).stream()
+            attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
+            results.append(_info_doc_to_obj(doc.id, doc_data, attachments))
+        results.sort(key=lambda i: i.created_at, reverse=True)
+        return results
 
     def finalize(self, id: Union[int, str]) -> Optional[FirestoreNurseryInfo]:
         doc_ref = self.db.collection("nursery_info").document(str(id))

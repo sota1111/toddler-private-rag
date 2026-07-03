@@ -107,6 +107,29 @@ def test_finalize_404_for_missing():
     assert resp.status_code == 404
 
 
+def test_processing_list_returns_only_processing():
+    # SOT-1499: 読み取り中(processing)の項目一覧。追加自動登録した写真を仮登録画面に
+    # 「読み取り中」カードとして表示するため、processing のみを返す。
+    _create(title="reading-1", registration_state="processing")
+    _create(title="draft-1", registration_state="draft")
+    _create(title="registered-1")
+
+    processing_titles = {i["title"] for i in client.get("/api/info/drafts/processing").json()}
+    assert processing_titles == {"reading-1"}
+
+    # processing は仮登録(draft)一覧にも通常一覧にも出ない
+    assert "reading-1" not in {i["title"] for i in client.get("/api/info/drafts").json()}
+    assert "reading-1" not in {i["title"] for i in client.get("/api/info/").json()}
+
+    # 件数エンドポイントとも整合する
+    assert client.get("/api/info/drafts/processing-count").json()["count"] == 1
+
+
+def test_processing_list_empty_by_default():
+    _create(title="draft-only", registration_state="draft")
+    assert client.get("/api/info/drafts/processing").json() == []
+
+
 def test_create_draft_with_empty_string_dates(monkeypatch):
     """SOT-1197: 自動登録の save-first ペイロード（空文字の日付）で 422 にならない。
 
