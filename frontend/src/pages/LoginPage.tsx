@@ -1,12 +1,12 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/useAuth'
 import { useI18n } from '../i18n/useI18n'
 
 type LoginMethod = 'select' | 'email'
 
 export default function LoginPage() {
-  const { login, loginWithGoogle } = useAuth()
+  const { login, loginWithGoogle, isAuthenticated, loading: authLoading } = useAuth()
   const { t } = useI18n()
   const navigate = useNavigate()
   const [method, setMethod] = useState<LoginMethod>('select')
@@ -42,6 +42,14 @@ export default function LoginPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // SOT-1508: Google ログインを redirect 方式（モバイル）で行うと、認証後にアプリへ戻ったとき
+  // `/login` に着地する。AuthProvider がマウント時にセッションを確立し isAuthenticated=true に
+  // なる（ナビは表示される）が、ここで遷移しないとログイン画面のまま取り残される。認証済みなら
+  // ダッシュボードへ送る（ProtectedRoute の逆）。loading 中は AuthProvider の確認完了を待つ。
+  if (!authLoading && isAuthenticated) {
+    return <Navigate to="/" replace />
   }
 
   return (
