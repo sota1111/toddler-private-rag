@@ -88,7 +88,8 @@ def hybrid_search(
     top_k: int = 20,
 ) -> List[HybridHit]:
     try:
-        infos = repo.list()
+        # SOT-1504: 検索(hybrid-search)の対象にはアーカイブ済み(is_archived=True)の項目も含める。
+        infos = repo.list(include_archived=True)
     except Exception:  # pragma: no cover - defensive
         logger.exception("hybrid_search: failed to list infos")
         return []
