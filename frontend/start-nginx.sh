@@ -21,5 +21,30 @@ envsubst '${BACKEND_URL} ${BACKEND_HOST} ${UPLOAD_URL} ${UPLOAD_HOST}' \
   < /etc/nginx/templates/default.conf.template \
   > /etc/nginx/conf.d/default.conf
 
+# SOT-1494: Self-host the Firebase Auth helper so Google sign-in popups work under browser
+# storage partitioning. When FIREBASE_AUTH_DOMAIN is set, reverse-proxy /__/auth/ and
+# /__/firebase/ to the real Firebase auth domain (*.firebaseapp.com); the frontend sets its
+# own origin as authDomain so the popup handler becomes same-origin with the app. When unset,
+# the snippet is empty so nginx still starts and only Google sign-in stays unconfigured.
+mkdir -p /etc/nginx/snippets
+FIREBASE_AUTH_DOMAIN="$(printf '%s' "${FIREBASE_AUTH_DOMAIN:-}" | sed -E 's#^https?://##; s#/.*$##')"
+if [ -n "$FIREBASE_AUTH_DOMAIN" ]; then
+  cat > /etc/nginx/snippets/firebase-auth.conf <<EOF
+location /__/ {
+    proxy_pass https://${FIREBASE_AUTH_DOMAIN};
+    proxy_http_version 1.1;
+    proxy_set_header Host ${FIREBASE_AUTH_DOMAIN};
+    proxy_ssl_server_name on;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header X-Real-IP \$remote_addr;
+}
+EOF
+  echo "start-nginx: Firebase auth self-host proxy /__/ -> https://${FIREBASE_AUTH_DOMAIN}"
+else
+  : > /etc/nginx/snippets/firebase-auth.conf
+  echo "start-nginx: FIREBASE_AUTH_DOMAIN unset; Google sign-in self-host proxy disabled"
+fi
+
 echo "start-nginx: proxying /api -> ${BACKEND_URL} (Host ${BACKEND_HOST}); upload -> ${UPLOAD_URL} (Host ${UPLOAD_HOST})"
 exec nginx -g 'daemon off;'
