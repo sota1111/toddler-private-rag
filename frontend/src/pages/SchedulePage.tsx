@@ -88,12 +88,15 @@ const SchedulePage: React.FC = () => {
     return rows;
   }, [viewYear, viewMonth]);
 
-  // 一覧に渡す項目（カレンダーで日付選択時はその日のみ。ステータス絞り込みとソートは
-  // DatedInfoList が担当）。
-  const listItems = useMemo<NurseryInfo[]>(
-    () => (selectedDate ? events.filter((ev) => ev.event_date === selectedDate) : events),
-    [events, selectedDate],
-  );
+  // 一覧に渡す項目（カレンダーで日付選択時はその日のみ。日付未選択時は「表示中の月」の予定のみ。
+  // ステータス絞り込みとソートは DatedInfoList が担当）。
+  // SOT-1501: 従来は日付未選択だと全月の予定を表示していたが、表示中の月(viewYear/viewMonth)の
+  // 予定のみに絞る。
+  const listItems = useMemo<NurseryInfo[]>(() => {
+    if (selectedDate) return events.filter((ev) => ev.event_date === selectedDate);
+    const monthPrefix = `${viewYear}-${pad(viewMonth + 1)}-`;
+    return events.filter((ev) => (ev.event_date as string).startsWith(monthPrefix));
+  }, [events, selectedDate, viewYear, viewMonth]);
 
   const todayStr = fmtDate(today);
 

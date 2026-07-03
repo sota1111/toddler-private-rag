@@ -128,6 +128,18 @@ test.describe('toddler-private-rag シナリオ', () => {
     // 予定一覧見出しが表示される（カレンダー見出し「予定カレンダー」は SOT-1326 で削除）
     await expect(page.getByText('予定一覧')).toBeVisible()
 
+    // SOT-1501: 一覧は「表示中の月」の予定のみを出す。モックの予定(2026-10-15)を表示するため、
+    // 現在月から 2026年10月まで決定的にカレンダーを移動する。
+    const now = new Date()
+    const monthsToTarget =
+      (2026 - now.getFullYear()) * 12 + (9 /* Oct=0-indexed */ - now.getMonth())
+    const navButton = page.getByRole('button', {
+      name: monthsToTarget >= 0 ? '次の月' : '前の月',
+    })
+    for (let i = 0; i < Math.abs(monthsToTarget); i += 1) {
+      await navButton.click()
+    }
+
     // 日付つき予定（運動会のお知らせ / 2026-10-15）が一覧に表示される
     const eventLink = page.getByRole('link', { name: /運動会のお知らせ/ })
     await expect(eventLink).toBeVisible()
