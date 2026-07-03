@@ -110,18 +110,21 @@ def test_google_session_invalid_token_returns_401(client, monkeypatch):
     assert "auth_token" not in res.cookies
 
 
-def test_google_session_email_not_allowed_returns_403(client, monkeypatch):
+def test_google_session_any_verified_email_allowed(client, monkeypatch):
+    # SOT-1497: Google 認証は allowlist を免除し、検証済みメールを持つ任意の
+    # アカウント（allowlist 外でも）に使用を許可する。
     def fake_post(url, params=None, json=None, timeout=None):
         return FakeResponse(
             200,
-            {"users": [{"email": "intruder@example.com", "emailVerified": True}]},
+            {"users": [{"email": "anyone@example.com", "emailVerified": True}]},
         )
 
     monkeypatch.setattr(auth.httpx, "post", fake_post)
 
     res = client.post("/api/auth/session/google", json={"id_token": "valid.token"})
-    assert res.status_code == 403
-    assert "auth_token" not in res.cookies
+    assert res.status_code == 200
+    assert res.json()["success"] is True
+    assert "auth_token" in res.cookies
 
 
 def test_google_session_unverified_email_returns_401(client, monkeypatch):
