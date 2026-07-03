@@ -322,7 +322,7 @@ jobs:
             --allow-unauthenticated \
             --clear-secrets \
             $SA_FLAG \
-            --set-env-vars "BACKEND_URL=$BACKEND_URL,UPLOAD_URL=$UPLOAD_URL" \
+            --set-env-vars "BACKEND_URL=$BACKEND_URL,UPLOAD_URL=$UPLOAD_URL,FIREBASE_AUTH_DOMAIN=${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}" \
             --memory 256Mi \
             --timeout 300 \
             --min-instances 0 \
