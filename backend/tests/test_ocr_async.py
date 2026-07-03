@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+from tests._images import PNG_BYTES
 from app import ocr, models, database
 from app.database import Base, get_db
 from app.routers.auth import get_current_user
@@ -58,7 +59,7 @@ def test_upload_attachment_ocr_async(monkeypatch):
     # 3. Upload file
     response = client.post(
         f"/api/info/{info_id}/attachments",
-        files={"file": ("test.png", b"fake image", "image/png")}
+        files={"file": ("test.png", PNG_BYTES, "image/png")}
     )
     assert response.status_code == 200
     data = response.json()
@@ -90,7 +91,7 @@ def test_upload_attachment_ocr_failed(monkeypatch):
     # 3. Upload file
     response = client.post(
         f"/api/info/{info_id}/attachments",
-        files={"file": ("test.png", b"fake image", "image/png")}
+        files={"file": ("test.png", PNG_BYTES, "image/png")}
     )
     assert response.status_code == 200
     att_id = response.json()["id"]

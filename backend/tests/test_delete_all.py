@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.main import app
+from tests._images import PNG_BYTES
 from app.database import Base, get_db
 from app.routers.auth import get_current_user
 from app import storage, models, database
@@ -63,7 +64,7 @@ def _create_info_with_attachment():
     ).json()["id"]
     att_id = client.post(
         f"/api/info/{info_id}/attachments",
-        files={"file": ("photo.png", b"fake image", "image/png")},
+        files={"file": ("photo.png", PNG_BYTES, "image/png")},
     ).json()["id"]
     return info_id, att_id
 

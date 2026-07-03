@@ -4,6 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from app.main import app
+from tests._images import PNG_BYTES
 from app.database import Base, get_db
 from app import models, database
 from pathlib import Path
@@ -74,7 +75,7 @@ def test_upload_attachment_graceful_ocr_failure(client, db):
 
     # Upload a tiny dummy file that is not OCRable
     dummy_file = Path("dummy.png")
-    dummy_file.write_bytes(b"not a real image")
+    dummy_file.write_bytes(PNG_BYTES)
     
     try:
         with open(dummy_file, "rb") as f:

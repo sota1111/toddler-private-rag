@@ -4,6 +4,7 @@ import os
 import logging
 from typing import Optional, Union
 from .. import schemas, storage, ocr, extraction, clock, submission_agent
+from ..upload_security import validate_and_sanitize_upload
 from ..concurrency import run_parallel
 from ..timing import time_block
 from ..privacy import redact_pii
@@ -338,9 +339,17 @@ async def upload_attachment(
     file_size = len(content)
     if file_size > MAX_FILE_SIZE:
         raise HTTPException(
-            status_code=413, 
+            status_code=413,
             detail=f"File too large. Maximum size is {MAX_FILE_SIZE / (1024*1024)}MB"
         )
+
+    # SOT-1487: クライアント申告の content-type は信用せず、実バイトのマジックバイトで
+    # 種別を検証する。画像は Pillow で再エンコードして EXIF/不正ペイロードを除去する。
+    try:
+        content, content_type = validate_and_sanitize_upload(content, content_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    file_size = len(content)
 
     # Save to storage
     backend = storage.get_storage()

@@ -12,6 +12,7 @@ from app.main import app
 from app.database import Base, get_db
 from app.routers.auth import get_current_user
 from app import storage, models, database
+from tests._images import PNG_BYTES, JPEG_BYTES, WEBP_BYTES
 
 # Test database setup
 SQLALCHEMY_DATABASE_URL = "sqlite://"
@@ -74,7 +75,7 @@ def test_upload_and_get_attachment():
     info_id = response.json()["id"]
 
     # 2. Upload a file
-    file_content = b"fake image content"
+    file_content = PNG_BYTES
     response = client.post(
         f"/api/info/{info_id}/attachments",
         files={"file": ("test.png", file_content, "image/png")}
@@ -96,7 +97,8 @@ def test_upload_and_get_attachment():
     # 4. Download file
     response = client.get(f"/api/attachments/{att_id}/file")
     assert response.status_code == 200
-    assert response.content == file_content
+    # SOT-1487: 画像はアップロード時に再エンコードされるためバイト一致ではなく有効なPNGであることを確認する
+    assert response.content[:8] == b"\x89PNG\r\n\x1a\n"
     assert response.headers["content-type"] == "image/png"
     # SOT-1275: served inline so clicking an image opens (not downloads) in the browser
     assert response.headers["content-disposition"].startswith("inline")
@@ -113,7 +115,7 @@ def test_get_attachment_file_gcs_streams_inline(monkeypatch):
         "/api/info/",
         json={"title": "T", "info_type": "行事", "content": "c"},
     ).json()["id"]
-    img_bytes = b"\xff\xd8\xff fake-jpeg-bytes \xff\xd9"
+    img_bytes = JPEG_BYTES
     att_id = client.post(
         f"/api/info/{info_id}/attachments",
         files={"file": ("photo.jpg", img_bytes, "image/jpeg")},
@@ -180,7 +182,7 @@ def test_upload_allows_any_image_content_type():
 
     response = client.post(
         f"/api/info/{info_id}/attachments",
-        files={"file": ("test.webp", b"image", "image/webp")}
+        files={"file": ("test.webp", WEBP_BYTES, "image/webp")}
     )
     assert response.status_code == 200
 
@@ -190,7 +192,7 @@ def test_delete_attachment():
     info_id = response.json()["id"]
     response = client.post(
         f"/api/info/{info_id}/attachments",
-        files={"file": ("test.png", b"data", "image/png")}
+        files={"file": ("test.png", PNG_BYTES, "image/png")}
     )
     att_id = response.json()["id"]
     stored_filename = models.Attachment.stored_filename
@@ -216,7 +218,7 @@ def test_delete_info_removes_attachments():
     info_id = response.json()["id"]
     response = client.post(
         f"/api/info/{info_id}/attachments",
-        files={"file": ("test.png", b"data", "image/png")}
+        files={"file": ("test.png", PNG_BYTES, "image/png")}
     )
     att_id = response.json()["id"]
     db = next(override_get_db())
@@ -253,7 +255,7 @@ def test_list_include_attachments_param():
     ).json()["id"]
     client.post(
         f"/api/info/{info_id}/attachments",
-        files={"file": ("test.png", b"data", "image/png")},
+        files={"file": ("test.png", PNG_BYTES, "image/png")},
     )
 
     # 仮登録(draft) は一覧に出ない（軽量モードでも除外維持）
@@ -305,7 +307,7 @@ def test_get_attachment_transcription(monkeypatch):
     ).json()["id"]
     att_id = client.post(
         f"/api/info/{info_id}/attachments",
-        files={"file": ("photo.png", b"img", "image/png")},
+        files={"file": ("photo.png", PNG_BYTES, "image/png")},
     ).json()["id"]
 
     # OCR 原文を直接保存（process_ocr 相当）
@@ -346,7 +348,7 @@ def test_transcription_translation_is_cached(monkeypatch):
     ).json()["id"]
     att_id = client.post(
         f"/api/info/{info_id}/attachments",
-        files={"file": ("photo.png", b"img", "image/png")},
+        files={"file": ("photo.png", PNG_BYTES, "image/png")},
     ).json()["id"]
 
     db = TestingSessionLocal()
@@ -371,7 +373,7 @@ def test_get_attachment_transcription_empty_when_no_ocr():
     ).json()["id"]
     att_id = client.post(
         f"/api/info/{info_id}/attachments",
-        files={"file": ("photo.png", b"img", "image/png")},
+        files={"file": ("photo.png", PNG_BYTES, "image/png")},
     ).json()["id"]
 
     resp = client.get(f"/api/attachments/{att_id}/transcription")

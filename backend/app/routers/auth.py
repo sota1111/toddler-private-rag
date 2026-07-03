@@ -17,6 +17,10 @@ _SIGN_IN_URL = (
     "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
 )
 
+# Identity Toolkit REST endpoint to look up (and thereby validate) an ID token
+# minted by our Firebase project — used for Google sign-in (SOT-1487).
+_LOOKUP_URL = "https://identitytoolkit.googleapis.com/v1/accounts:lookup"
+
 
 def _get_firebase_api_key() -> str | None:
     return os.getenv("FIREBASE_WEB_API_KEY") or os.getenv("FIREBASE_API_KEY")
@@ -25,6 +29,10 @@ def _get_firebase_api_key() -> str | None:
 class SessionRequest(BaseModel):
     email: str
     password: str
+
+
+class GoogleSessionRequest(BaseModel):
+    id_token: str
 
 
 def _sign(owner_id: str, secret: str) -> str:
@@ -110,26 +118,55 @@ def _verify_with_firebase(email: str, password: str, api_key: str) -> str:
     )
 
 
-@router.post("/session")
-def create_session(request: SessionRequest):
-    auth_secret = os.getenv("AUTH_SECRET")
-    api_key = _get_firebase_api_key()
-    allowed_emails_str = os.getenv("ALLOWED_USER_EMAILS", "")
-    allowed_emails = [e.strip() for e in allowed_emails_str.split(",") if e.strip()]
+def _verify_google_id_token(id_token: str, api_key: str) -> str:
+    """Firebase(Google) が発行した ID トークンを検証し、検証済みメールを返す（SOT-1487）。
 
-    if not auth_secret:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="AUTH_SECRET not configured",
+    Identity Toolkit の accounts:lookup に ID トークンを渡すと、当該 Firebase
+    プロジェクトが発行した有効なトークンのときだけユーザー情報が返る。他プロジェクトの
+    トークンや失効/改竄トークンはエラーになるため、これでトークンの正当性を検証できる。
+    トークン本文はログに出さない。失敗時は HTTPException を送出する。
+    """
+    try:
+        resp = httpx.post(
+            _LOOKUP_URL,
+            params={"key": api_key},
+            json={"idToken": id_token},
+            timeout=10.0,
         )
-    if not api_key:
+    except httpx.HTTPError:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="FIREBASE_WEB_API_KEY / FIREBASE_API_KEY not configured",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="認証サービスに接続できません",
         )
 
-    email = _verify_with_firebase(request.email, request.password, api_key)
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Googleログインの検証に失敗しました",
+        )
 
+    users = resp.json().get("users") or []
+    if not users:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Googleログインの検証に失敗しました",
+        )
+
+    user = users[0]
+    email = user.get("email")
+    if not email or user.get("emailVerified") is False:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="メールアドレスが確認されていません",
+        )
+    return email
+
+
+def _issue_session_response(email: str, auth_secret: str, allowed_emails: list[str]):
+    """allowlist を確認し、検証済みメールから署名付きセッション cookie を発行する。
+
+    email/password と Google 認証で共通のセッション発行ロジック（SOT-1431 / SOT-1487）。
+    """
     if allowed_emails and email not in allowed_emails:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -151,6 +188,45 @@ def create_session(request: SessionRequest):
         path="/",
     )
     return response
+
+
+def _require_auth_config() -> tuple[str, str, list[str]]:
+    """認証に必要な設定（AUTH_SECRET / API key / allowlist）を取得・検証する。"""
+    auth_secret = os.getenv("AUTH_SECRET")
+    api_key = _get_firebase_api_key()
+    allowed_emails_str = os.getenv("ALLOWED_USER_EMAILS", "")
+    allowed_emails = [e.strip() for e in allowed_emails_str.split(",") if e.strip()]
+
+    if not auth_secret:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="AUTH_SECRET not configured",
+        )
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="FIREBASE_WEB_API_KEY / FIREBASE_API_KEY not configured",
+        )
+    return auth_secret, api_key, allowed_emails
+
+
+@router.post("/session")
+def create_session(request: SessionRequest):
+    auth_secret, api_key, allowed_emails = _require_auth_config()
+    email = _verify_with_firebase(request.email, request.password, api_key)
+    return _issue_session_response(email, auth_secret, allowed_emails)
+
+
+@router.post("/session/google")
+def create_google_session(request: GoogleSessionRequest):
+    """Google 認証（Firebase ID トークン）でセッションを発行する（SOT-1487）。
+
+    パスキー要件は Google 認証で充足する、という方針に基づく。フロントエンドは Firebase の
+    Google サインインで得た ID トークンを送り、サーバ側で検証してから allowlist を通す。
+    """
+    auth_secret, api_key, allowed_emails = _require_auth_config()
+    email = _verify_google_id_token(request.id_token, api_key)
+    return _issue_session_response(email, auth_secret, allowed_emails)
 
 
 @router.post("/logout")

@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/useAuth'
 import { useI18n } from '../i18n/useI18n'
 
 export default function LoginPage() {
-  const { login } = useAuth()
+  const { login, loginWithGoogle } = useAuth()
   const { t } = useI18n()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
@@ -18,6 +18,20 @@ export default function LoginPage() {
     setLoading(true)
     try {
       await login(email, password)
+      navigate('/')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : ''
+      setError(msg || t('login.failed'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleGoogle = async () => {
+    setError('')
+    setLoading(true)
+    try {
+      await loginWithGoogle()
       navigate('/')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ''
@@ -62,6 +76,19 @@ export default function LoginPage() {
             {loading ? t('login.submitting') : t('login.submit')}
           </button>
         </form>
+        <div className="flex items-center gap-3">
+          <span className="flex-1 h-px bg-border" />
+          <span className="text-xs text-muted-foreground">{t('login.or')}</span>
+          <span className="flex-1 h-px bg-border" />
+        </div>
+        <button
+          type="button"
+          onClick={handleGoogle}
+          disabled={loading}
+          className="w-full border border-border text-foreground bg-surface py-2 px-4 rounded-md hover:bg-surface-muted disabled:opacity-50"
+        >
+          {t('login.google')}
+        </button>
       </div>
     </div>
   )

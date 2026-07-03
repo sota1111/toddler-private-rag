@@ -11,6 +11,7 @@ SOT-1324: 写真(メイン)レコードは本登録(finalize)を介さず直接 
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+from tests._images import PNG_BYTES
 from app import ocr, models, database
 from app.database import Base, get_db
 from app.routers.auth import get_current_user
@@ -70,7 +71,7 @@ def _create_info(registration_state: str) -> int:
 def _upload(info_id: int):
     return client.post(
         f"/api/info/{info_id}/attachments",
-        files={"file": ("test.png", b"fake image", "image/png")},
+        files={"file": ("test.png", PNG_BYTES, "image/png")},
     )
 
 
