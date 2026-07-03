@@ -360,4 +360,29 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page).toHaveURL(/\/archive/)
     await expect(page.getByRole('link', { name: /運動会のお知らせ/ })).toBeVisible()
   })
+
+  test('S16: やることリストの月見出しの逆三角ボタンでその月の項目を表示/非表示に切り替えられる (SOT-1505)', async ({ page }) => {
+    await installApiMocks(page, { authed: true })
+    await login(page)
+
+    await page.locator('nav a[href="/tasks"]').first().click()
+    await expect(page).toHaveURL(/\/tasks/)
+
+    // 月見出し（2026年10月）とその月の項目が表示されている
+    await expect(page.getByRole('heading', { name: '2026年10月' })).toBeVisible()
+    const eventLink = page.getByRole('link', { name: /運動会のお知らせ/ })
+    await expect(eventLink).toBeVisible()
+
+    // 逆三角ボタン（見出しと同じ高さ）で折りたたむと、その月の項目が非表示になる
+    const collapseBtn = page.getByRole('button', { name: '2026年10月を折りたたむ' })
+    await expect(collapseBtn).toBeVisible()
+    await collapseBtn.click()
+    await expect(eventLink).toHaveCount(0)
+    // 見出しは残り、ラベルは「展開する」に切り替わる
+    await expect(page.getByRole('heading', { name: '2026年10月' })).toBeVisible()
+
+    // 再度押すと展開され、項目が再表示される
+    await page.getByRole('button', { name: '2026年10月を展開する' }).click()
+    await expect(eventLink).toBeVisible()
+  })
 })
