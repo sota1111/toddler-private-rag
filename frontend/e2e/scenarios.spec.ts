@@ -333,4 +333,31 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page.getByText('読み取り中', { exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: '写真を読み取り中' })).toBeVisible()
   })
+
+  test('S15: 詳細でアーカイブするとやることリストから消え、設定→アーカイブ一覧に表示される (SOT-1500)', async ({ page }) => {
+    await installApiMocks(page, { authed: true })
+    await login(page)
+
+    // やることリストから対象タスクの詳細を開く
+    await page.locator('nav a[href="/tasks"]').first().click()
+    await expect(page).toHaveURL(/\/tasks/)
+    await page.getByRole('link', { name: /運動会のお知らせ/ }).click()
+    await expect(page).toHaveURL(/\/data\/2$/)
+    await expect(page.getByRole('heading', { name: '運動会のお知らせ' })).toBeVisible()
+
+    // 「アーカイブ」ボタン（編集ボタンの下）で確認モーダルの OK を押す
+    await page.getByRole('button', { name: 'アーカイブ', exact: true }).click()
+    await page.getByRole('button', { name: 'OK' }).click()
+
+    // アーカイブ後はやることリストへ戻り、対象が一覧から消える
+    await expect(page).toHaveURL(/\/tasks/)
+    await expect(page.getByRole('link', { name: /運動会のお知らせ/ })).toHaveCount(0)
+
+    // 設定画面の「アーカイブを確認」ボタンからアーカイブ一覧へ遷移し、対象が表示される
+    await page.locator('nav a[href="/settings"]').first().click()
+    await expect(page).toHaveURL(/\/settings/)
+    await page.getByRole('link', { name: /アーカイブを確認/ }).click()
+    await expect(page).toHaveURL(/\/archive/)
+    await expect(page.getByRole('link', { name: /運動会のお知らせ/ })).toBeVisible()
+  })
 })

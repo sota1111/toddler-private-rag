@@ -27,6 +27,9 @@ class NurseryInfo(Base):
     needs_deadline_investigation = Column(Boolean, nullable=True, default=False)
     # SOT-1428: お気に入りフラグ。nullable で追加（既存行は NULL = 非お気に入り扱い）。
     is_favorite = Column(Boolean, nullable=True, default=False)
+    # SOT-1500: アーカイブフラグ。nullable で追加（既存行は NULL = 非アーカイブ扱い）。
+    # アーカイブした項目はやることリスト等のアクティブ一覧から外し、アーカイブ一覧にのみ表示する。
+    is_archived = Column(Boolean, nullable=True, default=False)
     # SOT-1411: 締切調査が生成した手順タスク群をまとめるグループ識別子と、基準日(最終提出期限)からの
     # 日数オフセットを永続化する。基準日を変更したとき同グループの付随タスクをオフセット分だけ
     # まとめてずらす。全て nullable（既存行・締切調査由来でないタスクは NULL = ずらし対象外）。

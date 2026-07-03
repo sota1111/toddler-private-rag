@@ -229,6 +229,29 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
     onError: () => setDeleteError(t('records.deleteError')),
   });
 
+  // SOT-1500: この項目をアーカイブする。アクティブな一覧(やることリスト等)から外し、
+  // アーカイブ一覧にのみ表示させる。既存の更新API(PUT /info/{id})を is_archived で再利用する。
+  const archiveMutation = useMutation({
+    mutationFn: () => updateInfo(id, { is_archived: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['info'] });
+      queryClient.invalidateQueries({ queryKey: ['archived'] });
+      queryClient.invalidateQueries({ queryKey: ['tomorrow'] });
+      queryClient.invalidateQueries({ queryKey: ['weekly'] });
+      queryClient.invalidateQueries({ queryKey: ['pending'] });
+      navigate(-1);
+    },
+    onError: () => setDeleteError(t('records.archiveError')),
+  });
+
+  const handleArchive = async () => {
+    if (archiveMutation.isPending || !item) return;
+    if (await confirm(t('records.confirmArchive', { title: item.title }))) {
+      setDeleteError(null);
+      archiveMutation.mutate();
+    }
+  };
+
   // SOT-1411: 締切調査タスクの基準日(最終提出期限)を変更し、同じ締切調査グループの付随タスクを
   // 保存済みオフセットでまとめてずらす。
   const rescheduleMutation = useMutation({
@@ -369,6 +392,18 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
                   className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-3 py-1 rounded-md transition-colors"
                 >
                   {t('records.edit')}
+                </button>
+              )}
+              {/* SOT-1500: 「アーカイブ」ボタン。編集ボタンの下に配置する。
+                  非写真タスクレコードのみ・編集モード以外で表示する。 */}
+              {!hasPhoto && !isEditing && (
+                <button
+                  type="button"
+                  onClick={handleArchive}
+                  disabled={archiveMutation.isPending}
+                  className="text-sm font-medium text-amber-600 hover:text-amber-700 hover:bg-amber-50 px-3 py-1 rounded-md disabled:text-muted-foreground disabled:hover:bg-transparent transition-colors"
+                >
+                  {archiveMutation.isPending ? t('records.archiving') : t('records.archive')}
                 </button>
               )}
             </div>

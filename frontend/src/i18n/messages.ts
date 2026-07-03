@@ -51,6 +51,12 @@ export const messages: Record<Lang, Messages> = {
     'settings.deleteAllSuccess': '全データを削除しました（{count}件）。',
     'settings.deleteAllError': '削除に失敗しました。時間をおいて再度お試しください。',
 
+    // アーカイブ (SOT-1500)
+    'settings.archiveTitle': 'アーカイブ',
+    'settings.archiveDescription': 'アーカイブしたやることを確認できます。',
+    'settings.archiveButton': 'アーカイブを確認',
+    'archive.listTitle': 'アーカイブ',
+
     // アプリの使い方 (SOT-1435)
     'howto.title': 'アプリの使い方',
     'howto.subtitle': 'おたよりナビの主な使い方を、画面の図とあわせて説明します。',
@@ -216,6 +222,10 @@ export const messages: Record<Lang, Messages> = {
     'records.deleting': '削除中…',
     'records.confirmDelete': '「{title}」を削除しますか？',
     'records.deleteError': '削除に失敗しました。時間をおいて再度お試しください。',
+    'records.archive': 'アーカイブ',
+    'records.archiving': 'アーカイブ中…',
+    'records.confirmArchive': '「{title}」をアーカイブしますか？',
+    'records.archiveError': 'アーカイブに失敗しました。時間をおいて再度お試しください。',
     'records.saveError': '保存に失敗しました。時間をおいて再度お試しください。',
     'records.changeStatus': 'ステータス変更',
     'records.statusError': 'ステータスの変更に失敗しました。時間をおいて再度お試しください。',
@@ -462,6 +472,12 @@ export const messages: Record<Lang, Messages> = {
     'settings.deleteAllSuccess': 'All data has been deleted ({count} items).',
     'settings.deleteAllError': 'Failed to delete. Please try again later.',
 
+    // Archive (SOT-1500)
+    'settings.archiveTitle': 'Archive',
+    'settings.archiveDescription': 'View the tasks you have archived.',
+    'settings.archiveButton': 'View archive',
+    'archive.listTitle': 'Archive',
+
     // How to use this app (SOT-1435)
     'howto.title': 'How to use this app',
     'howto.subtitle': 'A visual guide to the main features of Nursery Notice Guide.',
@@ -627,6 +643,10 @@ export const messages: Record<Lang, Messages> = {
     'records.deleting': 'Deleting…',
     'records.confirmDelete': 'Delete “{title}”?',
     'records.deleteError': 'Failed to delete. Please try again later.',
+    'records.archive': 'Archive',
+    'records.archiving': 'Archiving…',
+    'records.confirmArchive': 'Archive “{title}”?',
+    'records.archiveError': 'Failed to archive. Please try again later.',
     'records.saveError': 'Failed to save. Please try again later.',
     'records.changeStatus': 'Change status',
     'records.statusError': 'Failed to change status. Please try again later.',

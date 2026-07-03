@@ -19,6 +19,7 @@ export interface MockRecord {
   memo?: string
   child_id?: string
   registration_state?: string
+  is_archived?: boolean
   created_at: string
   updated_at: string
   attachments?: Array<{
@@ -197,6 +198,10 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
     if (path === '/info/drafts/processing-count') {
       return json(route, 200, { count: store.filter(r => r.registration_state === 'processing').length })
     }
+    // SOT-1500: アーカイブ一覧。is_archived=true の本登録項目のみを返す。
+    if (path === '/info/archived') {
+      return json(route, 200, store.filter(r => r.registration_state !== 'draft' && r.is_archived))
+    }
     if (path === '/info/reminders') return json(route, 200, { items: [] })
     if (['/info/today', '/info/tomorrow', '/info/weekly', '/info/next-week', '/info/pending'].includes(path)) {
       return json(route, 200, [])
@@ -233,7 +238,8 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
     if (path === '/info/' || path === '/info') {
       if (method === 'GET') {
         // 一覧は本登録(registered)のみを返す（draft は /info/drafts 側）。
-        return json(route, 200, store.filter(r => r.registration_state !== 'draft'))
+        // SOT-1500: アーカイブ済み(is_archived)はアクティブ一覧から除外する。
+        return json(route, 200, store.filter(r => r.registration_state !== 'draft' && !r.is_archived))
       }
       if (method === 'POST') {
         const data = JSON.parse(req.postData() || '{}')
