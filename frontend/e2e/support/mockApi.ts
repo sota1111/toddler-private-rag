@@ -320,6 +320,8 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
 // 一度バウンスするため、実フローでログインするのが最も確実）。
 export async function login(page: Page) {
   await page.goto('/login')
+  // 方式選択画面で「メールアドレスでログイン」を選ぶとフォームが表示される。
+  await page.getByRole('button', { name: 'メールアドレスでログイン' }).click()
   await page.locator('input[type="email"]').fill('test@example.com')
   await page.locator('input[type="password"]').fill('password123')
   await page.locator('button[type="submit"]').click()

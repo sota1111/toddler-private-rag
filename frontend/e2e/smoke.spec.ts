@@ -21,6 +21,8 @@ async function mockApi(page: Page, opts: { authed: boolean }) {
 // ログインフォームから認証してダッシュボードに遷移する。
 async function login(page: Page) {
   await page.goto('/login')
+  // 方式選択画面で「メールアドレスでログイン」を選ぶとフォームが表示される。
+  await page.getByRole('button', { name: 'メールアドレスでログイン' }).click()
   await page.locator('input[type="email"]').fill('test@example.com')
   await page.locator('input[type="password"]').fill('password123')
   await page.locator('button[type="submit"]').click()
@@ -28,17 +30,21 @@ async function login(page: Page) {
   await expect(page.locator('a[href="/create/auto"]')).toBeVisible()
 }
 
-test('未認証で / にアクセスすると /login へリダイレクトしフォームが表示される', async ({ page }) => {
+test('未認証で / にアクセスすると /login へリダイレクトし方式選択が表示される', async ({ page }) => {
   await mockApi(page, { authed: false })
   await page.goto('/')
   await expect(page).toHaveURL(/\/login/)
-  await expect(page.locator('input[type="email"]')).toBeVisible()
-  await expect(page.locator('input[type="password"]')).toBeVisible()
+  // 方式選択画面: メール/Google の2択が表示される。
+  await expect(page.getByRole('button', { name: 'メールアドレスでログイン' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Googleでログイン' })).toBeVisible()
+  // 選択前はメール入力フォームは表示されない。
+  await expect(page.locator('input[type="email"]')).toHaveCount(0)
 })
 
-test('/login がメール・パスワード入力と送信ボタンを表示する', async ({ page }) => {
+test('/login でメール方式を選ぶとメール・パスワード入力と送信ボタンを表示する', async ({ page }) => {
   await mockApi(page, { authed: false })
   await page.goto('/login')
+  await page.getByRole('button', { name: 'メールアドレスでログイン' }).click()
   await expect(page.locator('input[type="email"]')).toBeVisible()
   await expect(page.locator('input[type="password"]')).toBeVisible()
   await expect(page.locator('button[type="submit"]')).toBeVisible()
