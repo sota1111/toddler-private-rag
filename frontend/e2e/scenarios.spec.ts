@@ -359,6 +359,23 @@ test.describe('toddler-private-rag シナリオ', () => {
     await page.getByRole('link', { name: /アーカイブを確認/ }).click()
     await expect(page).toHaveURL(/\/archive/)
     await expect(page.getByRole('link', { name: /運動会のお知らせ/ })).toBeVisible()
+
+    // SOT-1500 再オープン#2: アーカイブ項目を開くとボタンが「アーカイブから戻す」になり、
+    // 押すとアーカイブ一覧から消えてやることリストに復帰する。
+    await page.getByRole('link', { name: /運動会のお知らせ/ }).click()
+    await expect(page).toHaveURL(/\/data\/2$/)
+    await expect(page.getByRole('button', { name: 'アーカイブ', exact: true })).toHaveCount(0)
+    await page.getByRole('button', { name: 'アーカイブから戻す', exact: true }).click()
+    await page.getByRole('button', { name: 'OK' }).click()
+
+    // アーカイブ一覧へ戻り、対象が一覧から消える
+    await expect(page).toHaveURL(/\/archive/)
+    await expect(page.getByRole('link', { name: /運動会のお知らせ/ })).toHaveCount(0)
+
+    // やることリストには対象が再び表示される
+    await page.locator('nav a[href="/tasks"]').first().click()
+    await expect(page).toHaveURL(/\/tasks/)
+    await expect(page.getByRole('link', { name: /運動会のお知らせ/ })).toBeVisible()
   })
 
   test('S16: やることリストの月見出しの逆三角ボタンでその月の項目を表示/非表示に切り替えられる (SOT-1505)', async ({ page }) => {

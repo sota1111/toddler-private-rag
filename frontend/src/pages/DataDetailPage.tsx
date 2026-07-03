@@ -229,10 +229,12 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
     onError: () => setDeleteError(t('records.deleteError')),
   });
 
-  // SOT-1500: この項目をアーカイブする。アクティブな一覧(やることリスト等)から外し、
-  // アーカイブ一覧にのみ表示させる。既存の更新API(PUT /info/{id})を is_archived で再利用する。
+  // SOT-1500: この項目のアーカイブ状態を切り替える。アーカイブ時はアクティブな一覧(やること
+  // リスト等)から外し、アーカイブ一覧のみに表示する。再オープン対応で、アーカイブ済みの項目
+  // (アーカイブ画面から開いた場合)は「アーカイブから戻す」(is_archived=false)に切り替える。
+  // いずれも既存の更新API(PUT /info/{id})を is_archived で再利用する。
   const archiveMutation = useMutation({
-    mutationFn: () => updateInfo(id, { is_archived: true }),
+    mutationFn: (archived: boolean) => updateInfo(id, { is_archived: archived }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['info'] });
       queryClient.invalidateQueries({ queryKey: ['archived'] });
@@ -241,14 +243,19 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
       queryClient.invalidateQueries({ queryKey: ['pending'] });
       navigate(-1);
     },
-    onError: () => setDeleteError(t('records.archiveError')),
+    onError: () =>
+      setDeleteError(t(item?.is_archived ? 'records.unarchiveError' : 'records.archiveError')),
   });
 
   const handleArchive = async () => {
     if (archiveMutation.isPending || !item) return;
-    if (await confirm(t('records.confirmArchive', { title: item.title }))) {
+    const archived = !item.is_archived;
+    const message = archived
+      ? t('records.confirmArchive', { title: item.title })
+      : t('records.confirmUnarchive', { title: item.title });
+    if (await confirm(message)) {
       setDeleteError(null);
-      archiveMutation.mutate();
+      archiveMutation.mutate(archived);
     }
   };
 
@@ -552,8 +559,9 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
             </div>
           )}
 
-          {/* SOT-1500: 「アーカイブ」ボタン。再オープン対応で、内容の下・右下に配置し、
+          {/* SOT-1500: アーカイブ操作ボタン。再オープン対応で、内容の下・右下に配置し、
               日付バッジ(rounded-full ピル)と同じデザインで色を紫(purple)基調にする。
+              アーカイブ済み(アーカイブ画面から開いた項目)は「アーカイブから戻す」に切り替える。
               非写真タスクレコードのみ・編集モード以外で表示する。 */}
           {!hasPhoto && !isEditing && (
             <div className="mt-4 flex justify-end">
@@ -561,11 +569,17 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
                 type="button"
                 onClick={handleArchive}
                 disabled={archiveMutation.isPending}
-                aria-label={t('records.archive')}
+                aria-label={item.is_archived ? t('records.unarchive') : t('records.archive')}
                 className="inline-flex items-center gap-1 text-sm font-medium bg-purple-100 text-purple-800 px-3 py-1 rounded-full hover:bg-purple-200 disabled:opacity-60 transition-colors"
               >
-                <span aria-hidden="true">🗄️</span>
-                {archiveMutation.isPending ? t('records.archiving') : t('records.archive')}
+                <span aria-hidden="true">{item.is_archived ? '♻️' : '🗄️'}</span>
+                {archiveMutation.isPending
+                  ? item.is_archived
+                    ? t('records.unarchiving')
+                    : t('records.archiving')
+                  : item.is_archived
+                    ? t('records.unarchive')
+                    : t('records.archive')}
               </button>
             </div>
           )}
