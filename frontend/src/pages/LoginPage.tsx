@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/useAuth'
 import { useI18n } from '../i18n/useI18n'
+import { isEmbeddedBrowser } from '../firebase'
 
 type LoginMethod = 'select' | 'email'
 
@@ -32,6 +33,13 @@ export default function LoginPage() {
 
   const handleGoogle = async () => {
     setError('')
+    // SOT-1510: アプリ内ブラウザ（埋め込み WebView）では Google がポリシーで OAuth を拒否し
+    // （Error 403: disallowed_useragent）、popup/redirect のどちらでも成立しない。ブロック画面に
+    // 飛ばす前に検出し、標準ブラウザで開く（またはメールログインを使う）よう案内して中断する。
+    if (isEmbeddedBrowser()) {
+      setError(t('login.embeddedBrowser'))
+      return
+    }
     setLoading(true)
     try {
       await loginWithGoogle()

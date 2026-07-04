@@ -69,6 +69,23 @@ function shouldUseRedirect(): boolean {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
 }
 
+// SOT-1510: Google は埋め込みブラウザ（アプリ内ブラウザ / WebView）からの OAuth を
+// ポリシーで拒否する（`Error 403: disallowed_useragent`）。popup / redirect のどちらでも
+// 回避できない Google 側の仕様のため、埋め込みブラウザを検出した場合は Google ログインを
+// 試みず、標準ブラウザ（Chrome / Safari）で開くよう案内する（メールログインは利用可能）。
+// 判定は Android WebView（`; wv`）と代表的なアプリ内ブラウザの UA トークンで行う。
+export function isEmbeddedBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent || ''
+  // Android WebView は UA に "; wv" を含む。
+  if (/;\s*wv[;)]/i.test(ua) || /;\s*wv\s/i.test(ua)) return true
+  // 代表的なアプリ内ブラウザ（Facebook / Instagram / LINE / X(Twitter) / WeChat /
+  // KakaoTalk / Snapchat / WhatsApp / Messenger 等）。
+  return /(FBAN|FBAV|FB_IAB|Instagram|Line\/|Twitter|MicroMessenger|KAKAOTALK|Snapchat|WhatsApp|Messenger)/i.test(
+    ua,
+  )
+}
+
 /** Google サインインを行い、Firebase の ID トークンを返す。 */
 export async function signInWithGoogleIdToken(): Promise<string> {
   const auth = getFirebaseAuth()
