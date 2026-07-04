@@ -264,7 +264,11 @@ worker は 202 を即返して背景で `process_ocr`（OCR→構造化→エー
 3. **処置** — 直近デプロイ起因なら前 revision へロールバック。**デプロイ時は canary 自動ロールバック**
    （`/health` 失敗で旧 revision 維持）、**ランタイム時は自律ロールバック（opt-in）**
    がガードレール付き（token 認証 / dry-run 既定 ON / cooldown / 直近デプロイ判定）でトラフィックを
-   健全な前 revision へ戻します（`backend/remediation_function/`）。
+   健全な前 revision へ戻します（`backend/remediation_function/`）。自動ロールバックは**更新（デプロイ）
+   起因のエラーに限定**し、サーバ側の 5xx / レイテンシ / LLM エラーのアラートと直近デプロイ判定を対象にします。
+   クライアント起因の **4xx はアラート対象外**のため自動処置は発火しません。監視の有効化と自動処置は
+   **二段スイッチで分離**し、いずれも**既定 OFF**（Terraform `enable_autonomous_rollback = false` /
+   実行時 `remediation_dry_run = true`）です。明示的に有効化したときのみ実トラフィックを操作します。
 4. **回復確認** — 5xx / p99 / LLM エラー率がベースラインへ戻ったことをダッシュボードで確認し、恒久対応を
    入れた場合は**エージェント性能評価ゲート（eval 回帰スイート）が緑**であることを確認してから再デプロイ。
 5. **ポストモーテム作成** — 事象・原因・対応・再発防止を記録。remediation サービスが構造化ポストモーテム
