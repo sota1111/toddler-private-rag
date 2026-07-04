@@ -277,7 +277,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    Issue["Linear Issue<br/>(要件・優先度)"] --> PR["GitHub PR<br/>feat/<issue>-..."]
+    Issue["Linear Issue<br/>(要件・優先度)"] --> PR["GitHub PR<br/>feat/issue-branch"]
     PR --> CI["ci.yml<br/>backend-tests + evaluation-gate + frontend-checks"]
     CI --> SEC["security-scan.yml<br/>pip-audit / npm audit / Trivy / SBOM / Dependabot"]
     CI --> TFCI["terraform-ci.yml<br/>fmt / validate"]
