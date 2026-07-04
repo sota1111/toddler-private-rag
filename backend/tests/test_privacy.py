@@ -1,8 +1,7 @@
 import pytest
 import datetime
-import os
 from app.privacy import redact_pii
-from app import models, database, retention, repository, storage
+from app import models, retention, repository, storage
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool

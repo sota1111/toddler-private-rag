@@ -23,6 +23,9 @@ import re
 import time
 import uuid
 
+import functions_framework
+from flask import Response, jsonify, request
+
 # --- Identity (mirrors backend/app/identity.py) ---
 # 軽量関数は backend/app(重依存)を import しない設計のため、既定オーナー導出を複製する。
 # backend の identity.DEFAULT_OWNER_ID（sha256(正規化email)[:32]）と一致させること。
@@ -32,9 +35,6 @@ _DEFAULT_OWNER_EMAIL = "sota.moro@gmail.com"
 def _default_owner_id() -> str:
     normalized = _DEFAULT_OWNER_EMAIL.strip().lower()
     return hashlib.sha256(normalized.encode()).hexdigest()[:32]
-
-import functions_framework
-from flask import Response, jsonify, request
 
 logger = logging.getLogger(__name__)
 
