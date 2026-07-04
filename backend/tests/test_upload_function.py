@@ -8,6 +8,7 @@ backend CI image, which only installs backend/requirements.txt).
 import hashlib
 import hmac
 import os
+import time
 
 import pytest
 
@@ -17,6 +18,7 @@ _FUNCTION_SOURCE = os.path.join(
     os.path.dirname(os.path.dirname(__file__)), "upload_function", "main.py"
 )
 _APP_NAME = "toddler-private-rag"
+_OWNER = "0" * 32  # 32桁 hex 相当の owner_id（形式のみ重要）
 
 
 def _client():
@@ -24,8 +26,13 @@ def _client():
     return app.test_client()
 
 
-def _valid_token(secret: str) -> str:
-    return hmac.new(secret.encode(), f"{_APP_NAME}-auth".encode(), hashlib.sha256).hexdigest()
+def _valid_token(secret: str, owner_id: str = _OWNER, issued_at: int | None = None) -> str:
+    """SOT-1528: backend と同一スキームの署名付きセッション `<owner_id>.<issued_at>.<sig>`。"""
+    if issued_at is None:
+        issued_at = int(time.time())
+    message = f"{_APP_NAME}-auth:{owner_id}:{issued_at}"
+    sig = hmac.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()
+    return f"{owner_id}.{issued_at}.{sig}"
 
 
 def test_get_method_not_allowed():
@@ -48,6 +55,28 @@ def test_invalid_cookie_401(monkeypatch):
     monkeypatch.setenv("AUTH_SECRET", "s3cr3t")
     client = _client()
     client.set_cookie("auth_token", "wrong-token")
+    resp = client.post("/api/info/1/attachments")
+    assert resp.status_code == 401
+
+
+def test_legacy_fixed_token_rejected_401(monkeypatch):
+    # SOT-1528(M3): 旧固定トークン（owner 非依存・有効期限なし）は失効させる。
+    monkeypatch.setenv("AUTH_SECRET", "s3cr3t")
+    legacy = hmac.new(
+        b"s3cr3t", f"{_APP_NAME}-auth".encode(), hashlib.sha256
+    ).hexdigest()
+    client = _client()
+    client.set_cookie("auth_token", legacy)
+    resp = client.post("/api/info/1/attachments")
+    assert resp.status_code == 401
+
+
+def test_expired_session_rejected_401(monkeypatch):
+    # SOT-1528(M4): 有効期限切れのセッションは拒否する。
+    monkeypatch.setenv("AUTH_SECRET", "s3cr3t")
+    monkeypatch.setenv("SESSION_MAX_AGE_SECONDS", "60")
+    client = _client()
+    client.set_cookie("auth_token", _valid_token("s3cr3t", issued_at=int(time.time()) - 3600))
     resp = client.post("/api/info/1/attachments")
     assert resp.status_code == 401
 

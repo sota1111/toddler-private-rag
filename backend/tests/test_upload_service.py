@@ -121,8 +121,17 @@ def test_worker_endpoint_rejects_bad_token(monkeypatch):
     assert resp.status_code == 403
 
 
-def test_worker_endpoint_accepts_and_schedules(monkeypatch):
+def test_worker_endpoint_rejects_when_token_unset(monkeypatch):
+    # SOT-1528(M2): WORKER_INVOKE_TOKEN 未設定時はフェイルクローズで拒否する。
     monkeypatch.delenv("WORKER_INVOKE_TOKEN", raising=False)
+    client = TestClient(main_app)
+    resp = client.post("/internal/process-ocr", json={"att_id": 1})
+    assert resp.status_code == 403
+
+
+def test_worker_endpoint_accepts_and_schedules(monkeypatch):
+    # SOT-1528(M2): 正しい worker-token を提示したときだけ受理する。
+    monkeypatch.setenv("WORKER_INVOKE_TOKEN", "secret")
     info_id = _create_info()
     att_id = _create_attachment(info_id)
 
@@ -147,6 +156,7 @@ def test_worker_endpoint_accepts_and_schedules(monkeypatch):
     resp = client.post(
         "/internal/process-ocr",
         json={"att_id": att_id, "info_id": info_id, "language": "ja"},
+        headers={"X-Worker-Token": "secret"},
     )
     assert resp.status_code == 202, resp.text
     assert resp.json()["att_id"] == att_id
@@ -156,7 +166,11 @@ def test_worker_endpoint_accepts_and_schedules(monkeypatch):
 
 
 def test_worker_endpoint_unknown_attachment_404(monkeypatch):
-    monkeypatch.delenv("WORKER_INVOKE_TOKEN", raising=False)
+    monkeypatch.setenv("WORKER_INVOKE_TOKEN", "secret")
     client = TestClient(main_app)
-    resp = client.post("/internal/process-ocr", json={"att_id": 424242})
+    resp = client.post(
+        "/internal/process-ocr",
+        json={"att_id": 424242},
+        headers={"X-Worker-Token": "secret"},
+    )
     assert resp.status_code == 404

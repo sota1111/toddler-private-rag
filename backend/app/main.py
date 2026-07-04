@@ -20,7 +20,24 @@ if database_type == "sqlite":
 
 app = FastAPI(title="おたよりナビ API")
 
-_cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+def _parse_cors_origins() -> list[str]:
+    """CORS 許可オリジンを解析する（SOT-1528: 本番オリジン限定のハードニング）。
+
+    ``allow_credentials=True`` はワイルドカード ``*`` と両立しない（資格情報付きで全オリジンを
+    許可すると API が誰からでも呼べてしまう）。空白除去のうえ ``*`` は破棄し、結果が空なら
+    ローカル既定にフォールバックする。
+    """
+    raw = os.getenv("CORS_ORIGINS", "http://localhost:5173")
+    origins = [o.strip() for o in raw.split(",") if o.strip()]
+    safe = [o for o in origins if o != "*"]
+    if len(safe) != len(origins):
+        logger.warning(
+            "CORS_ORIGINS に '*' が含まれています。allow_credentials=True と両立しないため無視します。"
+        )
+    return safe or ["http://localhost:5173"]
+
+
+_cors_origins = _parse_cors_origins()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,

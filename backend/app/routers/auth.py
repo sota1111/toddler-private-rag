@@ -2,6 +2,7 @@ import os
 import hmac
 import hashlib
 import logging
+import time
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Cookie, status
 from fastapi.responses import JSONResponse
@@ -29,6 +30,23 @@ def _get_firebase_api_key() -> str | None:
     return os.getenv("FIREBASE_WEB_API_KEY") or os.getenv("FIREBASE_API_KEY")
 
 
+# SOT-1528(M4): セッショントークンの有効期限（秒）。既定 7 日。`SESSION_MAX_AGE_SECONDS` で上書き可能。
+_DEFAULT_SESSION_MAX_AGE = 7 * 24 * 60 * 60
+
+
+def _session_max_age_seconds() -> int:
+    """セッションの有効期限（秒）を返す。無効値/未設定は既定値にフォールバック。"""
+    raw = os.getenv("SESSION_MAX_AGE_SECONDS")
+    if raw:
+        try:
+            value = int(raw)
+            if value > 0:
+                return value
+        except ValueError:
+            pass
+    return _DEFAULT_SESSION_MAX_AGE
+
+
 class SessionRequest(BaseModel):
     email: str
     password: str
@@ -38,23 +56,31 @@ class GoogleSessionRequest(BaseModel):
     id_token: str
 
 
-def _sign(owner_id: str, secret: str) -> str:
-    """owner_id を AUTH_SECRET で HMAC 署名する（SOT-1431）。cookie 改竄防止。"""
-    return hmac.new(
-        secret.encode(), f"{_APP_NAME}-auth:{owner_id}".encode(), hashlib.sha256
-    ).hexdigest()
+def _sign(owner_id: str, secret: str, issued_at: int) -> str:
+    """owner_id + 発行時刻を AUTH_SECRET で HMAC 署名する（SOT-1431 / SOT-1528）。cookie 改竄防止。
+
+    署名対象に発行時刻(issued_at)を含めることで、時刻を改竄すると署名が壊れる＝有効期限を
+    サーバ側で強制できる。
+    """
+    message = f"{_APP_NAME}-auth:{owner_id}:{issued_at}"
+    return hmac.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()
 
 
-def _build_session_token(owner_id: str, secret: str) -> str:
-    """署名付きセッショントークン `<owner_id>.<sig>` を組み立てる（SOT-1431）。"""
-    return f"{owner_id}.{_sign(owner_id, secret)}"
+def _build_session_token(owner_id: str, secret: str, issued_at: int | None = None) -> str:
+    """署名付きセッショントークン `<owner_id>.<issued_at>.<sig>` を組み立てる（SOT-1431 / SOT-1528）。"""
+    if issued_at is None:
+        issued_at = int(time.time())
+    return f"{owner_id}.{issued_at}.{_sign(owner_id, secret, issued_at)}"
 
 
 def get_current_user(auth_token: str = Cookie(None)) -> str:
-    """署名付きセッションから owner_id を復元して返す（SOT-1431）。
+    """署名付きセッションから owner_id を復元して返す（SOT-1431 / SOT-1528）。
 
-    cookie は `<owner_id>.<hmac署名>`。署名を検証し、一致した owner_id を返す。
+    cookie は `<owner_id>.<issued_at>.<hmac署名>`。署名を検証し、有効期限内であれば owner_id を返す。
     これによりログイン中のユーザーをサーバ側で一意に識別し、データを owner で分離する。
+
+    SOT-1528(M4): 発行時刻を含まない旧形式トークン（`<owner_id>.<sig>`）は失効させ、再ログインを
+    促す。これによりトークン漏えい時にも有効期限(既定7日)で自動失効する。
     """
     auth_secret = os.getenv("AUTH_SECRET")
     if not auth_secret or not auth_token:
@@ -62,17 +88,30 @@ def get_current_user(auth_token: str = Cookie(None)) -> str:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
         )
-    owner_id, _, signature = auth_token.rpartition(".")
-    if not owner_id or not signature:
+    parts = auth_token.split(".")
+    if len(parts) != 3 or not all(parts):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid session",
         )
-    expected = _sign(owner_id, auth_secret)
+    owner_id, issued_at_raw, signature = parts
+    try:
+        issued_at = int(issued_at_raw)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session",
+        )
+    expected = _sign(owner_id, auth_secret, issued_at)
     if not hmac.compare_digest(signature, expected):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid session",
+        )
+    if int(time.time()) - issued_at > _session_max_age_seconds():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired",
         )
     return owner_id
 
@@ -205,7 +244,7 @@ def _issue_session_response(
         httponly=True,
         secure=is_production,
         samesite="lax",
-        max_age=7 * 24 * 60 * 60,
+        max_age=_session_max_age_seconds(),  # SOT-1528(M4): サーバ側の有効期限と一致させる。
         path="/",
     )
     return response

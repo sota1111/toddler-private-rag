@@ -11,6 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional, Union
 import base64
+import hmac
 import json
 import os
 import logging
@@ -22,6 +23,20 @@ from .attachments import process_ocr
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["worker"])
+
+
+def _require_worker_token(provided: Optional[str]) -> None:
+    """内部エンドポイントの共有シークレット検証（フェイルクローズ）。SOT-1528(M2)。
+
+    バックエンドは Cloud Run で公開(allow-unauthenticated)のため、このトークンが唯一の
+    アクセスゲート。``WORKER_INVOKE_TOKEN`` が未設定のときはスキップ（フェイルオープン）せず
+    必ず拒否する。設定済みのときは定数時間比較でトークンを検証する。
+    """
+    expected = os.getenv("WORKER_INVOKE_TOKEN")
+    if not expected:
+        raise HTTPException(status_code=403, detail="worker token not configured")
+    if not provided or not hmac.compare_digest(provided, expected):
+        raise HTTPException(status_code=403, detail="invalid worker token")
 
 
 class ProcessOcrRequest(BaseModel):
@@ -36,9 +51,7 @@ async def internal_process_ocr(
     background_tasks: BackgroundTasks,
     x_worker_token: Optional[str] = Header(None),
 ):
-    expected = os.getenv("WORKER_INVOKE_TOKEN")
-    if expected and x_worker_token != expected:
-        raise HTTPException(status_code=403, detail="invalid worker token")
+    _require_worker_token(x_worker_token)
 
     repo = get_attachment_repo_standalone()
     try:
@@ -109,9 +122,7 @@ async def internal_gcs_finalize(
 
     Pyb/Sub push は任意ヘッダを付けられないため、worker-token は query (`?token=`) で検証する。
     """
-    expected = os.getenv("WORKER_INVOKE_TOKEN")
-    if expected and token != expected:
-        raise HTTPException(status_code=403, detail="invalid worker token")
+    _require_worker_token(token)
 
     try:
         envelope = await request.json()
@@ -174,9 +185,7 @@ async def internal_purge_orphans(
     """SOT-1366: Cloud Scheduler から日次で呼ばれる孤児オブジェクト保全ジョブ。
     DB に対応レコードが無い GCS オブジェクトのみを削除する（表示中写真は保持）。
     /internal/process-ocr と同じ worker-token で保護する。"""
-    expected = os.getenv("WORKER_INVOKE_TOKEN")
-    if expected and x_worker_token != expected:
-        raise HTTPException(status_code=403, detail="invalid worker token")
+    _require_worker_token(x_worker_token)
 
     from ..retention import reconcile_orphan_attachments
 
