@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-from pathlib import Path
 
 from app.main import app
 from app.database import Base, get_db
@@ -195,7 +194,6 @@ def test_delete_attachment():
         files={"file": ("test.png", PNG_BYTES, "image/png")}
     )
     att_id = response.json()["id"]
-    stored_filename = models.Attachment.stored_filename
     
     # Check file exists
     db = next(override_get_db())

@@ -8,8 +8,6 @@ from tests._images import PNG_BYTES
 from app.database import Base, get_db
 from app import models, database
 from pathlib import Path
-import os
-import shutil
 
 # Test database setup (in-memory for consistency and speed)
 SQLALCHEMY_DATABASE_URL = "sqlite://"

@@ -26,6 +26,16 @@ import uuid
 import functions_framework
 from flask import Response, jsonify, request
 
+# --- Identity (mirrors backend/app/identity.py) ---
+# 軽量関数は backend/app(重依存)を import しない設計のため、既定オーナー導出を複製する。
+# backend の identity.DEFAULT_OWNER_ID（sha256(正規化email)[:32]）と一致させること。
+_DEFAULT_OWNER_EMAIL = "sota.moro@gmail.com"
+
+
+def _default_owner_id() -> str:
+    normalized = _DEFAULT_OWNER_EMAIL.strip().lower()
+    return hashlib.sha256(normalized.encode()).hexdigest()[:32]
+
 logger = logging.getLogger(__name__)
 
 
@@ -88,18 +98,50 @@ def _get_firestore_client():
     return _firestore_client
 
 
-# --- Auth (mirrors routers/auth.py) ---
-def _compute_token(secret: str) -> str:
-    return hmac.new(
-        secret.encode(), f"{_APP_NAME}-auth".encode(), hashlib.sha256
-    ).hexdigest()
+# --- Auth (mirrors routers/auth.py signed session; SOT-1528 M3/M4) ---
+# 署名付きセッション `<owner_id>.<issued_at>.<sig>` を backend と同一スキームで検証する。
+# 以前の固定トークン（owner 非依存・有効期限なし）を廃し、owner を復元して越境書き込みを防ぐ。
+_DEFAULT_SESSION_MAX_AGE = 7 * 24 * 60 * 60
 
 
-def _is_authenticated(auth_token) -> bool:
+def _session_max_age_seconds() -> int:
+    raw = os.getenv("SESSION_MAX_AGE_SECONDS")
+    if raw:
+        try:
+            value = int(raw)
+            if value > 0:
+                return value
+        except ValueError:
+            pass
+    return _DEFAULT_SESSION_MAX_AGE
+
+
+def _sign(owner_id: str, secret: str, issued_at: int) -> str:
+    message = f"{_APP_NAME}-auth:{owner_id}:{issued_at}"
+    return hmac.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()
+
+
+def _verify_session_token(auth_token) -> "str | None":
+    """署名付きセッションを検証し owner_id を返す。無効・期限切れ・旧形式は None。
+
+    backend/app/routers/auth.py の get_current_user と同一スキーム（SOT-1528）。
+    """
     auth_secret = os.getenv("AUTH_SECRET")
     if not auth_secret or not auth_token:
-        return False
-    return hmac.compare_digest(auth_token, _compute_token(auth_secret))
+        return None
+    parts = auth_token.split(".")
+    if len(parts) != 3 or not all(parts):
+        return None
+    owner_id, issued_at_raw, signature = parts
+    try:
+        issued_at = int(issued_at_raw)
+    except ValueError:
+        return None
+    if not hmac.compare_digest(signature, _sign(owner_id, auth_secret, issued_at)):
+        return None
+    if int(time.time()) - issued_at > _session_max_age_seconds():
+        return None
+    return owner_id
 
 
 # --- CORS ---
@@ -143,14 +185,23 @@ def _save_to_gcs(object_key: str, content: bytes, content_type: str) -> None:
     blob.upload_from_string(content, content_type=content_type)
 
 
-def _info_exists(info_id: str) -> bool:
-    return (
+def _info_owner_ok(info_id: str, owner_id: str) -> bool:
+    """対象 info が current owner のものか判定する（越境書き込み=IDOR 防止, SOT-1528 M3）。
+
+    owner_id 未設定ドキュメントは既定オーナー扱い（backend の ``_owner_of`` と一致）。
+    存在しない/他 owner の info には書き込ませない。
+    """
+    doc = (
         _get_firestore_client()
         .collection("nursery_info")
         .document(str(info_id))
         .get()
-        .exists
     )
+    if not doc.exists:
+        return False
+    data = doc.to_dict() or {}
+    doc_owner = data.get("owner_id") or _default_owner_id()
+    return doc_owner == owner_id
 
 
 def _create_attachment(*, info_id, stored_filename, original_filename, mime_type,
@@ -231,8 +282,9 @@ def upload_attachment(req):
         return _json({"detail": "Not found"}, 404)
     info_id = m.group(1)
 
-    # Auth: auth_token cookie HMAC
-    if not _is_authenticated(req.cookies.get("auth_token")):
+    # Auth: 署名付きセッション cookie を検証し owner_id を復元（SOT-1528 M3/M4）
+    owner_id = _verify_session_token(req.cookies.get("auth_token"))
+    if owner_id is None:
         return _json({"detail": "Not authenticated"}, 401)
 
     # File
@@ -257,7 +309,8 @@ def upload_attachment(req):
             )
 
         try:
-            if not _info_exists(info_id):
+            # SOT-1528(M3): 対象 info が current owner のものでなければ 404（存在秘匿＝越境防止）。
+            if not _info_owner_ok(info_id, owner_id):
                 return _json({"detail": "NurseryInfo not found"}, 404)
 
             stored_filename = _generate_stored_filename(file.filename)

@@ -1225,7 +1225,14 @@ class FirestoreAttachmentRepository(AttachmentRepository):
 
     def delete(self, att_id: Union[int, str]) -> bool:
         doc_ref = self.db.collection("attachments").document(str(att_id))
-        if not doc_ref.get().exists:
+        snap = doc_ref.get()
+        if not snap.exists:
+            return False
+        # SOT-1528(L2): owner スコープを delete 内でも強制（多層防御）。親 info が current owner の
+        # 添付でなければ削除しない。ルータ側チェックが将来変わっても越境削除を防ぐ。
+        if self.owner_id is not None and not self._info_owner_ok(
+            (snap.to_dict() or {}).get("info_id")
+        ):
             return False
         doc_ref.delete()
         return True

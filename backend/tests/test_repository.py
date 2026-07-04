@@ -1,6 +1,5 @@
 import pytest
 import datetime
-import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.database import Base
@@ -19,16 +18,16 @@ def test_tags_conversion():
     assert _tags_str_to_array("") == []
     
     assert _tags_array_to_str(["tag1", "tag2"]) == "tag1,tag2"
-    assert _tags_array_to_str([]) == None
-    assert _tags_array_to_str(None) == None
+    assert _tags_array_to_str([]) is None
+    assert _tags_array_to_str(None) is None
 
 def test_date_conversion():
     d = datetime.date(2023, 10, 27)
     assert _from_date(d) == "2023-10-27"
     assert _to_date("2023-10-27") == d
-    assert _from_date(None) == None
-    assert _to_date(None) == None
-    assert _to_date("invalid") == None
+    assert _from_date(None) is None
+    assert _to_date(None) is None
+    assert _to_date("invalid") is None
 
 def test_matches_query():
     info = FirestoreNurseryInfo(
@@ -49,15 +48,15 @@ def test_matches_query():
     )
     
     # Matches
-    assert _matches_query(info, q="title", tag=None) == True
-    assert _matches_query(info, q="content", tag=None) == True
-    assert _matches_query(info, q="tag1", tag=None) == True
-    assert _matches_query(info, q="found", tag=None) == True # OCR search
-    assert _matches_query(info, q=None, tag="tag1") == True
+    assert _matches_query(info, q="title", tag=None)
+    assert _matches_query(info, q="content", tag=None)
+    assert _matches_query(info, q="tag1", tag=None)
+    assert _matches_query(info, q="found", tag=None) # OCR search
+    assert _matches_query(info, q=None, tag="tag1")
     
     # Non-matches
-    assert _matches_query(info, q="other", tag=None) == False
-    assert _matches_query(info, q=None, tag="tag3") == False
+    assert not _matches_query(info, q="other", tag=None)
+    assert not _matches_query(info, q=None, tag="tag3")
 
 # Test Factory
 def test_get_database_type(monkeypatch):
@@ -120,5 +119,5 @@ def test_sqlite_info_crud(db_session):
     assert updated.status == "完了"
     
     # Delete
-    assert repo.delete(created.id) == True
+    assert repo.delete(created.id)
     assert repo.get(created.id) is None
