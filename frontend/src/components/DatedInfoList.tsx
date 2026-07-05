@@ -204,15 +204,19 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({
           <span className="font-medium text-foreground truncate">{item.title}</span>
           <div className="flex items-center gap-2 flex-shrink-0">
             {/* SOT-1368 follow-up: 紐づけた子どもの名前タグ（子どもごとの色）。未指定/未解決は非表示。 */}
+            {/* SOT-1552: 子どもに組/クラスが登録されていれば「名前・組」の形でやることリストに表示する。 */}
             {(() => {
               if (!item.child_id) return null;
               const child = childList.find((c) => String(c.id) === String(item.child_id));
               if (!child) return null;
+              const label = child.group_name
+                ? `${child.name}・${child.group_name}`
+                : child.name;
               return (
                 <span
-                  className={`text-xs px-2 py-1 rounded-full max-w-[6rem] truncate ${getChildColorClasses(item.child_id, childList).chip}`}
+                  className={`text-xs px-2 py-1 rounded-full max-w-[9rem] truncate ${getChildColorClasses(item.child_id, childList).chip}`}
                 >
-                  {child.name}
+                  {label}
                 </span>
               );
             })()}

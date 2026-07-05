@@ -79,6 +79,9 @@ class Child(Base):
     # SOT-1431: データ所有者(マルチテナント分離)。nullable で追加（既存行は既定 owner 扱い）。
     owner_id = Column(String(64), nullable=True, index=True)
     name = Column(String(100), nullable=False)
+    # SOT-1552: 子どもが所属する組/クラス（例「ひまわり組」「さくらクラス」）。
+    # 任意入力。additive/nullable なので既存行は None（組/クラス未設定）のまま。
+    group_name = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

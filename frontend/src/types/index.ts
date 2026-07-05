@@ -28,6 +28,8 @@ export interface AttachmentTranscription {
 export interface Child {
   id: number | string
   name: string
+  // SOT-1552: 所属する組/クラス（任意）。未設定は null/undefined。
+  group_name?: string | null
   created_at: string
 }
 
