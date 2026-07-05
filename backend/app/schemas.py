@@ -66,6 +66,8 @@ class AttachmentTranscriptionResponse(BaseModel):
 
 class ChildBase(BaseModel):
     name: str
+    # SOT-1552: 所属する組/クラス（任意）。未指定は None。
+    group_name: Optional[str] = None
 
 
 class ChildCreate(ChildBase):

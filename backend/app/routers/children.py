@@ -29,7 +29,9 @@ def create_child(
     name = (child.name or "").strip()
     if not name:
         raise HTTPException(status_code=422, detail="name is required")
-    return repo.create(schemas.ChildCreate(name=name))
+    # SOT-1552: 組/クラスは任意。前後空白を除去し、空なら None（未設定）にする。
+    group_name = (child.group_name or "").strip() or None
+    return repo.create(schemas.ChildCreate(name=name, group_name=group_name))
 
 
 @router.delete("/{id}")

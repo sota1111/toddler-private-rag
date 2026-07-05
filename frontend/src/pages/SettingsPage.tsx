@@ -37,6 +37,8 @@ const SettingsPage: React.FC = () => {
   // SOT-1368: お子さまの登録・管理。
   const [children, setChildren] = React.useState<Child[]>([]);
   const [newChildName, setNewChildName] = React.useState('');
+  // SOT-1552: 名前と一緒に所属する組/クラス（任意）を登録する。
+  const [newChildGroup, setNewChildGroup] = React.useState('');
   const [childBusy, setChildBusy] = React.useState(false);
   const [childError, setChildError] = React.useState<string | null>(null);
 
@@ -55,9 +57,11 @@ const SettingsPage: React.FC = () => {
     setChildBusy(true);
     setChildError(null);
     try {
-      const created = await createChild(name);
+      // SOT-1552: 組/クラス（任意）も一緒に登録する。
+      const created = await createChild(name, newChildGroup.trim());
       setChildren((prev) => [...prev, created]);
       setNewChildName('');
+      setNewChildGroup('');
     } catch {
       setChildError(t('settings.childrenAddError'));
     } finally {
@@ -184,7 +188,15 @@ const SettingsPage: React.FC = () => {
                 key={c.id}
                 className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2"
               >
-                <span className="text-sm text-foreground">{c.name}</span>
+                <span className="text-sm text-foreground">
+                  {c.name}
+                  {/* SOT-1552: 登録済みの組/クラスを名前の隣に表示する。 */}
+                  {c.group_name && (
+                    <span className="ml-2 rounded-full bg-brand/10 px-2 py-0.5 text-xs text-brand-strong">
+                      {c.group_name}
+                    </span>
+                  )}
+                </span>
                 <button
                   type="button"
                   onClick={() => handleDeleteChild(c.id)}
@@ -197,13 +209,22 @@ const SettingsPage: React.FC = () => {
           </ul>
         )}
 
-        <form onSubmit={handleAddChild} className="flex gap-2">
+        <form onSubmit={handleAddChild} className="flex flex-col gap-2 sm:flex-row">
           <input
             type="text"
             aria-label={t('settings.childrenTitle')}
             value={newChildName}
             onChange={(e) => setNewChildName(e.target.value)}
             placeholder={t('settings.childrenPlaceholder')}
+            className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40"
+          />
+          {/* SOT-1552: 所属する組/クラス（任意）の入力欄。 */}
+          <input
+            type="text"
+            aria-label={t('settings.childrenGroupLabel')}
+            value={newChildGroup}
+            onChange={(e) => setNewChildGroup(e.target.value)}
+            placeholder={t('settings.childrenGroupPlaceholder')}
             className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40"
           />
           <button

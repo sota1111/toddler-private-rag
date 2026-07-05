@@ -46,8 +46,15 @@ export const getChildren = async (): Promise<Child[]> => {
   return response.data;
 };
 
-export const createChild = async (name: string): Promise<Child> => {
-  const response = await api.post('/children', { name });
+// SOT-1552: 名前に加え、所属する組/クラス（任意）も登録できる。
+export const createChild = async (
+  name: string,
+  groupName?: string,
+): Promise<Child> => {
+  const response = await api.post('/children', {
+    name,
+    group_name: groupName?.trim() || null,
+  });
   return response.data;
 };
 

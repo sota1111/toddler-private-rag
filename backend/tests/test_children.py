@@ -65,6 +65,34 @@ def test_create_list_delete_child():
     assert [c["name"] for c in listed] == ["はなこ"]
 
 
+def test_create_child_with_group_name_roundtrips():
+    # SOT-1552: 名前と一緒に組/クラスを登録でき、一覧・作成レスポンスで返る。
+    resp = client.post(
+        "/api/children", json={"name": "たろう", "group_name": "ひまわり組"}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["group_name"] == "ひまわり組"
+
+    listed = client.get("/api/children").json()
+    assert listed[0]["group_name"] == "ひまわり組"
+
+
+def test_create_child_without_group_name_is_backward_compatible():
+    # SOT-1552: 組/クラス未指定でも従来どおり登録でき、group_name は None。
+    resp = client.post("/api/children", json={"name": "はなこ"})
+    assert resp.status_code == 200
+    assert resp.json()["group_name"] is None
+
+
+def test_create_child_blank_group_name_normalized_to_none():
+    # SOT-1552: 空白のみの組/クラスは未設定(None)に正規化する。
+    resp = client.post(
+        "/api/children", json={"name": "じろう", "group_name": "   "}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["group_name"] is None
+
+
 def test_delete_missing_child_returns_404():
     assert client.delete("/api/children/99999").status_code == 404
 

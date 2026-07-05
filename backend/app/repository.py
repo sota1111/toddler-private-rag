@@ -550,7 +550,12 @@ class SqliteChildRepository(ChildRepository):
 
     def create(self, data: schemas.ChildCreate) -> models.Child:
         # SOT-1431: 作成時に current owner を付与する(リクエスト経路)。owner None(背景)は未設定のまま。
-        db_child = models.Child(name=data.name, owner_id=self.owner_id)
+        # SOT-1552: 所属する組/クラス（任意）。空文字は None に正規化する。
+        db_child = models.Child(
+            name=data.name,
+            owner_id=self.owner_id,
+            group_name=(data.group_name or None),
+        )
         self.db.add(db_child)
         self.db.commit()
         self.db.refresh(db_child)
@@ -1243,6 +1248,8 @@ class FirestoreChild:
     id: str
     name: str
     created_at: datetime.datetime
+    # SOT-1552: 所属する組/クラス（任意）。
+    group_name: Optional[str] = None
 
 
 class FirestoreChildRepository(ChildRepository):
@@ -1265,6 +1272,7 @@ class FirestoreChildRepository(ChildRepository):
                 id=doc.id,
                 name=doc.to_dict().get("name", ""),
                 created_at=doc.to_dict().get("created_at") or datetime.datetime.now(),
+                group_name=doc.to_dict().get("group_name"),  # SOT-1552
             )
             for doc in self.db.collection("children").stream()
             if self.owner_id is None or _owner_of(doc.to_dict()) == self.owner_id  # SOT-1431
@@ -1275,9 +1283,18 @@ class FirestoreChildRepository(ChildRepository):
     def create(self, data: schemas.ChildCreate) -> FirestoreChild:
         now = datetime.datetime.now(datetime.timezone.utc)
         # SOT-1431: 作成時に current owner を付与する(owner None=背景は未設定)。
-        doc_data = {"name": data.name, "created_at": now, "owner_id": self.owner_id}
+        # SOT-1552: 所属する組/クラス（任意）。空文字は None に正規化する。
+        group_name = data.group_name or None
+        doc_data = {
+            "name": data.name,
+            "created_at": now,
+            "owner_id": self.owner_id,
+            "group_name": group_name,
+        }
         _, doc_ref = self.db.collection("children").add(doc_data)
-        return FirestoreChild(id=doc_ref.id, name=data.name, created_at=now)
+        return FirestoreChild(
+            id=doc_ref.id, name=data.name, created_at=now, group_name=group_name
+        )
 
     def delete(self, child_id: Union[int, str]) -> bool:
         doc_ref = self.db.collection("children").document(str(child_id))

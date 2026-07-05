@@ -96,7 +96,11 @@ def _seed_sqlite(owner_id: str) -> bool:
             .all()
         )
         for child in src_children:
-            new_child = models.Child(owner_id=owner_id, name=child.name)
+            new_child = models.Child(
+                owner_id=owner_id,
+                name=child.name,
+                group_name=getattr(child, "group_name", None),  # SOT-1552: 組/クラスも複製
+            )
             db.add(new_child)
             db.flush()  # new_child.id を確定させる
             child_id_map[str(child.id)] = new_child
@@ -165,6 +169,7 @@ def _seed_firestore(owner_id: str) -> bool:
             {
                 "name": data.get("name", ""),
                 "owner_id": owner_id,
+                "group_name": data.get("group_name"),  # SOT-1552: 組/クラスも複製
                 "created_at": firestore.SERVER_TIMESTAMP,
             }
         )
