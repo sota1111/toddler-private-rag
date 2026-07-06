@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getDrafts, finalizeInfo, deleteInfo, updateInfo, getAttachmentFileUrl, getProcessingDrafts } from '../api';
+import { getDrafts, finalizeInfo, deleteInfo, updateInfo, getAttachmentFileUrl, getProcessingDrafts, revertSplitDrafts } from '../api';
 import type { NurseryInfo, NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import { useConfirm } from '../components/confirmDialogContext';
@@ -180,6 +180,30 @@ const DraftsPage: React.FC = () => {
     }
   };
 
+  // SOT-1577: 「分割前のタスクに戻す」。同一書類(source_info_id)由来の分割 draft 群を、
+  // 未分割の1 draft へまとめ直す。押下したグループ全体を置換するため、対象書類の source_info_id を渡す。
+  const handleRevertSplit = async (id: number | string, sourceInfoId: number | string) => {
+    if (!(await confirm(t('drafts.confirmRevertSplit')))) return;
+    setBusyId(id);
+    try {
+      await revertSplitDrafts(sourceInfoId);
+      await refreshAll();
+    } catch (e) {
+      console.error('Failed to revert split drafts', e);
+      window.alert(t('drafts.actionFail'));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // SOT-1577: 同一書類から2件以上に分割された draft グループだけに「分割前に戻す」を出すため、
+  // source_info_id ごとの件数を数える（source_info_id が無い手動 draft は対象外）。
+  const splitGroupCounts = new Map<string, number>();
+  for (const d of drafts ?? []) {
+    const key = d.source_info_id != null ? String(d.source_info_id) : '';
+    if (key) splitGroupCounts.set(key, (splitGroupCounts.get(key) ?? 0) + 1);
+  }
+
   const inputCls = 'mt-1 block w-full border border-border rounded-md shadow-sm p-2 text-sm';
 
   return (
@@ -287,6 +311,9 @@ const DraftsPage: React.FC = () => {
           // 多重リクエスト/状態競合を防ぐ（処理中の項目だけ「処理中…」表示を維持）。
           const anyBusy = busyId !== null || bulkBusy;
           const isEditing = editingId === d.id && editForm !== null;
+          // SOT-1577: 同一書類から2件以上に分割された draft なら「分割前に戻す」を表示。
+          const sourceInfoId = d.source_info_id != null ? String(d.source_info_id) : '';
+          const isSplitGroup = sourceInfoId !== '' && (splitGroupCounts.get(sourceInfoId) ?? 0) >= 2;
           return (
             <div key={d.id} className="bg-surface shadow-sm border border-border rounded-lg p-5">
               <div className="flex flex-col sm:flex-row gap-4">
@@ -417,6 +444,16 @@ const DraftsPage: React.FC = () => {
                   </>
                 ) : (
                   <>
+                    {isSplitGroup && (
+                      <button
+                        type="button"
+                        onClick={() => handleRevertSplit(d.id, sourceInfoId)}
+                        disabled={anyBusy}
+                        className="px-4 py-2 text-sm font-medium text-brand-strong bg-surface border border-brand rounded-md hover:bg-accent-bg disabled:opacity-50"
+                      >
+                        {busy ? t('drafts.working') : t('drafts.revertSplit')}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleDiscard(d.id)}
