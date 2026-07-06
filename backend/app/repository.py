@@ -115,6 +115,20 @@ class InfoRepository(abc.ABC):
             if str(getattr(d, "source_info_id", None) or "") == key
         ]
 
+    def list_registered_by_source(self, source_info_id) -> List[Any]:
+        """SOT-1577: 同一書類(source_info_id)由来の本登録タスク群を返す。
+
+        本登録後のタスク詳細画面から「分割前のタスクに戻す」を呼ぶための群取得。
+        owner スコープ済みの list()（本登録のみ）を Python 側で source_info_id 一致に
+        フィルタするため、Sqlite/Firestore 双方で追加実装なく他 owner を混ぜずに動く。
+        アーカイブ済みは list() 既定で除外される。
+        """
+        key = str(source_info_id)
+        return [
+            d for d in self.list()
+            if str(getattr(d, "source_info_id", None) or "") == key
+        ]
+
     @abc.abstractmethod
     def count_processing(self) -> int:
         pass
