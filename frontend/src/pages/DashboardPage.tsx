@@ -1,10 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getToday, getTomorrow, getWeekly, getNextWeek, getReminders } from '../api';
-import type { NurseryInfo, ReminderItem, ReminderUrgency } from '../types';
+import { getToday, getTomorrow, getWeekly, getNextWeek, getReminders, getChildren } from '../api';
+import type { Child, NurseryInfo, ReminderItem, ReminderUrgency } from '../types';
 import { useI18n } from '../i18n/useI18n';
-import { getStatusDateChipClass, getStatusFilterPillClass } from './infoFormOptions';
+import { getStatusDateChipClass, getStatusFilterPillClass, getChildColorClasses } from './infoFormOptions';
 import FavoriteStar from '../components/FavoriteStar';
 
 // SOT-1080 / 提案5-A: 緊急度ごとの配色（受動表示ではなく能動的に目を引く）。
@@ -40,6 +40,24 @@ const StatusLegend: React.FC = () => {
         </span>
       ))}
     </div>
+  );
+};
+
+// SOT-1561: 掲示板の「今週の予定」「来週の予定」に、やることリスト(DatedInfoList)と同じ様式で
+// 紐づく子どもの名前チップ（子どもごとの色・名前のみ）を表示する。未指定/未解決は非表示。
+const ChildNameChip: React.FC<{ childId: string | null | undefined; children: Child[] }> = ({
+  childId,
+  children,
+}) => {
+  if (!childId) return null;
+  const child = children.find((c) => String(c.id) === String(childId));
+  if (!child) return null;
+  return (
+    <span
+      className={`text-xs px-2 py-1 rounded-full max-w-[6rem] truncate ${getChildColorClasses(childId, children).chip}`}
+    >
+      {child.name}
+    </span>
   );
 };
 
@@ -200,6 +218,9 @@ const DashboardPage: React.FC = () => {
   const tomorrowQuery = useQuery({ queryKey: ['tomorrow'], queryFn: getTomorrow });
   const weeklyQuery = useQuery({ queryKey: ['weekly'], queryFn: getWeekly });
   const nextWeekQuery = useQuery({ queryKey: ['nextWeek'], queryFn: getNextWeek });
+  // SOT-1561: 週次予定の子ども名チップ用に children を取得（DatedInfoList と同一キーでデデュープ）。
+  const childrenQuery = useQuery({ queryKey: ['children'], queryFn: getChildren });
+  const childList = childrenQuery.data ?? [];
 
   // SOT-1423: 写真本体レコード（添付あり・登録一覧用）は掲示板に出さず、やることリストの中身
   // （分解タスク=添付なし）のみ表示する。写真本体は event_date=None だが date/info_type を持つため
@@ -267,9 +288,13 @@ const DashboardPage: React.FC = () => {
                 {item.is_favorite && <FavoriteStar filled />}
                 {item.title}
               </span>
-              <span className={`text-xs px-2 py-1 rounded-full ${getStatusDateChipClass(item.status)}`}>
-                {item.event_date}
-              </span>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* SOT-1561: やることリストと同様に紐づく子どもの名前チップを表示。 */}
+                <ChildNameChip childId={item.child_id} children={childList} />
+                <span className={`text-xs px-2 py-1 rounded-full ${getStatusDateChipClass(item.status)}`}>
+                  {item.event_date}
+                </span>
+              </div>
             </div>
           )}
         />
@@ -288,9 +313,13 @@ const DashboardPage: React.FC = () => {
                 {item.is_favorite && <FavoriteStar filled />}
                 {item.title}
               </span>
-              <span className={`text-xs px-2 py-1 rounded-full ${getStatusDateChipClass(item.status)}`}>
-                {item.event_date}
-              </span>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* SOT-1561: やることリストと同様に紐づく子どもの名前チップを表示。 */}
+                <ChildNameChip childId={item.child_id} children={childList} />
+                <span className={`text-xs px-2 py-1 rounded-full ${getStatusDateChipClass(item.status)}`}>
+                  {item.event_date}
+                </span>
+              </div>
             </div>
           )}
         />
