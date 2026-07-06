@@ -102,8 +102,8 @@ def test_llm_extract_documents_parsing(monkeypatch):
     payload = '[{"name":"健康調査票","due_date":"5月1日"},{"name":"","due_date":"x"}]'
     monkeypatch.setattr(ai_client, "get_genai_client", lambda: _FakeClient(payload))
     docs = submission_agent._llm_extract_documents(SAMPLE, "ja")
-    # 空 name は除外される
-    assert docs == [{"name": "健康調査票", "due_date": "5月1日"}]
+    # 空 name は除外される（SOT-1566: inferred は未指定なら False）
+    assert docs == [{"name": "健康調査票", "due_date": "5月1日", "inferred": False}]
 
 
 def test_grounded_enrich_handles_empty(monkeypatch):
@@ -119,6 +119,146 @@ def test_grounded_enrich_handles_empty(monkeypatch):
         "source": "",
         "sources": [],
     }
+
+
+# --- SOT-1566: 手続き名だけ → 就労証明書へ到達（辞書＋LLM推論＋inferredフラグ） ---------
+
+# 書類名は明記されず「手続き名」だけのおたより本文。
+PROCEDURE_ONLY = """保育施設在籍にかかる現況確認の手続きはお済でしょうか。
+7月31日までにご対応ください。
+"""
+
+# 手続きキーワードを一切含まない一般文（過検出しないことの検証用）。
+GENERAL_NOTICE = """入園のしおり
+運動会は5月20日に開催します。上履きを持たせてください。
+"""
+
+
+def test_dictionary_infers_document_pure():
+    """純粋関数: 手続きキーワードから標準書類を inferred=True で推定する。"""
+    docs = submission_agent._dictionary_inferred_documents(PROCEDURE_ONLY)
+    assert docs == [{"name": "就労証明書", "due_date": "", "inferred": True}]
+
+
+def test_dictionary_no_keyword_returns_empty():
+    """純粋関数: 手続きキーワードが無い一般文では書類を湧かせない（過検出しない）。"""
+    assert submission_agent._dictionary_inferred_documents(GENERAL_NOTICE) == []
+    assert submission_agent._dictionary_inferred_documents("   ") == []
+
+
+def test_merge_candidates_explicit_wins_and_dedup():
+    """マージ: 同一書類名は重複排除し、明記(inferred=False)が推定に勝つ。締切は明記を優先。"""
+    merged = submission_agent._merge_document_candidates(
+        [
+            {"name": "就労証明書", "due_date": "2026-05-10", "inferred": False},
+            {"name": "就労 証明書", "due_date": "", "inferred": True},  # 空白違い＝同一
+            {"name": "健康調査票", "due_date": "", "inferred": True},
+        ]
+    )
+    assert len(merged) == 2
+    work = merged[0]
+    assert work["name"] == "就労証明書"
+    assert work["inferred"] is False  # 明記が勝つ
+    assert work["due_date"] == "2026-05-10"
+    assert merged[1] == {"name": "健康調査票", "due_date": "", "inferred": True}
+
+
+def test_extract_documents_procedure_only_infers(monkeypatch):
+    """手続き名だけ（LLM抽出0件）でも辞書で就労証明書へ到達し、inferred=True で grounding に乗る。"""
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
+    # LLM は書類名を拾えない（0件）想定でも、辞書だけで到達できることを検証。
+    monkeypatch.setattr(
+        submission_agent, "_llm_extract_documents", lambda text, language: []
+    )
+    monkeypatch.setattr(
+        ai_client,
+        "generate_grounded_with_sources",
+        lambda prompt, **k: (_enrich_json(), []),
+    )
+
+    docs = submission_agent.extract_submission_documents(PROCEDURE_ONLY, language="ja")
+    assert len(docs) == 1
+    doc = docs[0]
+    assert doc["name"] == "就労証明書"
+    assert doc["inferred"] is True
+    # grounding 裏取りに乗って手順が付く（＝締切逆算タスク生成に到達できる）。
+    assert doc["steps"]
+    # 本文の締切(7/31)が逆算アンカーとして拾われる。
+    assert doc["due_date"].endswith("-07-31")
+
+
+def test_extract_documents_explicit_stays_not_inferred(monkeypatch):
+    """明記書類は inferred=False のまま退行しない。手続きキーワードが無ければ辞書注入もされない。"""
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
+    monkeypatch.setattr(
+        submission_agent,
+        "_llm_extract_documents",
+        lambda text, language: [
+            {"name": "就労証明書", "due_date": "2026-05-10", "inferred": False},
+        ],
+    )
+    monkeypatch.setattr(
+        ai_client,
+        "generate_grounded_with_sources",
+        lambda prompt, **k: (_enrich_json(), []),
+    )
+
+    docs = submission_agent.extract_submission_documents(SAMPLE, language="ja")
+    assert len(docs) == 1
+    assert docs[0]["name"] == "就労証明書"
+    assert docs[0]["inferred"] is False
+
+
+def test_extract_documents_no_overdetection(monkeypatch):
+    """手続きキーワードの無い一般文では、LLM 0件＋辞書0件で書類が湧かない。"""
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
+    monkeypatch.setattr(
+        submission_agent, "_llm_extract_documents", lambda text, language: []
+    )
+    monkeypatch.setattr(
+        ai_client,
+        "generate_grounded_with_sources",
+        lambda prompt, **k: (_enrich_json(), []),
+    )
+    assert submission_agent.extract_submission_documents(GENERAL_NOTICE) == []
+
+
+def test_build_drafts_inferred_shows_notice(monkeypatch):
+    """推定由来の書類は draft に inferred=True が伝播し、本文に「推定（要確認）」導線が出る。"""
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
+    monkeypatch.setattr(
+        submission_agent, "_llm_extract_documents", lambda text, language: []
+    )
+    monkeypatch.setattr(
+        ai_client,
+        "generate_grounded_with_sources",
+        lambda prompt, **k: (_enrich_json(), []),
+    )
+    drafts = submission_agent.build_submission_task_drafts(PROCEDURE_ONLY, language="ja")
+    assert drafts  # 締切逆算タスクに到達
+    assert all(d["inferred"] is True for d in drafts)
+    assert all("推定（要確認）" in d["content"] for d in drafts)
+
+
+def test_build_drafts_explicit_no_notice(monkeypatch):
+    """明記書類は inferred=False で伝播し、「推定（要確認）」導線は出ない（退行防止）。"""
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
+    monkeypatch.setattr(
+        submission_agent,
+        "_llm_extract_documents",
+        lambda text, language: [
+            {"name": "就労証明書", "due_date": "2026-05-10", "inferred": False},
+        ],
+    )
+    monkeypatch.setattr(
+        ai_client,
+        "generate_grounded_with_sources",
+        lambda prompt, **k: (_enrich_json(), []),
+    )
+    drafts = submission_agent.build_submission_task_drafts(SAMPLE, language="ja")
+    assert drafts
+    assert all(d["inferred"] is False for d in drafts)
+    assert all("推定（要確認）" not in d["content"] for d in drafts)
 
 
 # --- build_submission_task_drafts --------------------------------------------------
