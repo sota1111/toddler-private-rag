@@ -34,7 +34,7 @@ jobs:
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ steps.sha.outputs.sha }}
           # fetch-depth 2 so the change-detection step (A2) can diff the deploy
