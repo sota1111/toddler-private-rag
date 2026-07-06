@@ -218,7 +218,13 @@ def test_forward_generated_group_is_reschedulable(monkeypatch):
     タスク1件しか動かなかった（=「他のやることの日付が変わらない」）。
     """
     # 最終提出期限を持たない（due_date が空の）書類を、手順つきで生成させる。
-    def fake_extract(safe_text, detected_dates=None, language="ja", final_due_iso=None):
+    def fake_extract(
+        safe_text,
+        detected_dates=None,
+        language="ja",
+        final_due_iso=None,
+        issue_date=None,
+    ):
         return [
             {
                 "name": "在籍証明書",
