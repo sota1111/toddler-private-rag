@@ -4,12 +4,26 @@ from app.rag.providers import FakeEmbeddingProvider, FakeLLMProvider
 from app.rag.service import RagService
 from tests.eval.dataset import RAG_CORPUS, RAG_EVAL_CASES, REFUSAL_EVAL_CASES
 
-# Thresholds
+# Thresholds — each constant is a release quality gate. A value below the floor
+# fails the `evaluation-gate` CI job, which (SOT-1469) blocks the production
+# deploy. Documented here (SOT-1568 item 4) so 審査員 can see at a glance what
+# quality each threshold protects. Ratchet upward as accuracy improves.
+
+# 守る品質: 正答性（回答の根拠として正しい情報を最上位に引けているか）。
+# 指標: top-source正答率 = 期待した情報が sources[0] に来たケースの割合。
 MIN_TOP_SOURCE_ACCURACY = 0.8
+
+# 守る品質: 網羅性（回答に必要なキーワードを取りこぼしていないか）。
+# 指標: 平均 keyword hit rate = 期待キーワードのうち回答に含まれた割合の平均。
 MIN_AVG_KEYWORD_HIT_RATE = 0.8
-# SOT-1471: groundedness = answer keywords must be traceable to retrieved sources
-# (no hallucination). Refusal = no answer must be fabricated with no sources.
+
+# 守る品質: 根拠性 / 幻覚抑制（SOT-1471）。回答が述べるキーワードは、検索で取得した
+# ソース本文に必ず遡れること（ソースに無い＝ハルシネーション）。
+# 指標: groundedness = 回答中キーワードのうちソース本文に存在した割合。
 MIN_GROUNDEDNESS = 0.8
+
+# 守る品質: 幻覚抑制（範囲外は答えず拒否）。何も検索できないとき、回答を捏造せず
+# 「見つかりませんでした」で拒否する（REFUSAL_EVAL_CASES で検証）。
 REFUSAL_MARKER = "見つかりませんでした"
 
 class FakeAttachment:

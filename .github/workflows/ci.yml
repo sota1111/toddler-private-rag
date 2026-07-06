@@ -48,6 +48,7 @@ jobs:
           # coverage improves. Coverage config: backend/.coveragerc.
           python -m pytest -q \
             --ignore=tests/test_eval_ocr.py --ignore=tests/test_eval_rag.py \
+            --ignore=tests/test_eval_agent.py \
             --cov=app --cov-config=.coveragerc \
             --cov-report=term-missing --cov-fail-under=70
 
@@ -56,6 +57,11 @@ jobs:
   # so an accuracy regression (coverage/precision/F1, groundedness, refusal)
   # fails CI on its own. Because the Deploy workflow is triggered by CI success
   # (SOT-1469 A1), a failing evaluation-gate blocks the production deploy.
+  #
+  # SOT-1568: the Agent E2E Regression suite (test_eval_agent.py) also runs here.
+  # It gates the agent's own output quality — task generation coverage/precision,
+  # deadline back-calc accuracy, and ambiguity handling — so an agent regression
+  # fails this gate and blocks the production deploy, same as OCR/RAG.
   evaluation-gate:
     runs-on: ubuntu-latest
     defaults:
@@ -85,10 +91,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Evaluation regression gate (OCR + RAG accuracy thresholds)
+      - name: Evaluation regression gate (OCR + RAG + Agent E2E accuracy thresholds)
         run: |
           mkdir -p data
-          python -m pytest -q tests/test_eval_ocr.py tests/test_eval_rag.py
+          python -m pytest -q \
+            tests/test_eval_ocr.py tests/test_eval_rag.py tests/test_eval_agent.py
 
   frontend-checks:
     runs-on: ubuntu-latest

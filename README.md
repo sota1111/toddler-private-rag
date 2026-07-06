@@ -218,14 +218,19 @@ worker は 202 を即返して背景で `process_ocr`（OCR→構造化→エー
 - **CI** (`.github/workflows/ci.yml`) — 3 ジョブ構成: `backend-tests`（`pytest` +
   **カバレッジゲート** `--cov-fail-under=70`）、`evaluation-gate`（後述のエージェント性能評価ゲート）、
   `frontend-checks`（`eslint` + `typecheck/build` + **Playwright e2e**）。
-- **エージェント性能評価ゲート** (`evaluation-gate`) — おたより先回りエージェント（OCR→抽出→RAG）の
+- **エージェント性能評価ゲート** (`evaluation-gate`) — おたより先回りエージェントの
   **精度回帰を独立した必須ステータスチェック**として分離（`backend/tests/test_eval_ocr.py` /
-  `test_eval_rag.py`、golden dataset は `backend/tests/eval/dataset.py`）。閾値を割ると CI が落ち、
-  **CD（deploy-cloudrun）は CI 成功がゲート**のため本番デプロイもブロックされます。ゲートする指標:
+  `test_eval_rag.py` / `test_eval_agent.py`、golden dataset は `backend/tests/eval/dataset.py`）。
+  閾値を割ると CI が落ち、**CD（deploy-cloudrun）は CI 成功がゲート**のため本番デプロイもブロックされます。
+  ゲートする指標:
   - **OCR 精度** — 日付・持ち物の coverage（recall）に加え、**precision（誤検出ゼロ）** と **F1** を
     集約平均で下限ゲート。
   - **RAG 精度** — **top-source 正答率**・**keyword hit rate**・**groundedness**（回答語が取得ソースに
     追跡可能か）・**refusal**（空インデックス時は出典なし＋拒否応答を返す）を下限ゲート。
+  - **Agent E2E Regression** — おたより文 →（抽出→調査→締切逆算）→ 準備タスク生成の**一気通貫**を
+    golden ケースで回帰。**タスク生成の coverage/precision**（やること化の網羅性・過検出ゼロ）・
+    **締切逆算の一致率**（例 7/30→7/9）・**曖昧対応**（締切不明で日付を捏造しない／手続き名のみで
+    「推定（要確認）」導線／一般文で書類を湧かせない）を下限ゲート（`test_eval_agent.py`）。
 - **CD** (`.github/workflows/deploy-cloudrun.yml`) — **CI 成功を条件**に起動（`workflow_run`）し、
   **変更のあったサービスのみ**を Docker build → Artifact Registry push → Cloud Run deploy。
   backend は **canary デプロイ**（`--no-traffic --tag canary` で無トラフィック投入 → `/health`
@@ -251,6 +256,27 @@ worker は 202 を即返して背景で `process_ocr`（OCR→構造化→エー
   allowlist 制のメール/パスワードに加え、メール検証済み Google アカウントを許可。詳細は [12. 認証](#12-認証)）。
   アップロード画像は**申告 content-type を信用せず先頭バイトでマジックバイト検証**し、不一致は 400 で拒否、
   画像は **Pillow で再エンコードして EXIF/不正ペイロードを除去**（`backend/app/upload_security.py`）。
+
+### AI 品質ゲート一覧
+
+AI の品質（OCR / RAG / エージェント本体）を、**閾値割れ → CI 失敗 → 本番デプロイもブロック**という
+強制力のあるゲートとして CI に組み込んでいます。すべて `evaluation-gate` ジョブ（独立した必須ステータス
+チェック）で実行され、golden dataset は `backend/tests/eval/dataset.py`、閾値は初期 0.8 で実測に合わせて
+上方ラチェットします。
+
+| ゲート名 | 守る品質 | 主な指標 | 閾値 | 強制場所（CIジョブ / テスト） |
+| --- | --- | --- | --- | --- |
+| OCR 精度 | 読み取りの正確さ（取りこぼし/誤検出なし） | 日付・持ち物の coverage(recall) / precision / F1 | ≥ 0.8 | `evaluation-gate` / `test_eval_ocr.py` |
+| RAG 正答性 | 正しい根拠を最上位に引く | top-source 正答率 | ≥ 0.8 | `evaluation-gate` / `test_eval_rag.py` |
+| RAG 網羅性 | 必要情報を取りこぼさない | keyword hit rate（平均） | ≥ 0.8 | `evaluation-gate` / `test_eval_rag.py` |
+| RAG 根拠性 | 幻覚抑制（回答語が取得ソースに追跡可能） | groundedness | ≥ 0.8 | `evaluation-gate` / `test_eval_rag.py` |
+| RAG 拒否 | 範囲外は答えず拒否（捏造しない） | 空インデックスで出典なし＋拒否応答 | 必須 | `evaluation-gate` / `test_eval_rag.py` |
+| Agent タスク生成 | 「やること化」の網羅性・過検出ゼロ | task coverage / precision | ≥ 0.8 | `evaluation-gate` / `test_eval_agent.py` |
+| Agent 締切逆算 | 準備開始日の実用的な正確さ | 逆算日付の一致率（誤差 0 日、例 7/30→7/9） | ≥ 0.8 | `evaluation-gate` / `test_eval_agent.py` |
+| Agent 曖昧対応 | 安全な判断（捏造しない／推定は要確認／過検出しない） | 締切不明で日付非捏造 / 推定(要確認)導線 / 一般文で書類ゼロ | 必須 | `evaluation-gate` / `test_eval_agent.py` |
+
+> いずれのゲートも `evaluation-gate` の失敗として CI を落とし、**CD（deploy-cloudrun）は CI 成功が条件**の
+> ため、AI 品質の回帰はそのまま本番デプロイのブロックにつながります。
 
 ### 障害対応サイクル（検知 → 原因特定 → 処置 → 回復確認 → ポストモーテム）
 
