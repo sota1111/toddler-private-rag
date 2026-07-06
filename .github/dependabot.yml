@@ -6,12 +6,17 @@
 # compromised/tampered release is not pulled in the moment it is published. We
 # wait longer on major bumps (more likely to be a hijack target and higher blast
 # radius) and less on patches. This narrows the supply-chain window at no cost.
+#
+# SOT-1565: update frequency lowered from `weekly` to `monthly` to greatly reduce
+# the volume of dependency-update PRs. Note: Dependabot's `schedule.interval` only
+# supports daily/weekly/monthly natively — there is no "every 2 months" nor a fixed
+# start-date field — so `monthly` is the least-frequent native cadence available.
 version: 2
 updates:
   - package-ecosystem: pip
     directory: /backend
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
     cooldown:
       default-days: 5
@@ -25,7 +30,7 @@ updates:
   - package-ecosystem: npm
     directory: /frontend
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
     cooldown:
       default-days: 5
@@ -39,7 +44,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 5
     labels:
@@ -49,7 +54,7 @@ updates:
   - package-ecosystem: docker
     directory: /backend
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 5
     labels:
@@ -59,7 +64,7 @@ updates:
   - package-ecosystem: docker
     directory: /frontend
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 5
     labels:
