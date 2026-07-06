@@ -106,6 +106,15 @@ export const revertSplitDrafts = async (
   return response.data;
 };
 
+// SOT-1577: 「分割前のタスクに戻す」（本登録後版）。同一書類(source_info_id)から分割された本登録
+// タスク群を、未分割の1タスクへ置き換える。本登録後のタスク詳細画面の戻し導線。返り値は生成された未分割タスク。
+export const revertSplitRegistered = async (
+  sourceInfoId: number | string,
+): Promise<NurseryInfo> => {
+  const response = await api.post(`/info/${sourceInfoId}/revert-split-registered`);
+  return response.data;
+};
+
 // 仮登録を本登録(registered)に確定する (SOT-1113)
 export const finalizeInfo = async (id: number | string): Promise<NurseryInfo> => {
   const response = await api.post(`/info/${id}/finalize`);

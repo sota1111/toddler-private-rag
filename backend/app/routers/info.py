@@ -472,6 +472,64 @@ def revert_split_drafts(
     return created
 
 
+# SOT-1577: 「分割前のタスクに戻す」（本登録後版）。同一書類(source_info_id)から分割された
+# 本登録タスク群を、書類全体をまとめた未分割の1タスクへ置き換える。仮登録画面だけでなく、
+# 本登録後のタスク詳細画面にも「分割前に戻す」導線を出すためのエンドポイント。
+# 統合ロジックは draft 版と同じ merge_split_drafts_to_single を再利用する（重複ロジックを作らない）。
+@router.post("/{source_info_id}/revert-split-registered", response_model=schemas.NurseryInfoResponse)
+def revert_split_registered(
+    source_info_id: str,
+    background_tasks: BackgroundTasks,
+    repo: InfoRepository = Depends(get_info_repository),
+    current_user: str = Depends(get_current_user),
+):
+    # owner スコープ済み。当該書類由来の本登録タスクが無ければ 404。
+    group = repo.list_registered_by_source(source_info_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="No split tasks for this source document")
+
+    # 書類全体（元の登録レコード）を owner スコープで取得（数値でなければ None 扱い）。
+    source = None
+    try:
+        source = repo.get(source_info_id)
+    except (ValueError, TypeError):
+        source = None
+    source_dict = _draft_to_dict(source) if source is not None else None
+
+    merged = extraction.merge_split_drafts_to_single(
+        [_draft_to_dict(d) for d in group], source_dict
+    )
+
+    # 未分割の1タスクを作成（子ども/owner・元書類参照は分割タスクから継承）。draft 版と違い
+    # 本登録タスクなので registration_state は registered、status/priority は先頭タスクを継承する。
+    # owner はリクエスト経路のリポジトリが current user に強制するため、なりすましは効かない。
+    first = group[0]
+    created = repo.create(
+        schemas.NurseryInfoCreate(
+            title=merged["title"],
+            info_type=merged["info_type"],
+            content=merged["content"],
+            items=(merged["items"] or None),
+            date=(merged["date"] or None),
+            event_date=(merged["event_date"] or None),
+            child_id=getattr(first, "child_id", None),
+            owner_id=getattr(first, "owner_id", None),
+            source_info_id=str(source_info_id),
+            status=(getattr(first, "status", None) or "未確認"),
+            priority=(getattr(first, "priority", None) or "普通"),
+            registration_state="registered",
+        )
+    )
+
+    # 置換: 元の分割タスク群を削除する（owner スコープの delete）。
+    for d in group:
+        repo.delete(d.id)
+
+    # 本登録タスクなので通常の登録と同じくベクトル化して検索対象にする (SOT-1294)。best-effort。
+    background_tasks.add_task(index_info_id, getattr(created, "id", None))
+    return created
+
+
 # アーカイブ一覧 (SOT-1500)。"/{id}" より前に宣言してリテラルパスを優先させる。
 # アーカイブ済み(is_archived=True)の本登録項目のみを返す。やることリストと同様に一覧表示する。
 @router.get("/archived", response_model=List[schemas.NurseryInfoResponse])

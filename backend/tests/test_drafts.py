@@ -163,3 +163,38 @@ def test_create_draft_with_empty_string_dates(monkeypatch):
     assert upd.status_code == 200, upd.text
     assert upd.json()["date"] is None
     assert upd.json()["event_date"] == "2026-07-01"
+
+
+# --- SOT-1577: 本登録後の「分割前のタスクに戻す」（revert-split-registered）---------------
+def test_revert_split_registered_merges_group_into_single():
+    """同一書類(source_info_id)から分割された本登録タスク群を、未分割の1タスクへまとめ直す。"""
+    src = _create(title="元書類", content="全文まとめ")
+    sid = str(src["id"])
+    a = _create(title="タスクA", content="Aの内容", source_info_id=sid)
+    b = _create(title="タスクB", content="Bの内容", source_info_id=sid)
+
+    resp = client.post(f"/api/info/{sid}/revert-split-registered")
+    assert resp.status_code == 200, resp.text
+    merged = resp.json()
+    assert merged["registration_state"] == "registered"
+    assert str(merged["source_info_id"]) == sid
+
+    titles = {i["title"] for i in client.get("/api/info/").json()}
+    # 元の分割タスクは置き換えられて消える。元書類レコードは残る。
+    assert "タスクA" not in titles
+    assert "タスクB" not in titles
+    assert "元書類" in titles
+    assert merged["id"] not in {a["id"], b["id"]}
+    # 同一書類由来の本登録タスクは統合後1件（= merged）だけになる。
+    same_source = [
+        i for i in client.get("/api/info/").json()
+        if str(i.get("source_info_id") or "") == sid
+    ]
+    assert len(same_source) == 1
+    assert same_source[0]["id"] == merged["id"]
+
+
+def test_revert_split_registered_404_when_no_group():
+    """当該書類由来の本登録タスクが無ければ 404。"""
+    resp = client.post("/api/info/999999/revert-split-registered")
+    assert resp.status_code == 404, resp.text

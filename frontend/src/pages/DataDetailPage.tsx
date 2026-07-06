@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getInfoById, deleteInfo, updateInfo, getAttachmentFileUrl, getAttachmentTranscription, rescheduleDeadline } from '../api';
-import type { Attachment } from '../types';
+import { getInfoById, deleteInfo, updateInfo, getAttachmentFileUrl, getAttachmentTranscription, rescheduleDeadline, getInfoList, revertSplitRegistered } from '../api';
+import type { Attachment, NurseryInfo } from '../types';
 import { STATUS_TYPES } from './infoFormOptions';
 import { useI18n } from '../i18n/useI18n';
 import { useConfirm } from '../components/confirmDialogContext';
@@ -173,6 +173,43 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
     queryFn: () => getInfoById(sourceInfoId),
     enabled: Boolean(sourceInfoId),
   });
+
+  // SOT-1577: 本登録後のタスク詳細でも「分割前のタスクに戻す」導線を出す。仮登録画面と同じく、
+  // 同一書類(source_info_id)から2件以上に分割された本登録タスクがある場合のみ表示する。
+  // 兄弟件数は本登録一覧(RegisteredListPage と同じ queryKey)から数え、キャッシュを共有する。
+  const { data: registeredList } = useQuery({
+    queryKey: ['info', 'registered'],
+    queryFn: () => getInfoList(),
+    enabled: Boolean(sourceInfoId),
+  });
+  const splitSiblingCount = sourceInfoId
+    ? (registeredList ?? []).filter(
+        (r: NurseryInfo) => String(r.source_info_id ?? '') === sourceInfoId,
+      ).length
+    : 0;
+  const isSplitGroup = sourceInfoId !== '' && splitSiblingCount >= 2;
+
+  // SOT-1577: 押下でこのタスクを含む分割グループを未分割の1タスクへまとめ直す。まとめ直すと
+  // 現在のタスクは削除されるため、生成された未分割タスクの詳細へ遷移する。
+  const revertSplitMutation = useMutation({
+    mutationFn: () => revertSplitRegistered(sourceInfoId),
+    onSuccess: (merged) => {
+      queryClient.invalidateQueries({ queryKey: ['info'] });
+      queryClient.invalidateQueries({ queryKey: ['tomorrow'] });
+      queryClient.invalidateQueries({ queryKey: ['weekly'] });
+      queryClient.invalidateQueries({ queryKey: ['pending'] });
+      const nextId = merged?.id != null ? String(merged.id) : '';
+      navigate(nextId ? `/data/${nextId}` : '/registered');
+    },
+    onError: () => setDeleteError(t('drafts.actionFail')),
+  });
+
+  const handleRevertSplit = async () => {
+    if (revertSplitMutation.isPending || !sourceInfoId) return;
+    if (!(await confirm(t('drafts.confirmRevertSplit')))) return;
+    setDeleteError(null);
+    revertSplitMutation.mutate();
+  };
 
   // SOT-1337: 一覧から開いた項目のステータスだけを、編集モードに入らず即時変更する。
   const statusMutation = useMutation({
@@ -573,6 +610,22 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
             <div className="mb-4">
               <h2 className="text-sm font-semibold text-muted-foreground mb-1">{t('records.content')}</h2>
               <LinkifiedText text={item.content} className="whitespace-pre-wrap break-words text-foreground" />
+            </div>
+          )}
+
+          {/* SOT-1577: 「分割前のタスクに戻す」ボタン。本文と、写真リンク／アーカイブ行の間に配置する。
+              仮登録画面(DraftsPage)と同じく、同一書類から2件以上に分割された本登録タスクの場合のみ表示し、
+              押下でその分割グループを未分割の1タスクへまとめ直す。非写真タスク・編集モード以外で表示。 */}
+          {!hasPhoto && !isEditing && isSplitGroup && (
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={handleRevertSplit}
+                disabled={revertSplitMutation.isPending}
+                className="px-4 py-2 text-sm font-medium text-brand-strong bg-surface border border-brand rounded-md hover:bg-accent-bg disabled:opacity-50"
+              >
+                {revertSplitMutation.isPending ? t('drafts.working') : t('drafts.revertSplit')}
+              </button>
             </div>
           )}
 
