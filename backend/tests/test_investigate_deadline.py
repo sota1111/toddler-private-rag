@@ -76,6 +76,31 @@ def test_investigate_includes_title_in_safe_text(monkeypatch):
     assert captured["safe_text"].startswith("就労証明書の提出")
 
 
+def test_investigate_passes_issue_date_from_created_at(monkeypatch):
+    """SOT-1567: 締切調査は登録日時(created_at)を発行日(issue_date)として渡す。
+
+    これにより本文検出の締切を発行月コンテキストで整合チェック・OCR誤読補正できる。
+    回帰: 修正前は issue_date を渡しておらず、本番フローでは発行月補正が発火しなかった。
+    """
+    import datetime
+
+    captured = {}
+
+    def fake_drafts(safe_text, detected_dates=None, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(submission_agent, "build_submission_task_drafts", fake_drafts)
+
+    info = _create(title="就労証明書の提出", content="メモ")
+
+    resp = client.post(f"/api/info/{info['id']}/investigate-deadline")
+    assert resp.status_code == 200, resp.text
+
+    # issue_date が date として渡っていること（登録日時から導出）。
+    assert isinstance(captured.get("issue_date"), datetime.date)
+
+
 def test_investigate_excludes_attachment_ocr(monkeypatch):
     """SOT-1406 再オープン: 添付写真のOCR原文は調査対象テキストに含めない。"""
     captured = {}
@@ -218,7 +243,13 @@ def test_forward_generated_group_is_reschedulable(monkeypatch):
     タスク1件しか動かなかった（=「他のやることの日付が変わらない」）。
     """
     # 最終提出期限を持たない（due_date が空の）書類を、手順つきで生成させる。
-    def fake_extract(safe_text, detected_dates=None, language="ja", final_due_iso=None):
+    def fake_extract(
+        safe_text,
+        detected_dates=None,
+        language="ja",
+        final_due_iso=None,
+        issue_date=None,
+    ):
         return [
             {
                 "name": "在籍証明書",

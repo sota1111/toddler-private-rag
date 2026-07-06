@@ -16,6 +16,7 @@ import hashlib
 import json
 import logging
 import re
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from . import ai_client, clock
@@ -369,30 +370,204 @@ def organize_content(
 # 写真アップロード後のサーバ側 background task の両方から呼べる純関数として提供する。
 
 
-def normalize_date(raw: Optional[str]) -> Optional[str]:
+def normalize_date(
+    raw: Optional[str], *, reference_year: Optional[int] = None
+) -> Optional[str]:
     """検出した日付文字列をベストエフォートで ISO (YYYY-MM-DD) に正規化する。
 
-    対応: YYYY-MM-DD / YYYY/M/D / M月D日 (年は当年と仮定)。
+    対応: YYYY-MM-DD / YYYY/M/D / M月D日 / M/D(年なしスラッシュ, 例 7/31; SOT-1567 提案4)。
+    年が明示されない表記(M月D日 / M/D)は ``reference_year``（無指定なら発行年=当年）で補完する。
     確実に解釈できない場合は None を返す。
     """
     if not raw:
         return None
     s = raw.strip()
+    base_year = reference_year if reference_year else clock.today().year
 
     m = re.match(r"^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$", s)
     if m:
         year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
     else:
         m = re.match(r"^(\d{1,2})月(\d{1,2})日$", s)
-        if not m:
-            return None
-        year = clock.today().year
-        month, day = int(m.group(1)), int(m.group(2))
+        if m:
+            year = base_year
+            month, day = int(m.group(1)), int(m.group(2))
+        else:
+            # SOT-1567 提案4: M/D(年なしスラッシュ)。年は発行年(reference_year)で補完する。
+            m = re.match(r"^(\d{1,2})/(\d{1,2})$", s)
+            if not m:
+                return None
+            year = base_year
+            month, day = int(m.group(1)), int(m.group(2))
 
     try:
         return datetime.date(year, month, day).isoformat()
     except ValueError:
         return None
+
+
+# --- SOT-1567: OCR日付誤読の発行月コンテキスト補正 --------------------------------
+# 「7月号のおたよりの締切が『1/31』に化ける（7→1 誤読）」のような、字形の似た文字による
+# OCR日付誤認識を、発行月コンテキストで検出・補正するための純粋関数群。
+
+# 提案3: 日付フィールドに限定した OCR 混同文字の正規化マップ。
+# 和文OCRで「数字と誤認されやすい非数字」(O/〇→0, l/｜→1, Z→2, S→5, B→8 等)と全角数字だけを
+# 半角数字へ寄せる。本文全体には適用しない（過補正回避）。
+# 注意: 7↔1 のような「数字どうし」の混同はここでは直さない（どちらも妥当な数字で決定的に直せない）。
+# それは提案1(check_deadline_consistency)＋提案2(LLM補正)で扱う。
+_DATE_CHAR_CONFUSIONS = {
+    "O": "0", "o": "0", "〇": "0", "○": "0", "◯": "0", "Ｏ": "0",
+    "l": "1", "I": "1", "i": "1", "｜": "1", "|": "1", "！": "1", "Ｉ": "1",
+    "Z": "2", "z": "2", "Ｚ": "2",
+    "S": "5", "s": "5", "Ｓ": "5",
+    "B": "8", "Ｂ": "8",
+    "g": "9", "q": "9",
+    "０": "0", "１": "1", "２": "2", "３": "3", "４": "4",
+    "５": "5", "６": "6", "７": "7", "８": "8", "９": "9",
+    "／": "/", "－": "-", "ー": "-", "　": " ",
+}
+
+
+def normalize_date_field_confusions(raw: Optional[str]) -> str:
+    """日付フィールド文字列に限定して OCR 混同文字を数字へ正規化する (SOT-1567 提案3)。
+
+    区切り(月日年 / スラッシュ / ハイフン)や漢字は保持し、数字と紛らわしい非数字・全角数字だけを
+    写像する。本文全体ではなく「日付として扱う短い文字列」にのみ適用すること（過補正回避）。
+    純粋関数。
+    """
+    if not raw:
+        return ""
+    return "".join(_DATE_CHAR_CONFUSIONS.get(ch, ch) for ch in raw)
+
+
+# 提案3の候補スキャン用: 「数字またはその字形類似字」1文字にマッチする文字クラス。
+# _DATE_CHAR_CONFUSIONS のうち「数字へ写る文字」(=区切り記号は除く)＋半角数字から生成する
+# （マップと二重管理にしないため）。区切り(月/日/スラッシュ)は別に扱う。
+_CONFUSABLE_DIGIT_CHARS = "0123456789" + "".join(
+    k for k, v in _DATE_CHAR_CONFUSIONS.items() if v.isdigit()
+)
+_CONFUSABLE_DIGIT_CLASS = "[" + re.escape(_CONFUSABLE_DIGIT_CHARS) + "]"
+
+# 混同文字を含む「日付らしい短いトークン」だけを拾う候補パターン (SOT-1567 提案3)。
+# M/D(スラッシュ, 半/全角) と M月D日 の2形。前後が英数字/スラッシュのトークンは対象外にして、
+# 単語の一部や YYYY/M/D の断片を拾わないようにする（過補正回避＝日付フィールド限定の担保）。
+_CONFUSABLE_DATE_TOKEN_RE = re.compile(
+    r"(?<![0-9A-Za-z/／])(?:"
+    + _CONFUSABLE_DIGIT_CLASS + r"{1,2}[/／]" + _CONFUSABLE_DIGIT_CLASS + r"{1,2}"
+    + r"|"
+    + _CONFUSABLE_DIGIT_CLASS + r"{1,2}月" + _CONFUSABLE_DIGIT_CLASS + r"{1,2}日"
+    + r")(?![0-9A-Za-z/／])"
+)
+
+
+def find_confusable_date_tokens(text: Optional[str]) -> List[str]:
+    """本文から「混同文字を含む日付らしいトークン」を拾い、混同正規化した文字列で返す (SOT-1567 提案3)。
+
+    数字と字形の紛らわしい文字(O/l/S/B 等)・全角数字・全角スラッシュを含む短い日付トークン
+    (``M/D`` / ``M月D日``)だけを対象に ``normalize_date_field_confusions`` で数字へ寄せた文字列を
+    返す。本文全体には広げないため過補正しない。返す文字列は ``normalize_date`` でそのまま解釈できる
+    形（例: ``7／3l`` → ``7/31``）。順序保持・重複除去。純粋関数・never-throw。
+    """
+    if not text:
+        return []
+    out: List[str] = []
+    try:
+        for raw in _CONFUSABLE_DATE_TOKEN_RE.findall(text):
+            fixed = normalize_date_field_confusions(raw)
+            if fixed and fixed not in out:
+                out.append(fixed)
+    except Exception as e:  # noqa: BLE001 - best-effort
+        logger.warning("confusable date token scan failed: %s", e)
+        return []
+    return out
+
+
+# 提案1: 締切月と発行月の差(月数)がこれを超えたら「不自然」とみなす閾値。提出物の締切は通常、
+# 発行から数か月以内。半年(6か月)を超える乖離は誤読を疑う。
+_DEADLINE_MONTH_GAP_THRESHOLD = 6
+
+# 字形が似ており OCR で入れ替わりやすい1桁数字の対（補正候補の決定的導出に使う）。
+_DIGIT_CONFUSION_PAIRS = {
+    "1": {"7"},
+    "7": {"1"},
+    "0": {"8", "6", "9"},
+    "8": {"0", "6", "3"},
+    "3": {"8"},
+    "5": {"6", "8"},
+    "6": {"0", "5", "8"},
+    "9": {"0", "4"},
+}
+
+
+@dataclass
+class DateContextFinding:
+    """発行月コンテキストに対する締切日の整合判定結果 (SOT-1567 提案1)。"""
+
+    suspicious: bool
+    reason: str = ""
+    # 決定的に補正候補が導ける場合の ISO（例: 7↔1 誤読 → 発行月へ寄せた候補）。無ければ None。
+    suggestion: Optional[str] = None
+
+
+def _suggest_issue_month_candidate(
+    deadline: datetime.date, issue_date: datetime.date
+) -> Optional[str]:
+    """過去に化けた締切について、月を発行月へ差し替えた補正候補 ISO を決定的に導く。
+
+    締切月と発行月が「字形の似た1桁数字の混同」で説明でき、月を発行月へ替えると発行日以降に
+    なる場合のみ候補を返す（例: 発行=7月・締切=1/31 → 7/31）。それ以外は None（憶測しない）。
+    """
+    d_month, i_month = str(deadline.month), str(issue_date.month)
+    if d_month == i_month:
+        return None
+    # 1桁月どうしの字形混同でなければ決定的候補は出さない（例: 12月↔2月は桁数違い）。
+    if i_month not in _DIGIT_CONFUSION_PAIRS.get(d_month, set()):
+        return None
+    try:
+        candidate = datetime.date(issue_date.year, issue_date.month, deadline.day)
+    except ValueError:
+        return None
+    return candidate.isoformat() if candidate >= issue_date else None
+
+
+def check_deadline_consistency(
+    deadline_iso: Optional[str],
+    issue_date: Optional[datetime.date],
+    *,
+    month_gap_threshold: int = _DEADLINE_MONTH_GAP_THRESHOLD,
+) -> DateContextFinding:
+    """締切日が発行日(発行月コンテキスト)と整合するかを決定的に判定する (SOT-1567 提案1)。
+
+    - 締切が発行日より過去 → 疑わしい（例: 7月発行なのに締切 1/31）。
+    - 締切月と発行月の差が ``month_gap_threshold`` か月を超える → 疑わしい。
+    補正はここでは行わず、疑わしさのフラグと（可能なら決定的な）補正候補のみ返す。検出＋トリガ専用で、
+    LLM補正(提案2)を呼ぶかどうかのゲートに使う。情報不足(発行日/締切が無い・解釈不能)のときは
+    suspicious=False を返す（過検出しない）。純粋関数。
+    """
+    if not deadline_iso or issue_date is None:
+        return DateContextFinding(False)
+    try:
+        deadline = datetime.date.fromisoformat(deadline_iso)
+    except (ValueError, TypeError):
+        return DateContextFinding(False)
+
+    if deadline < issue_date:
+        return DateContextFinding(
+            True,
+            reason=f"締切({deadline.isoformat()})が発行日({issue_date.isoformat()})より過去です",
+            suggestion=_suggest_issue_month_candidate(deadline, issue_date),
+        )
+
+    gap = abs((deadline.year - issue_date.year) * 12 + (deadline.month - issue_date.month))
+    if gap > month_gap_threshold:
+        return DateContextFinding(
+            True,
+            reason=(
+                f"締切月({deadline.year}-{deadline.month:02d})と"
+                f"発行月({issue_date.year}-{issue_date.month:02d})の差が{gap}か月と大きすぎます"
+            ),
+        )
+    return DateContextFinding(False)
 
 
 def guess_info_type(text: str, has_items: bool) -> str:

@@ -15,11 +15,12 @@ import datetime
 import json
 import logging
 import re
+import time
 import urllib.parse
 import uuid
 from typing import List, Optional
 
-from . import ai_client, extraction
+from . import ai_client, clock, extraction
 
 logger = logging.getLogger(__name__)
 
@@ -54,28 +55,143 @@ _DATE_PATTERNS = (
     r"\d{4}[-/]\d{1,2}[-/]\d{1,2}",          # 2026-07-31, 2026/7/31
     r"\d{1,2}月\d{1,2}日",                   # 7月31日（年は当年と仮定）
     r"(?:令和|平成|昭和)\d{1,2}年\d{1,2}月\d{1,2}日",  # 令和8年7月31日
+    # SOT-1567 提案4: M/D(年なしスラッシュ, 例 7/31)。YYYY/M/D の一部を二重検出しないよう
+    # 前後が数字/スラッシュのときは拾わない。年は発行年で補完（normalize_date 側で処理）。
+    r"(?<![\d/])\d{1,2}/\d{1,2}(?![\d/])",
 )
 
 
-def _detect_deadline_iso(text: str) -> str:
+def _detect_deadline_iso(
+    text: str, issue_date: Optional[datetime.date] = None
+) -> str:
     """本文中の日付のうち最も遅い日付を ISO で返す（提出期限の代替アンカー）。
 
     LLM が書類に締切を紐づけられなかった場合でも、おたよりに書かれた締切（例: 7/31）を
     各手順の逆算アンカーとして利用するためのフォールバック。見つからなければ ""。常に never-throw。
+
+    SOT-1567: ``issue_date``（おたよりの発行日/登録日）が与えられた場合は、検出した締切を発行月
+    コンテキストで整合チェックし、OCR誤読（例: 7→1 で 7月号なのに 1/31）が疑わしいときだけ補正する。
     """
     if not text:
         return ""
     isos: List[str] = []
     try:
+        ref_year = issue_date.year if issue_date else None
         for pattern in _DATE_PATTERNS:
             for raw in re.findall(pattern, text):
-                iso = extraction.normalize_date(raw)
+                iso = extraction.normalize_date(raw, reference_year=ref_year)
                 if iso:
                     isos.append(iso)
+        # SOT-1567 提案3: 混同文字を含む日付トークン(例 7／3l)も、日付フィールド限定で
+        # 混同正規化してから拾う（本文全体には広げない）。
+        for token in extraction.find_confusable_date_tokens(text):
+            iso = extraction.normalize_date(token, reference_year=ref_year)
+            if iso:
+                isos.append(iso)
     except Exception as e:  # noqa: BLE001 - best-effort
         logger.warning("deadline date detection failed: %s", e)
         return ""
-    return max(isos) if isos else ""
+    best = max(isos) if isos else ""
+    if best and issue_date is not None:
+        best = _reconcile_deadline_with_issue(text, best, issue_date)
+    return best
+
+
+def _reconcile_deadline_with_issue(
+    text: str, deadline_iso: str, issue_date: datetime.date, language: str = "ja"
+) -> str:
+    """発行月コンテキストで締切日を整合チェックし、疑わしい時のみ補正する (SOT-1567 提案1+2)。
+
+    1) ``extraction.check_deadline_consistency`` で決定的に「疑わしい」かを判定（提案1＝ゲート）。
+    2) 疑わしくなければ原文をそのまま返す（正常な日付は誤補正しない）。
+    3) 疑わしければ、まず決定的な補正候補(例: 7↔1 の月差し替え=7/31)を採用。無ければ LLM に
+       発行月コンテキストで補正/要確認を依頼（提案2）。LLM 失敗/要確認/不明時は原文維持。
+    常に never-throw。
+    """
+    try:
+        finding = extraction.check_deadline_consistency(deadline_iso, issue_date)
+    except Exception as e:  # noqa: BLE001 - best-effort
+        logger.warning("deadline consistency check failed: %s", e)
+        return deadline_iso
+    if not finding.suspicious:
+        return deadline_iso
+    logger.info(
+        "suspicious deadline vs issue date: deadline=%s issue=%s (%s)",
+        deadline_iso,
+        issue_date.isoformat(),
+        finding.reason,
+    )
+    if finding.suggestion:
+        return finding.suggestion
+    corrected = _llm_correct_deadline(text, deadline_iso, issue_date, language)
+    return corrected or deadline_iso
+
+
+def _llm_correct_deadline(
+    text: str, candidate_iso: str, issue_date: datetime.date, language: str = "ja"
+) -> str:
+    """疑わしい締切日のみ、OCRテキスト＋発行月コンテキストを LLM に渡して補正する (SOT-1567 提案2)。
+
+    高信頼で補正できた場合のみ ISO を返す。要確認/不明/失敗時は "" を返し、呼び出し側が原文を維持する。
+    本リポの never-throw / graceful-fallback 方針に従い、例外は投げない。補正結果も「発行日以降」で
+    あることを最終ゲートし、LLM が過去日へ逸脱した場合は採用しない。
+    """
+    if not candidate_iso or not ai_client.gemini_available():
+        return ""
+    started = time.perf_counter()
+    ok = False
+    try:
+        client = ai_client.get_genai_client()
+        model = ai_client.get_model_name()
+        prompt = (
+            "You correct a likely OCR misread of a submission DEADLINE date on a Japanese "
+            "nursery-school notice. Similar-looking digits are often confused (e.g. 7 misread as 1).\n"
+            f"- Notice issue date (発行日): {issue_date.isoformat()}\n"
+            f"- Today: {clock.today().isoformat()}\n"
+            f"- OCR-detected deadline (suspicious): {candidate_iso}\n"
+            "The real deadline must be ON OR AFTER the issue date (a notice never asks to submit in the "
+            "past). Using the OCR body text and the issue month as context, decide the most likely "
+            "corrected deadline.\n"
+            "Output ONLY a JSON object: "
+            '{"corrected_date":"YYYY-MM-DD or empty string","needs_review":true or false}. '
+            "Set corrected_date only when highly confident; otherwise empty string with "
+            "needs_review=true.\n\n"
+            f"# OCR body\n{(text or '')[:2000]}\n\n# Output (JSON only)"
+        )
+        cfg = ai_client.default_generate_config(max_output_tokens=256)
+
+        def _gen():
+            if cfg is not None:
+                return client.models.generate_content(
+                    model=model, contents=prompt, config=cfg
+                )
+            return client.models.generate_content(model=model, contents=prompt)
+
+        response = ai_client.with_retry(_gen)
+        raw = (getattr(response, "text", "") or "").strip()
+        data = _extract_json_object(raw)
+        ok = True
+        corrected = extraction.normalize_date(
+            str(data.get("corrected_date", "")).strip(),
+            reference_year=issue_date.year,
+        )
+        if corrected:
+            try:
+                if datetime.date.fromisoformat(corrected) >= issue_date:
+                    return corrected
+            except ValueError:
+                return ""
+        return ""
+    except Exception as e:  # noqa: BLE001 - never-throw
+        logger.warning("LLM deadline correction failed: %s", e)
+        return ""
+    finally:
+        ai_client.log_llm_call(
+            "date_sanity_correction",
+            ai_client.get_model_name(),
+            (time.perf_counter() - started) * 1000,
+            ok,
+        )
 
 
 def _extract_json_object(text: str) -> dict:
@@ -444,6 +560,7 @@ def extract_submission_documents(
     detected_dates: Optional[List[str]] = None,
     language: str = "ja",
     final_due_iso: Optional[str] = None,
+    issue_date: Optional[datetime.date] = None,
 ) -> List[dict]:
     """提出書類を抽出し、grounding で公式情報を付与した dict のリストを返す。
 
@@ -475,7 +592,8 @@ def extract_submission_documents(
     # タスク自身に設定済みの最終期限（最優先アンカー）。
     explicit_due_iso = extraction.normalize_date(final_due_iso) if final_due_iso else ""
     # LLM が書類に締切を紐づけられなかったときの逆算アンカー（本文の最も遅い日付）。
-    fallback_due_iso = _detect_deadline_iso(safe_text)
+    # SOT-1567: 発行日(issue_date)があれば発行月コンテキストで締切の OCR 誤読を補正する。
+    fallback_due_iso = _detect_deadline_iso(safe_text, issue_date)
 
     enriched: List[dict] = []
     for doc in docs:
@@ -734,6 +852,7 @@ def build_submission_task_drafts(
     language: str = "ja",
     final_due_iso: Optional[str] = None,
     municipality: Optional[str] = None,
+    issue_date: Optional[datetime.date] = None,
 ) -> List[dict]:
     """提出書類ごとの準備タスク draft（build_task_drafts と同形 + due_date/tags）を返す。
 
@@ -748,10 +867,13 @@ def build_submission_task_drafts(
     ``municipality`` は登録/設定値の市町村（SOT-1405）。市区町村の窓口/公式ホームページから様式を
     ダウンロードする手順がある場合に、その市町村のダウンロードページ検索リンクを本文へ付与する。
     未設定（空/None）のときはリンクを付与しない。
+
+    ``issue_date`` はおたよりの発行日/登録日（SOT-1567）。与えられると本文検出の締切を発行月
+    コンテキストで整合チェックし、OCR誤読（例: 7→1 の 1/31）を疑わしい時だけ補正する。
     """
     try:
         docs = extract_submission_documents(
-            safe_text, detected_dates, language, final_due_iso
+            safe_text, detected_dates, language, final_due_iso, issue_date
         )
     except Exception as e:  # noqa: BLE001 - graceful degradation
         logger.warning("build_submission_task_drafts failed: %s", e)

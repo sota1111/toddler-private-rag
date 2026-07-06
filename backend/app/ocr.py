@@ -251,11 +251,20 @@ def build_extraction(raw_text: str) -> "DocumentExtraction":
         r"\d{4}[-/]\d{1,2}[-/]\d{1,2}",  # 2023-01-01, 2023/1/1
         r"\d{1,2}月\d{1,2}日",            # 1月1日
         r"(?:令和|平成|昭和)\d{1,2}年\d{1,2}月\d{1,2}日", # 令和5年1月1日
+        # SOT-1567 提案4: M/D(年なしスラッシュ, 例 7/31)。前後が数字/スラッシュのときは
+        # YYYY/M/D の一部なので拾わない（負の先読み/後読みで二重検出を防ぐ）。年は発行年で補完。
+        r"(?<![\d/])\d{1,2}/\d{1,2}(?![\d/])",
     ]
     detected_dates = []
     for pattern in date_patterns:
         matches = re.findall(pattern, raw_text)
         detected_dates.extend(matches)
+
+    # SOT-1567 提案3: 混同文字を含む日付らしいトークン(例 7／3l)を、日付フィールド限定で
+    # 混同正規化してから拾う（本文全体には広げない＝過補正回避）。正規化後の文字列(例 7/31)を
+    # 候補に加え、下流の normalize_date でそのまま解釈できるようにする。
+    from . import extraction
+    detected_dates.extend(extraction.find_confusable_date_tokens(raw_text))
     
     # Item detection (best effort)
     # Lines starting with bullet points
