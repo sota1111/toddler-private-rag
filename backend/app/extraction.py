@@ -440,6 +440,48 @@ def normalize_date_field_confusions(raw: Optional[str]) -> str:
     return "".join(_DATE_CHAR_CONFUSIONS.get(ch, ch) for ch in raw)
 
 
+# 提案3の候補スキャン用: 「数字またはその字形類似字」1文字にマッチする文字クラス。
+# _DATE_CHAR_CONFUSIONS のうち「数字へ写る文字」(=区切り記号は除く)＋半角数字から生成する
+# （マップと二重管理にしないため）。区切り(月/日/スラッシュ)は別に扱う。
+_CONFUSABLE_DIGIT_CHARS = "0123456789" + "".join(
+    k for k, v in _DATE_CHAR_CONFUSIONS.items() if v.isdigit()
+)
+_CONFUSABLE_DIGIT_CLASS = "[" + re.escape(_CONFUSABLE_DIGIT_CHARS) + "]"
+
+# 混同文字を含む「日付らしい短いトークン」だけを拾う候補パターン (SOT-1567 提案3)。
+# M/D(スラッシュ, 半/全角) と M月D日 の2形。前後が英数字/スラッシュのトークンは対象外にして、
+# 単語の一部や YYYY/M/D の断片を拾わないようにする（過補正回避＝日付フィールド限定の担保）。
+_CONFUSABLE_DATE_TOKEN_RE = re.compile(
+    r"(?<![0-9A-Za-z/／])(?:"
+    + _CONFUSABLE_DIGIT_CLASS + r"{1,2}[/／]" + _CONFUSABLE_DIGIT_CLASS + r"{1,2}"
+    + r"|"
+    + _CONFUSABLE_DIGIT_CLASS + r"{1,2}月" + _CONFUSABLE_DIGIT_CLASS + r"{1,2}日"
+    + r")(?![0-9A-Za-z/／])"
+)
+
+
+def find_confusable_date_tokens(text: Optional[str]) -> List[str]:
+    """本文から「混同文字を含む日付らしいトークン」を拾い、混同正規化した文字列で返す (SOT-1567 提案3)。
+
+    数字と字形の紛らわしい文字(O/l/S/B 等)・全角数字・全角スラッシュを含む短い日付トークン
+    (``M/D`` / ``M月D日``)だけを対象に ``normalize_date_field_confusions`` で数字へ寄せた文字列を
+    返す。本文全体には広げないため過補正しない。返す文字列は ``normalize_date`` でそのまま解釈できる
+    形（例: ``7／3l`` → ``7/31``）。順序保持・重複除去。純粋関数・never-throw。
+    """
+    if not text:
+        return []
+    out: List[str] = []
+    try:
+        for raw in _CONFUSABLE_DATE_TOKEN_RE.findall(text):
+            fixed = normalize_date_field_confusions(raw)
+            if fixed and fixed not in out:
+                out.append(fixed)
+    except Exception as e:  # noqa: BLE001 - best-effort
+        logger.warning("confusable date token scan failed: %s", e)
+        return []
+    return out
+
+
 # 提案1: 締切月と発行月の差(月数)がこれを超えたら「不自然」とみなす閾値。提出物の締切は通常、
 # 発行から数か月以内。半年(6か月)を超える乖離は誤読を疑う。
 _DEADLINE_MONTH_GAP_THRESHOLD = 6

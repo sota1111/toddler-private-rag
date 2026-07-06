@@ -495,6 +495,12 @@ def investigate_deadline(
     # その市町村のダウンロードページ検索リンクを生成タスク本文へ付与するために渡す。
     municipality = (payload.municipality if payload else None) or None
 
+    # SOT-1567: おたよりの発行日/登録日（登録月コンテキスト）。締切の OCR 誤読（例 7→1 で
+    # 7月号なのに 1/31）を発行月コンテキストで整合チェック・補正するために渡す。登録日時
+    # (created_at) を発行日として用いる（無ければ本日）。
+    created_at = getattr(db_info, "created_at", None)
+    issue_date = created_at.date() if hasattr(created_at, "date") else clock.today()
+
     created_ids: List = []
     try:
         sub_drafts = submission_agent.build_submission_task_drafts(
@@ -503,6 +509,7 @@ def investigate_deadline(
             language="ja",
             final_due_iso=final_due_iso,
             municipality=municipality,
+            issue_date=issue_date,
         )
         # SOT-1411 再オープン対応: 生成した付随タスク(子)を1グループに束ね、基準日(最終提出期限)を
         # 基準にオフセットを再計算する。group_id が返れば、後段で元タスク(親)を同グループのアンカー

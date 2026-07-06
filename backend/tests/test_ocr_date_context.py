@@ -78,6 +78,36 @@ def test_confusion_then_normalize_recovers_date():
     assert extraction.normalize_date(fixed, reference_year=2026) == "2026-07-31"
 
 
+def test_find_confusable_date_tokens_recovers_slash_token():
+    # 混同文字(全角スラッシュ＋末尾 l)を含む日付トークンを、混同正規化した文字列で拾う。
+    assert extraction.find_confusable_date_tokens("しめきりは 7／3l です") == ["7/31"]
+
+
+def test_find_confusable_date_tokens_ignores_full_date_fragment():
+    # YYYY/M/D の断片(26/7 や 7/31)を混同トークンとして二重に拾わない。
+    assert extraction.find_confusable_date_tokens("2026/7/31 が締切です") == []
+
+
+def test_find_confusable_date_tokens_ignores_plain_text():
+    # 区切り(スラッシュ/月日)を伴わない普通の文章から日付を捏造しない（過補正回避）。
+    assert extraction.find_confusable_date_tokens("持ち物を用意してください") == []
+
+
+def test_detect_deadline_iso_recovers_confusable_token():
+    # 提案3の本番経路: _detect_deadline_iso が混同文字トークン 7／3l を締切として拾う。
+    text = "提出締切は 7／3l です。"
+    iso = submission_agent._detect_deadline_iso(text, datetime.date(2026, 7, 5))
+    assert iso == "2026-07-31"
+
+
+def test_build_extraction_detects_confusable_token():
+    # 提案3の本番経路: build_extraction が混同文字トークンを正規化して検出日付に含める。
+    from app import ocr
+
+    doc = ocr.build_extraction("しめきりは 7／3l です")
+    assert "7/31" in doc.detected_dates
+
+
 # --- 提案1: 発行月コンテキストの整合チェック --------------------------------------
 
 

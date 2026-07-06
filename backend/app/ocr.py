@@ -259,6 +259,12 @@ def build_extraction(raw_text: str) -> "DocumentExtraction":
     for pattern in date_patterns:
         matches = re.findall(pattern, raw_text)
         detected_dates.extend(matches)
+
+    # SOT-1567 提案3: 混同文字を含む日付らしいトークン(例 7／3l)を、日付フィールド限定で
+    # 混同正規化してから拾う（本文全体には広げない＝過補正回避）。正規化後の文字列(例 7/31)を
+    # 候補に加え、下流の normalize_date でそのまま解釈できるようにする。
+    from . import extraction
+    detected_dates.extend(extraction.find_confusable_date_tokens(raw_text))
     
     # Item detection (best effort)
     # Lines starting with bullet points

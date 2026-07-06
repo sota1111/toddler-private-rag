@@ -76,13 +76,18 @@ def _detect_deadline_iso(
         return ""
     isos: List[str] = []
     try:
+        ref_year = issue_date.year if issue_date else None
         for pattern in _DATE_PATTERNS:
             for raw in re.findall(pattern, text):
-                iso = extraction.normalize_date(
-                    raw, reference_year=issue_date.year if issue_date else None
-                )
+                iso = extraction.normalize_date(raw, reference_year=ref_year)
                 if iso:
                     isos.append(iso)
+        # SOT-1567 提案3: 混同文字を含む日付トークン(例 7／3l)も、日付フィールド限定で
+        # 混同正規化してから拾う（本文全体には広げない）。
+        for token in extraction.find_confusable_date_tokens(text):
+            iso = extraction.normalize_date(token, reference_year=ref_year)
+            if iso:
+                isos.append(iso)
     except Exception as e:  # noqa: BLE001 - best-effort
         logger.warning("deadline date detection failed: %s", e)
         return ""

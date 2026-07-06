@@ -210,6 +210,10 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja", mun
                                 # 貫通させ、自動締切調査でもダウンロードリンクを付与する。
                                 # 未設定(空)のときは従来どおりリンクを付けない。
                                 municipality=(municipality or None),
+                                # SOT-1567: 写真アップロード=登録時点を発行日(登録月コンテキスト)
+                                # として渡し、締切の OCR 誤読(例 7→1 の 1/31)を発行月コンテキストで
+                                # 整合チェック・補正する。
+                                issue_date=clock.today(),
                             )
                             # SOT-1411 再オープン対応: 生成した付随タスク(子)を1グループに束ね、
                             # 基準日(最終提出期限)を基準にオフセットを再計算する。group_id が返れば
