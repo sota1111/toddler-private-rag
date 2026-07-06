@@ -95,6 +95,10 @@ class NurseryInfoBase(BaseModel):
     items: Optional[str] = None
     # SOT-1368: 紐づく子供のID(option A)。未指定は紐付けなし(後方互換)。
     child_id: Optional[str] = None
+    # SOT-1562: このレコードの「基になった登録写真レコード」への参照。写真の文字起こしから
+    # 分解生成したタスク(および締切調査の付随タスク)に、元写真レコードの id を保持させ、
+    # やることリストのタスク詳細から元写真へ遷移できるようにする。手動追加/既存タスクは None。
+    source_info_id: Optional[str] = None
     status: Optional[str] = "未確認"
     # 仮登録(draft) / 本登録(registered)。省略時は本登録。
     registration_state: Optional[str] = "registered"
@@ -128,6 +132,8 @@ class NurseryInfoUpdate(BaseModel):
     due_date: Optional[datetime.date] = None
     items: Optional[str] = None
     child_id: Optional[str] = None
+    # SOT-1562: 元写真レコードへの参照（後付け更新も許可）。
+    source_info_id: Optional[str] = None
     status: Optional[str] = None
     registration_state: Optional[str] = None
     needs_deadline_investigation: Optional[bool] = None

@@ -612,6 +612,8 @@ class FirestoreNurseryInfo:
     # SOT-1431: データ所有者(マルチテナント分離)。未設定は既定 owner 扱い。
     owner_id: Optional[str] = None
     child_id: Optional[str] = None
+    # SOT-1562: 基になった登録写真レコードへの参照。未設定は参照なし(手動追加/既存タスク)。
+    source_info_id: Optional[str] = None
     # SOT-1407: 締め切り調査が必要なタスクか。
     needs_deadline_investigation: bool = False
     # SOT-1428: お気に入りフラグ。
@@ -666,6 +668,7 @@ def _info_doc_to_obj(doc_id: str, data: dict, attachments: List[FirestoreAttachm
         registration_state=data.get("registration_state") or "registered",
         owner_id=data.get("owner_id"),
         child_id=data.get("child_id"),
+        source_info_id=data.get("source_info_id"),
         needs_deadline_investigation=bool(data.get("needs_deadline_investigation")),
         is_favorite=bool(data.get("is_favorite")),
         is_archived=bool(data.get("is_archived")),

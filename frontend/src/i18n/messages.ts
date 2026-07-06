@@ -230,6 +230,8 @@ export const messages: Record<Lang, Messages> = {
     'records.confirmDelete': '「{title}」を削除しますか？',
     'records.deleteError': '削除に失敗しました。時間をおいて再度お試しください。',
     'records.archive': 'アーカイブ',
+    // SOT-1562: タスク詳細で「基になった元写真」への遷移リンクに付けるラベル。
+    'records.sourcePhoto': '元の写真',
     'records.archiving': 'アーカイブ中…',
     'records.confirmArchive': '「{title}」をアーカイブしますか？',
     'records.archiveError': 'アーカイブに失敗しました。時間をおいて再度お試しください。',
@@ -662,6 +664,8 @@ export const messages: Record<Lang, Messages> = {
     'records.confirmDelete': 'Delete “{title}”?',
     'records.deleteError': 'Failed to delete. Please try again later.',
     'records.archive': 'Archive',
+    // SOT-1562: Label for the link back to the original source photo on a task detail.
+    'records.sourcePhoto': 'Source photo',
     'records.archiving': 'Archiving…',
     'records.confirmArchive': 'Archive “{title}”?',
     'records.archiveError': 'Failed to archive. Please try again later.',

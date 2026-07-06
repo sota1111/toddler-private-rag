@@ -19,6 +19,10 @@ class NurseryInfo(Base):
     items = Column(Text, nullable=True)
     # SOT-1368: どの子供に紐づくか（option A: 1家族で複数の子供）。未設定(既存データ)は紐付けなし。
     child_id = Column(String(50), nullable=True)
+    # SOT-1562: 基になった登録写真レコードへの参照。写真の文字起こしから分解生成したタスク
+    # (および締切調査の付随タスク)に元写真レコードの id を保持させ、タスク詳細から元写真へ
+    # 遷移できるようにする。nullable（手動追加/既存タスクは NULL = 参照なし）。
+    source_info_id = Column(String(64), nullable=True, index=True)
     status = Column(String(20), default="未確認")
     # 仮登録(draft) / 本登録(registered) の区分。既存(未設定)データは registered 扱い。
     registration_state = Column(String(20), nullable=False, server_default="registered", default="registered")

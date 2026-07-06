@@ -43,6 +43,9 @@ export interface NurseryInfo {
   due_date?: string
   items?: string
   child_id?: string | null
+  // SOT-1562: このタスクの基になった登録写真レコードの id。写真の文字起こしから分解生成された
+  // タスク（および締切調査の付随タスク）に付与される。手動追加/既存タスクは未設定。
+  source_info_id?: string | number | null
   status: string
   priority: string
   tags?: string
