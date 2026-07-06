@@ -169,6 +169,9 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja", mun
                             event_date=(task.get("event_date") or None),
                             child_id=parent_child_id,  # SOT-1368: 親写真の子どもを引き継ぐ
                             owner_id=parent_owner_id,  # SOT-1431: 親写真の owner を継承
+                            # SOT-1562: このタスクの基になった写真本体レコード(info_id)を参照として
+                            # 保持し、やることリストのタスク詳細から元写真へ遷移できるようにする。
+                            source_info_id=str(info_id),
                             status="未確認",
                             priority="普通",
                             registration_state="draft",
@@ -239,6 +242,8 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja", mun
                                             deadline_base_date=(sub.get("deadline_base_date") or None),
                                             child_id=parent_child_id,
                                             owner_id=parent_owner_id,  # SOT-1431: 親写真の owner を継承
+                                            # SOT-1562: 付随タスクも元の写真本体レコードを参照する。
+                                            source_info_id=str(info_id),
                                             status="未確認",
                                             priority="普通",
                                             registration_state="draft",

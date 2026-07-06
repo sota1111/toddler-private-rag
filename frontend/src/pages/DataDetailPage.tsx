@@ -160,6 +160,20 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
     enabled: Boolean(id),
   });
 
+  // SOT-1562: このタスクの基になった登録写真レコードのタイトルを取得する。写真の文字起こしから
+  // 分解生成されたタスク(および締切調査の付随タスク)にのみ source_info_id が付く。手動追加/既存
+  // タスクは未設定なので取得しない（enabled ゲート）。取得結果はタスク詳細でアーカイブの左に
+  // リンク表示し、クリックで元写真の詳細へ遷移させる（後段の JSX）。
+  const sourceInfoId =
+    item?.source_info_id != null && String(item.source_info_id) !== ''
+      ? String(item.source_info_id)
+      : '';
+  const { data: sourceInfo } = useQuery({
+    queryKey: ['info-detail', sourceInfoId],
+    queryFn: () => getInfoById(sourceInfoId),
+    enabled: Boolean(sourceInfoId),
+  });
+
   // SOT-1337: 一覧から開いた項目のステータスだけを、編集モードに入らず即時変更する。
   const statusMutation = useMutation({
     mutationFn: (status: string) => updateInfo(id, { status }),
@@ -564,13 +578,28 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
               アーカイブ済み(アーカイブ画面から開いた項目)は「アーカイブから戻す」に切り替える。
               非写真タスクレコードのみ・編集モード以外で表示する。 */}
           {!hasPhoto && !isEditing && (
-            <div className="mt-4 flex justify-end">
+            <div className="mt-4 flex items-center justify-between gap-2">
+              {/* SOT-1562: このタスクの基になった元写真のタイトルをアーカイブの左に表示し、
+                  クリックで元写真の詳細へ遷移する。参照が無い/元写真が取得できない場合は空要素で
+                  レイアウトを保ち、アーカイブボタンを従来どおり右端に維持する。 */}
+              {sourceInfoId && sourceInfo ? (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/data/${sourceInfoId}`)}
+                  className="inline-flex min-w-0 items-center gap-1 text-sm font-medium text-brand hover:text-brand-strong hover:underline"
+                >
+                  <span aria-hidden="true">🖼️</span>
+                  <span className="truncate">{t('records.sourcePhoto')}: {sourceInfo.title}</span>
+                </button>
+              ) : (
+                <span />
+              )}
               <button
                 type="button"
                 onClick={handleArchive}
                 disabled={archiveMutation.isPending}
                 aria-label={item.is_archived ? t('records.unarchive') : t('records.archive')}
-                className="inline-flex items-center gap-1 text-sm font-medium bg-purple-100 text-purple-800 px-3 py-1 rounded-full hover:bg-purple-200 disabled:opacity-60 transition-colors"
+                className="inline-flex shrink-0 items-center gap-1 text-sm font-medium bg-purple-100 text-purple-800 px-3 py-1 rounded-full hover:bg-purple-200 disabled:opacity-60 transition-colors"
               >
                 <span aria-hidden="true">{item.is_archived ? '♻️' : '🗄️'}</span>
                 {archiveMutation.isPending
