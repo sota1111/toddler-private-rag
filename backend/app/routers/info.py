@@ -407,6 +407,71 @@ def list_processing_drafts(repo: InfoRepository = Depends(get_info_repository), 
     return repo.list_processing()
 
 
+# SOT-1577: 「分割前のタスクに戻す」。同一書類(source_info_id)から分割された仮登録(draft)群を、
+# 書類全体をまとめた未分割の1 draft へ置き換える。分割が不要だったケースの戻し導線。
+# "/{id}" より前に宣言してリテラルパスを優先させる。
+def _draft_to_dict(info) -> dict:
+    """merge_split_drafts_to_single が読む形へ ORM/レコードを写像する（純データ変換）。"""
+    return {
+        "title": getattr(info, "title", "") or "",
+        "info_type": getattr(info, "info_type", "") or "",
+        "content": getattr(info, "content", "") or "",
+        "items": getattr(info, "items", "") or "",
+        "date": getattr(info, "date", "") or "",
+        "event_date": getattr(info, "event_date", "") or "",
+    }
+
+
+@router.post("/drafts/{source_info_id}/revert-split", response_model=schemas.NurseryInfoResponse)
+def revert_split_drafts(
+    source_info_id: str,
+    repo: InfoRepository = Depends(get_info_repository),
+    current_user: str = Depends(get_current_user),
+):
+    # owner スコープ済み。当該書類由来の draft が無ければ 404。
+    group = repo.list_drafts_by_source(source_info_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="No split drafts for this source document")
+
+    # 書類全体（元の登録レコード）を owner スコープで取得（数値でなければ None 扱い）。
+    source = None
+    try:
+        source = repo.get(source_info_id)
+    except (ValueError, TypeError):
+        source = None
+    source_dict = _draft_to_dict(source) if source is not None else None
+
+    merged = extraction.merge_split_drafts_to_single(
+        [_draft_to_dict(d) for d in group], source_dict
+    )
+
+    # 未分割の1 draft を作成（写真/子ども/owner・元書類参照は分割 draft から継承）。
+    # owner はリクエスト経路のリポジトリが current user に強制するため、なりすましは効かない。
+    first = group[0]
+    created = repo.create(
+        schemas.NurseryInfoCreate(
+            title=merged["title"],
+            info_type=merged["info_type"],
+            content=merged["content"],
+            items=(merged["items"] or None),
+            date=(merged["date"] or None),
+            event_date=(merged["event_date"] or None),
+            child_id=getattr(first, "child_id", None),
+            owner_id=getattr(first, "owner_id", None),
+            source_info_id=str(source_info_id),
+            status="未確認",
+            priority="普通",
+            registration_state="draft",
+        )
+    )
+
+    # 置換: 元の分割 draft 群を削除する（owner スコープの delete）。
+    for d in group:
+        repo.delete(d.id)
+
+    return created
+
+
 # アーカイブ一覧 (SOT-1500)。"/{id}" より前に宣言してリテラルパスを優先させる。
 # アーカイブ済み(is_archived=True)の本登録項目のみを返す。やることリストと同様に一覧表示する。
 @router.get("/archived", response_model=List[schemas.NurseryInfoResponse])

@@ -97,6 +97,15 @@ export const getProcessingDrafts = async (): Promise<NurseryInfo[]> => {
   return response.data;
 };
 
+// SOT-1577: 「分割前のタスクに戻す」。同一書類(source_info_id)から分割された仮登録(draft)群を、
+// 未分割の1 draft へ置き換える。分割が不要だったケースの戻し導線。返り値は生成された未分割 draft。
+export const revertSplitDrafts = async (
+  sourceInfoId: number | string,
+): Promise<NurseryInfo> => {
+  const response = await api.post(`/info/drafts/${sourceInfoId}/revert-split`);
+  return response.data;
+};
+
 // 仮登録を本登録(registered)に確定する (SOT-1113)
 export const finalizeInfo = async (id: number | string): Promise<NurseryInfo> => {
   const response = await api.post(`/info/${id}/finalize`);

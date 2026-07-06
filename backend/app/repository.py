@@ -103,6 +103,18 @@ class InfoRepository(abc.ABC):
     def list_drafts(self) -> List[Any]:
         pass
 
+    def list_drafts_by_source(self, source_info_id) -> List[Any]:
+        """SOT-1577: 同一書類(source_info_id)由来の仮登録(draft)群を返す。
+
+        owner スコープ済みの list_drafts() を Python 側で source_info_id 一致にフィルタするため、
+        Sqlite/Firestore 双方で追加実装なく、かつ他 owner のデータを混ぜずに動く。
+        """
+        key = str(source_info_id)
+        return [
+            d for d in self.list_drafts()
+            if str(getattr(d, "source_info_id", None) or "") == key
+        ]
+
     @abc.abstractmethod
     def count_processing(self) -> int:
         pass

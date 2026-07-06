@@ -359,3 +359,52 @@ def test_build_draft_fields_includes_needs_deadline_investigation():
     fields = extraction.build_draft_fields("健康調査票を提出してください", None, None)
     assert "needs_deadline_investigation" in fields
     assert fields["needs_deadline_investigation"] is True
+
+
+# --- SOT-1577: 分割前のタスクに戻す（merge_split_drafts_to_single）--------------
+def test_merge_split_drafts_prefers_source_content():
+    # source（元書類）本文があれば、それ（＝書類全体）を content に採用する。
+    drafts = [
+        {"title": "水筒を用意", "info_type": "持ち物", "content": "水筒", "items": "水筒", "date": "2026-05-10", "event_date": "2026-05-10"},
+        {"title": "タオルを用意", "info_type": "持ち物", "content": "タオル", "items": "タオル", "date": "2026-05-09", "event_date": "2026-05-09"},
+    ]
+    source = {"title": "運動会のお知らせ", "info_type": "行事", "content": "運動会の書類全文", "items": "", "date": "", "event_date": ""}
+    merged = extraction.merge_split_drafts_to_single(drafts, source)
+    assert merged["content"] == "運動会の書類全文"
+    assert merged["title"] == "運動会のお知らせ"
+    assert merged["info_type"] == "行事"
+    # 最も早い非空の日付を採用する。
+    assert merged["date"] == "2026-05-09"
+    assert merged["event_date"] == "2026-05-09"
+    # items は重複なく出現順に連結。
+    assert merged["items"] == "水筒\nタオル"
+
+
+def test_merge_split_drafts_concatenates_content_without_source():
+    # source が無い場合は各タスク本文を出現順に重複なく連結する。
+    drafts = [
+        {"title": "A", "info_type": "持ち物", "content": "水筒", "items": "水筒", "date": "", "event_date": ""},
+        {"title": "B", "info_type": "持ち物", "content": "タオル", "items": "水筒", "date": "", "event_date": ""},
+        {"title": "C", "info_type": "持ち物", "content": "水筒", "items": "", "date": "", "event_date": ""},
+    ]
+    merged = extraction.merge_split_drafts_to_single(drafts)
+    assert merged["content"] == "水筒\n\nタオル"
+    # items も重複除去（水筒は1回だけ）。
+    assert merged["items"] == "水筒"
+    # title は先頭 draft を継承（source 無し）。
+    assert merged["title"] == "A"
+
+
+def test_merge_split_drafts_keys_match_draft_shape():
+    merged = extraction.merge_split_drafts_to_single([
+        {"title": "t", "info_type": "資料", "content": "c", "items": "", "date": "", "event_date": ""},
+    ])
+    assert set(merged.keys()) == {"title", "info_type", "content", "items", "date", "event_date"}
+
+
+def test_merge_split_drafts_falls_back_info_type():
+    # 不正な info_type は "資料" にフォールバックする。
+    merged = extraction.merge_split_drafts_to_single([
+        {"title": "t", "info_type": "存在しない種別", "content": "本文", "items": "", "date": "", "event_date": ""},
+    ])
+    assert merged["info_type"] == "資料"

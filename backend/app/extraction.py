@@ -1002,3 +1002,67 @@ def build_task_drafts(
     # SOT-1350: 同一日・同一イベントのタスクを draft 化前に1件へ統合する。
     tasks = _consolidate_tasks(tasks)
     return [_task_to_draft(task, safe_text) for task in tasks]
+
+
+def merge_split_drafts_to_single(
+    drafts: List[dict],
+    source: Optional[dict] = None,
+) -> dict:
+    """SOT-1577: 同一書類から分割された複数タスク draft を「未分割の1タスク」へ統合する。
+
+    書類→タスク分割が不要だったケースのため、仮登録画面の「分割前のタスクに戻す」から呼ばれる。
+    LLM 呼び出しや I/O を行わない純関数。返り値のキー集合は build_task_drafts の各要素と同形
+    （title / info_type / content / items / date / event_date）。
+
+    - content: 元書類レコード(source)の本文があればそれ（＝書類全体）を優先し、無ければ各タスク
+      本文を出現順に重複なく連結する。
+    - title / info_type: source を優先し、無ければ先頭 draft、いずれも無ければフォールバック。
+    - date / event_date: 分割 draft 群のうち最も早い非空の日付を採用する（未分割でも1つの予定日を
+      保ち、やること一覧に出るようにする）。
+    - items: 分割 draft 群の非空 items を出現順に重複なく改行連結する。
+    """
+    drafts = [d for d in drafts if d]
+    first = drafts[0] if drafts else {}
+    source = source or {}
+
+    def _clean(v) -> str:
+        return str(v).strip() if v is not None else ""
+
+    # content: 書類全体（source）を優先し、無ければ各タスク本文を連結。
+    if _clean(source.get("content")):
+        content = _clean(source.get("content"))
+    else:
+        seen: List[str] = []
+        for d in drafts:
+            c = _clean(d.get("content"))
+            if c and c not in seen:
+                seen.append(c)
+        content = "\n\n".join(seen)
+
+    title = _clean(source.get("title")) or _clean(first.get("title")) or draft_title(content)
+    title = title[:40]
+
+    info_type = _clean(source.get("info_type"))
+    if info_type not in INFO_TYPES:
+        info_type = _clean(first.get("info_type"))
+    if info_type not in INFO_TYPES:
+        info_type = "資料"
+
+    def _earliest(key: str) -> str:
+        vals = sorted(v for v in (_clean(d.get(key)) for d in drafts) if v)
+        return vals[0] if vals else ""
+
+    items_seen: List[str] = []
+    for d in drafts:
+        it = _clean(d.get("items"))
+        if it and it not in items_seen:
+            items_seen.append(it)
+
+    return {
+        "title": title,
+        "info_type": info_type,
+        "content": content,
+        "items": "\n".join(items_seen),
+        "date": _earliest("date"),
+        "event_date": _earliest("event_date"),
+    }
