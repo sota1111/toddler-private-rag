@@ -592,7 +592,7 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
                   className="inline-flex min-w-0 items-center gap-1 text-sm font-medium text-brand hover:text-brand-strong hover:underline"
                 >
                   <span aria-hidden="true">🖼️</span>
-                  <span className="truncate">{t('records.sourcePhoto')}: {sourceInfo.title}</span>
+                  <span className="truncate">{sourceInfo.title}</span>
                 </button>
               ) : (
                 <span />
