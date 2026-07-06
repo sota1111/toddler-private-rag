@@ -30,6 +30,25 @@ _DEFAULT_LEAD_DAYS = 3
 # リマインド側(SOT-1339)が提出書類を区別するためのタグ番兵
 SUBMISSION_TAG = "提出書類"
 
+# SOT-1566: 手続き名だけで書類名が本文に明記されないおたよりから、標準的に必要な書類へ到達する
+# ための「手続きキーワード → 標準書類名」の決定的マッピング。純粋関数で扱い LLM 不要（オフライン
+# でも効く土台）。ここで注入した書類は inferred=True（推定=要確認）として扱う。
+# 誤検出を避けるため、キーワードは「提出手続き」を強く示唆する具体語に限定する（一般語は入れない）。
+_PROCEDURE_DOCUMENT_RULES = (
+    (
+        (
+            "現況確認",
+            "現況届",
+            "在籍確認",
+            "在籍にかかる現況",
+            "就労状況確認",
+            "就労状況届",
+            "就労確認",
+        ),
+        "就労証明書",
+    ),
+)
+
 # おたより本文から締切候補を拾うための日付パターン（ocr.py の検出と同等）。
 _DATE_PATTERNS = (
     r"\d{4}[-/]\d{1,2}[-/]\d{1,2}",          # 2026-07-31, 2026/7/31
@@ -244,6 +263,63 @@ def _step_subtitle(step_name: str, limit: int = 18) -> str:
     return s
 
 
+def _normalize_doc_name(name: str) -> str:
+    """書類名を重複判定用に正規化する（空白除去・小文字化）。常に never-throw。"""
+    return re.sub(r"\s+", "", str(name or "")).strip().lower()
+
+
+def _dictionary_inferred_documents(safe_text: str) -> List[dict]:
+    """本文に「提出手続き」を示す手続きキーワードが出たら、対応する標準書類を推定候補として返す（SOT-1566）。
+
+    決定的な `_PROCEDURE_DOCUMENT_RULES` に基づく純粋関数（LLM 不要・オフライン動作）。返す各要素は
+    ``{"name", "due_date": "", "inferred": True}``（推定=要確認）。手続きキーワードが無ければ空リスト
+    （＝一般文で書類を湧かせない）。書類名で重複排除する。常に never-throw。
+    """
+    text = safe_text or ""
+    if not text.strip():
+        return []
+    docs: List[dict] = []
+    seen: set = set()
+    for keywords, doc_name in _PROCEDURE_DOCUMENT_RULES:
+        if any(kw in text for kw in keywords):
+            key = _normalize_doc_name(doc_name)
+            if key and key not in seen:
+                seen.add(key)
+                docs.append({"name": doc_name, "due_date": "", "inferred": True})
+    return docs
+
+
+def _merge_document_candidates(candidates: List[dict]) -> List[dict]:
+    """複数ソース（LLM抽出・辞書推定）の書類候補を書類名で正規化マージする（SOT-1566）。
+
+    - 書類名（正規化）で重複排除し、初出の順序・表記を維持する。
+    - `inferred` は「明記（inferred=False）が1つでもあれば明記」を優先（安全側: 本文明記を推定に負けさせない）。
+    - `due_date` は明記されている値を優先し、既存が空なら埋める。
+    空 name の候補は捨てる。常に never-throw。
+    """
+    merged: dict = {}
+    order: List[str] = []
+    for c in candidates:
+        if not isinstance(c, dict):
+            continue
+        name = str(c.get("name", "") or "").strip()
+        key = _normalize_doc_name(name)
+        if not name or not key:
+            continue
+        inferred = bool(c.get("inferred", False))
+        due = str(c.get("due_date", "") or "").strip()
+        if key not in merged:
+            merged[key] = {"name": name, "due_date": due, "inferred": inferred}
+            order.append(key)
+        else:
+            existing = merged[key]
+            if not inferred:  # 明記が勝つ
+                existing["inferred"] = False
+            if due and not existing["due_date"]:
+                existing["due_date"] = due
+    return [merged[k] for k in order]
+
+
 def _llm_extract_documents(safe_text: str, language: str) -> List[dict]:
     """提出が必要な書類とその提出期限のみを抽出する LLM ステップ。失敗時は例外。"""
     client = ai_client.get_genai_client()
@@ -252,19 +328,27 @@ def _llm_extract_documents(safe_text: str, language: str) -> List[dict]:
         language, extraction._LANGUAGE_NAMES["ja"]
     )
     prompt = (
-        "You extract ONLY the documents/forms that a parent must SUBMIT "
+        "You extract the documents/forms that a parent must SUBMIT "
         "(提出が必要な書類) from a nursery-school notice. "
         "Ignore anything that is not a submittable document (events, belongings, general notes). "
         "Output ONLY a JSON array. If none apply, return [].\n"
         "Each element has this shape:\n"
         '{"name":"the document name",'
-        '"due_date":"the submission deadline as M月D日 or YYYY-MM-DD; empty string if unknown"}\n'
-        "Do not invent documents that are not present in the source text.\n"
+        '"due_date":"the submission deadline as M月D日 or YYYY-MM-DD; empty string if unknown",'
+        '"inferred":true or false}\n'
+        "Rules for inference (重要):\n"
+        "- If a document name is written explicitly in the body, output it with \"inferred\":false.\n"
+        "- If the body describes a SUBMISSION PROCEDURE (提出手続き) but does NOT name the document "
+        "(e.g. 『保育施設在籍にかかる現況確認の手続き』『就労状況の確認』『現況届の提出』), "
+        "infer the standard document that procedure requires (e.g. 現況確認/在籍確認/就労状況確認 → 就労証明書) "
+        "and output it with \"inferred\":true.\n"
+        "- Only infer when a concrete submission procedure is mentioned. Do NOT invent documents from "
+        "general notices, events, or belongings. When unsure, output nothing rather than guessing.\n"
         f"Write name in {language_name}.\n\n"
         f"# Body\n{safe_text}\n\n"
         "# Example output\n"
-        '[{"name":"健康調査票","due_date":"5月1日"},'
-        '{"name":"就労証明書","due_date":"2026-05-10"}]\n\n'
+        '[{"name":"健康調査票","due_date":"5月1日","inferred":false},'
+        '{"name":"就労証明書","due_date":"","inferred":true}]\n\n'
         "# Output (JSON array only)"
     )
     cfg = ai_client.default_generate_config()
@@ -288,7 +372,9 @@ def _llm_extract_documents(safe_text: str, language: str) -> List[dict]:
         if not name:
             continue
         due_raw = str(item.get("due_date", "")).strip()
-        docs.append({"name": name, "due_date": due_raw})
+        # SOT-1566: 手続きから推論した書類は inferred=True。明示されていない/未指定は明記扱い(False)。
+        inferred = bool(item.get("inferred", False))
+        docs.append({"name": name, "due_date": due_raw, "inferred": inferred})
     return docs[:_MAX_DOCUMENTS]
 
 
@@ -377,6 +463,13 @@ def extract_submission_documents(
         docs = _llm_extract_documents(safe_text, language)
     except Exception as e:  # noqa: BLE001 - graceful degradation
         logger.warning("submission document extraction failed: %s", e)
+        docs = []
+
+    # SOT-1566: 手続きキーワードから標準書類を推定する決定的な辞書候補を注入し、LLM抽出結果と
+    # 書類名でマージ（重複排除・明記優先）。LLM が失敗しても辞書だけで書類へ到達できる（オフライン土台）。
+    dict_docs = _dictionary_inferred_documents(safe_text)
+    docs = _merge_document_candidates(list(docs) + dict_docs)[:_MAX_DOCUMENTS]
+    if not docs:
         return []
 
     # タスク自身に設定済みの最終期限（最優先アンカー）。
@@ -415,6 +508,8 @@ def extract_submission_documents(
                 "lead_time_days": info["lead_time_days"],
                 "source": info["source"],
                 "sources": info.get("sources") or [],
+                # SOT-1566: 辞書/推論由来の書類は inferred=True（推定=要確認）。本文明記は False。
+                "inferred": bool(doc.get("inferred", False)),
             }
         )
     return enriched
@@ -435,6 +530,17 @@ def _prep_start_iso(due_iso: str, lead_days: Optional[int]) -> str:
     return start.isoformat()
 
 
+def _inferred_notice_line(ja: bool) -> str:
+    """推定（辞書/LLM推論）由来の書類であることを利用者へ明示し、否定（削除）を促す行（SOT-1566）。"""
+    return (
+        "※ 推定（要確認）: 本文に書類名が明記されていないため、手続きから推定した書類です。"
+        "不要な場合はこのタスクを削除してください。"
+        if ja
+        else "Note (please verify): inferred from the described procedure — the document name is not "
+        "written in the notice. Delete this task if it does not apply."
+    )
+
+
 def _build_content(
     doc: dict, language: str, municipality: Optional[str] = None
 ) -> str:
@@ -444,6 +550,9 @@ def _build_content(
     name = doc.get("name", "")
     if name:
         lines.append(name)
+    # SOT-1566: 推定由来の書類は「推定（要確認）」を明示し、安全側フォールバック（削除導線）を持たせる。
+    if doc.get("inferred"):
+        lines.append(_inferred_notice_line(ja))
 
     steps = doc.get("steps") or []
     if steps:
@@ -571,6 +680,9 @@ def _build_step_content(
     name = doc.get("name", "")
     if name:
         lines.append(f"{name}（手順 {idx}/{total}）" if ja else f"{name} (step {idx}/{total})")
+    # SOT-1566: 推定由来の書類は各手順タスク本文にも「推定（要確認）」を明示する。
+    if doc.get("inferred"):
+        lines.append(_inferred_notice_line(ja))
 
     step_name = step.get("name", "")
     if step_name:
@@ -687,6 +799,8 @@ def build_submission_task_drafts(
                     "deadline_group_id": group_id,
                     "deadline_offset_days": offset_days,
                     "deadline_base_date": base_date,
+                    # SOT-1566: 推定由来（辞書/LLM推論）の書類フラグを下流（表示/確認導線）へ伝播。
+                    "inferred": bool(doc.get("inferred", False)),
                     "categories": {"title": title, **category_dict},
                 }
             )
@@ -723,6 +837,8 @@ def build_submission_task_drafts(
                     "deadline_group_id": group_id,
                     "deadline_offset_days": step.get("offset_days"),
                     "deadline_base_date": step_base_date,
+                    # SOT-1566: 推定由来（辞書/LLM推論）の書類フラグを下流（表示/確認導線）へ伝播。
+                    "inferred": bool(doc.get("inferred", False)),
                     "categories": {"title": title, **category_dict},
                 }
             )
