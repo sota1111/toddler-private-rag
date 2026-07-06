@@ -425,12 +425,14 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
           )}
 
           {/* SOT-1468: 写真ありレコードでは登録月(created_at)を変更できる。
-              写真一覧はこの登録月でグルーピングされるため、ここでの変更が一覧の月グループに反映される。 */}
+              写真一覧はこの登録月でグルーピングされるため、ここでの変更が一覧の月グループに反映される。
+              SOT-1563: 見た目をやることリストの日付変更(event_date 変更 UI, SOT-1503)と同じ emerald 基調に揃える
+              （📅 付き emerald ラベル＋emerald 枠/薄緑背景/緑フォーカスの入力欄）。機能は変更しない。 */}
           {hasPhoto && (
             <div className="mb-4">
               <div className="flex flex-wrap items-center gap-2">
-                <label htmlFor="registered-month" className="text-sm font-medium text-foreground">
-                  {t('records.registeredMonth')}
+                <label htmlFor="registered-month" className="inline-flex items-center gap-1 text-sm font-medium text-emerald-800">
+                  📅 {t('records.registeredMonth')}
                 </label>
                 <input
                   id="registered-month"
@@ -441,13 +443,13 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
                     setMonthMessage(null);
                   }}
                   disabled={monthMutation.isPending}
-                  className="border border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2 disabled:opacity-60"
+                  className="border border-emerald-300 bg-emerald-50 text-emerald-900 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500 text-sm p-2 disabled:opacity-60"
                 />
                 <button
                   type="button"
                   onClick={handleSaveMonth}
                   disabled={monthMutation.isPending || !(monthInput ?? toMonthInput(item.created_at))}
-                  className="text-sm font-medium text-brand-strong border border-accent-border bg-accent-bg hover:opacity-90 px-3 py-1.5 rounded-md disabled:opacity-60 transition-colors"
+                  className="text-sm font-medium text-emerald-800 border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-md disabled:opacity-60 transition-colors"
                 >
                   {monthMutation.isPending ? t('records.rescheduling') : t('records.registeredMonthSave')}
                 </button>
