@@ -41,6 +41,10 @@ interface DatedInfoListProps {
   // SOT-1502: やることリストを月ごとの見出しでグループ表示し、期限なしを末尾グループにまとめる。
   // 既定 false（SchedulePage は従来どおりのフラット表示のまま）。
   groupByMonth?: boolean;
+  // SOT-1557: 行にカテゴリ（種別 = info_type: 行事/お知らせ/給食 等）ラベルを表示するか。
+  // 既定 true（SchedulePage / ArchivePage は従来どおり表示）。やることリスト(TasksPage)のみ
+  // false を渡してカテゴリ表示を非表示にする。
+  showCategory?: boolean;
 }
 
 const DatedInfoList: React.FC<DatedInfoListProps> = ({
@@ -49,6 +53,7 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({
   namespace,
   beforeList,
   groupByMonth = false,
+  showCategory = true,
 }) => {
   const { t, lang } = useI18n();
   // 種別ラベル（保存値は日本語のまま、表示は設定言語に合わせて翻訳）
@@ -220,7 +225,10 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({
             <span className={`text-xs px-2 py-1 rounded-full ${getStatusDateChipClass(item.status)}`}>
               {item.event_date ? item.event_date : t('common.noDeadline')}
             </span>
-            <span className="text-xs text-muted-foreground">{optLabel('infoType', item.info_type)}</span>
+            {/* SOT-1557: カテゴリ（種別）ラベル。やることリストでは非表示（showCategory=false）。 */}
+            {showCategory && (
+              <span className="text-xs text-muted-foreground">{optLabel('infoType', item.info_type)}</span>
+            )}
             {/* SOT-1428: お気に入りトグル。行リンク内なので遷移を抑止する。お気に入り時は黄色塗り潰し。 */}
             {showFavorite && (
               <button

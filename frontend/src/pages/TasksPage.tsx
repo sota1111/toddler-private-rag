@@ -225,7 +225,14 @@ const TasksPage: React.FC = () => {
             </button>
           )}
         </div>
-        <DatedInfoList items={events} isLoading={isLoading} namespace="tasks" groupByMonth />
+        {/* SOT-1557: やることリストではカテゴリ（種別）表示を非表示にする。 */}
+        <DatedInfoList
+          items={events}
+          isLoading={isLoading}
+          namespace="tasks"
+          groupByMonth
+          showCategory={false}
+        />
       </div>
     </div>
   );
