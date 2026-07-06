@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { getInfoById, deleteInfo, updateInfo, getAttachmentFileUrl, getAttachmentTranscription, rescheduleDeadline, getInfoList, revertSplitRegistered } from '../api';
 import type { Attachment, NurseryInfo } from '../types';
 import { STATUS_TYPES } from './infoFormOptions';
+import { countGenuineSplitTasks } from '../utils/splitTasks';
 import { useI18n } from '../i18n/useI18n';
 import { useConfirm } from '../components/confirmDialogContext';
 
@@ -182,11 +183,11 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
     queryFn: () => getInfoList(),
     enabled: Boolean(sourceInfoId),
   });
-  const splitSiblingCount = sourceInfoId
-    ? (registeredList ?? []).filter(
-        (r: NurseryInfo) => String(r.source_info_id ?? '') === sourceInfoId,
-      ).length
-    : 0;
+  // SOT-1577 REOPEN#2: 締切調査の付随タスクは分割件数に数えない（実タスク1件でボタンが出る誤表示を防ぐ）。
+  const splitSiblingCount = countGenuineSplitTasks(
+    (registeredList ?? []) as NurseryInfo[],
+    sourceInfoId,
+  );
   const isSplitGroup = sourceInfoId !== '' && splitSiblingCount >= 2;
 
   // SOT-1577: 押下でこのタスクを含む分割グループを未分割の1タスクへまとめ直す。まとめ直すと

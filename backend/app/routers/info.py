@@ -411,7 +411,8 @@ def list_processing_drafts(repo: InfoRepository = Depends(get_info_repository), 
 # 書類全体をまとめた未分割の1 draft へ置き換える。分割が不要だったケースの戻し導線。
 # "/{id}" より前に宣言してリテラルパスを優先させる。
 def _draft_to_dict(info) -> dict:
-    """merge_split_drafts_to_single が読む形へ ORM/レコードを写像する（純データ変換）。"""
+    """merge_split_drafts_to_single / is_deadline_companion が読む形へ ORM/レコードを写像する
+    （純データ変換）。SOT-1577 REOPEN#2: 付随タスク判定のため締切グループ情報も含める。"""
     return {
         "title": getattr(info, "title", "") or "",
         "info_type": getattr(info, "info_type", "") or "",
@@ -419,7 +420,16 @@ def _draft_to_dict(info) -> dict:
         "items": getattr(info, "items", "") or "",
         "date": getattr(info, "date", "") or "",
         "event_date": getattr(info, "event_date", "") or "",
+        "deadline_group_id": getattr(info, "deadline_group_id", None),
+        "deadline_offset_days": getattr(info, "deadline_offset_days", None),
     }
+
+
+def _genuine_split_dicts(group) -> list:
+    """SOT-1577 REOPEN#2: 分割グループから締切調査の付随タスクを除いた“実際の分割タスク”のみを
+    dict 化して返す。統合本文・件数はこれを基準にする（全て付随なら空リストになりうる）。"""
+    dicts = [_draft_to_dict(d) for d in group]
+    return [d for d in dicts if not extraction.is_deadline_companion(d)]
 
 
 @router.post("/drafts/{source_info_id}/revert-split", response_model=schemas.NurseryInfoResponse)
@@ -434,6 +444,7 @@ def revert_split_drafts(
         raise HTTPException(status_code=404, detail="No split drafts for this source document")
 
     # 書類全体（元の登録レコード）を owner スコープで取得（数値でなければ None 扱い）。
+    # SOT-1577 REOPEN#2: source は title / info_type にのみ使い、content(=全写真の文字起こし)は使わない。
     source = None
     try:
         source = repo.get(source_info_id)
@@ -441,9 +452,10 @@ def revert_split_drafts(
         source = None
     source_dict = _draft_to_dict(source) if source is not None else None
 
-    merged = extraction.merge_split_drafts_to_single(
-        [_draft_to_dict(d) for d in group], source_dict
-    )
+    # SOT-1577 REOPEN#2: 統合本文・日付・持ち物は分割タスク群自身から復元する。締切調査の付随タスクは
+    # 除外し、実際の分割タスクだけを対象にする。全て付随だった場合のみ群全体にフォールバックする。
+    merge_from = _genuine_split_dicts(group) or [_draft_to_dict(d) for d in group]
+    merged = extraction.merge_split_drafts_to_single(merge_from, source_dict)
 
     # 未分割の1 draft を作成（写真/子ども/owner・元書類参照は分割 draft から継承）。
     # owner はリクエスト経路のリポジトリが current user に強制するため、なりすましは効かない。
@@ -489,6 +501,7 @@ def revert_split_registered(
         raise HTTPException(status_code=404, detail="No split tasks for this source document")
 
     # 書類全体（元の登録レコード）を owner スコープで取得（数値でなければ None 扱い）。
+    # SOT-1577 REOPEN#2: source は title / info_type にのみ使い、content(=全写真の文字起こし)は使わない。
     source = None
     try:
         source = repo.get(source_info_id)
@@ -496,9 +509,10 @@ def revert_split_registered(
         source = None
     source_dict = _draft_to_dict(source) if source is not None else None
 
-    merged = extraction.merge_split_drafts_to_single(
-        [_draft_to_dict(d) for d in group], source_dict
-    )
+    # SOT-1577 REOPEN#2: 統合本文・日付・持ち物は分割タスク群自身から復元する。締切調査の付随タスクは
+    # 除外し、実際の分割タスクだけを対象にする。全て付随だった場合のみ群全体にフォールバックする。
+    merge_from = _genuine_split_dicts(group) or [_draft_to_dict(d) for d in group]
+    merged = extraction.merge_split_drafts_to_single(merge_from, source_dict)
 
     # 未分割の1タスクを作成（子ども/owner・元書類参照は分割タスクから継承）。draft 版と違い
     # 本登録タスクなので registration_state は registered、status/priority は先頭タスクを継承する。

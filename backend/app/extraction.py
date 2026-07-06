@@ -1004,6 +1004,24 @@ def build_task_drafts(
     return [_task_to_draft(task, safe_text) for task in tasks]
 
 
+def is_deadline_companion(record: dict) -> bool:
+    """SOT-1577 REOPEN#2: レコードが「締切調査の付随タスク」かを判定する純関数。
+
+    写真1枚(source_info_id)からは build_task_drafts が生成する“実際の分割タスク”に加え、
+    締切調査(submission_agent)が生成する付随タスクにも同じ source_info_id が付く。付随タスクは
+    締切グループ(deadline_group_id)に属し、基準日から前倒しされた offset(≠0)を持つ。分割の元
+    タスク(アンカー)は同グループでも offset 0。締切調査を要さない通常の分割タスクは group なし。
+
+    したがって「deadline_group_id があり、かつ offset が 0 でない」レコードを付随タスクとみなす。
+    「分割前のタスクに戻す」ボタンの表示件数や統合対象からは付随タスクを除外し、分割していない
+    (=実タスク1件)のにボタンが出る誤表示を防ぐ。
+    """
+    group = record.get("deadline_group_id")
+    if group in (None, ""):
+        return False
+    return record.get("deadline_offset_days") != 0
+
+
 def merge_split_drafts_to_single(
     drafts: List[dict],
     source: Optional[dict] = None,
@@ -1014,8 +1032,8 @@ def merge_split_drafts_to_single(
     LLM 呼び出しや I/O を行わない純関数。返り値のキー集合は build_task_drafts の各要素と同形
     （title / info_type / content / items / date / event_date）。
 
-    - content: 元書類レコード(source)の本文があればそれ（＝書類全体）を優先し、無ければ各タスク
-      本文を出現順に重複なく連結する。
+    - content: SOT-1577 REOPEN#2 で是正。書類全体(source.content=全写真の文字起こし)は流し込まず、
+      分割タスク群自身の本文を出現順に重複なく連結する（「戻す」で全写真分が出るのを防ぐ）。
     - title / info_type: source を優先し、無ければ先頭 draft、いずれも無ければフォールバック。
     - date / event_date: 分割 draft 群のうち最も早い非空の日付を採用する（未分割でも1つの予定日を
       保ち、やること一覧に出るようにする）。
@@ -1028,16 +1046,15 @@ def merge_split_drafts_to_single(
     def _clean(v) -> str:
         return str(v).strip() if v is not None else ""
 
-    # content: 書類全体（source）を優先し、無ければ各タスク本文を連結。
-    if _clean(source.get("content")):
-        content = _clean(source.get("content"))
-    else:
-        seen: List[str] = []
-        for d in drafts:
-            c = _clean(d.get("content"))
-            if c and c not in seen:
-                seen.append(c)
-        content = "\n\n".join(seen)
+    # content: SOT-1577 REOPEN#2。書類全体(source.content=全写真の文字起こし)は使わず、分割タスク
+    # 群自身の本文を出現順に重複なく連結する。source を優先すると「戻す」で全写真分の文字起こしが
+    # 出力されてしまうため（該当タスクの内容のみへ戻す）。
+    seen: List[str] = []
+    for d in drafts:
+        c = _clean(d.get("content"))
+        if c and c not in seen:
+            seen.append(c)
+    content = "\n\n".join(seen)
 
     title = _clean(source.get("title")) or _clean(first.get("title")) or draft_title(content)
     title = title[:40]

@@ -362,15 +362,19 @@ def test_build_draft_fields_includes_needs_deadline_investigation():
 
 
 # --- SOT-1577: 分割前のタスクに戻す（merge_split_drafts_to_single）--------------
-def test_merge_split_drafts_prefers_source_content():
-    # source（元書類）本文があれば、それ（＝書類全体）を content に採用する。
+def test_merge_split_drafts_ignores_source_content():
+    # SOT-1577 REOPEN#2: source（元書類=全写真の文字起こし）本文があっても content には採用せず、
+    # 分割タスク群自身の本文から復元する（「戻す」で全写真分が出るのを防ぐ）。title / info_type は source を優先。
     drafts = [
         {"title": "水筒を用意", "info_type": "持ち物", "content": "水筒", "items": "水筒", "date": "2026-05-10", "event_date": "2026-05-10"},
         {"title": "タオルを用意", "info_type": "持ち物", "content": "タオル", "items": "タオル", "date": "2026-05-09", "event_date": "2026-05-09"},
     ]
     source = {"title": "運動会のお知らせ", "info_type": "行事", "content": "運動会の書類全文", "items": "", "date": "", "event_date": ""}
     merged = extraction.merge_split_drafts_to_single(drafts, source)
-    assert merged["content"] == "運動会の書類全文"
+    # content は書類全文ではなく分割タスク群の本文連結。
+    assert merged["content"] == "水筒\n\nタオル"
+    assert "運動会の書類全文" not in merged["content"]
+    # title / info_type は source を優先。
     assert merged["title"] == "運動会のお知らせ"
     assert merged["info_type"] == "行事"
     # 最も早い非空の日付を採用する。
@@ -378,6 +382,27 @@ def test_merge_split_drafts_prefers_source_content():
     assert merged["event_date"] == "2026-05-09"
     # items は重複なく出現順に連結。
     assert merged["items"] == "水筒\nタオル"
+
+
+def test_is_deadline_companion_distinguishes_companion_from_split():
+    # SOT-1577 REOPEN#2: 締切グループがあり offset≠0 の付随タスクのみ True。
+    # 通常の分割タスク（group なし）・締切グループのアンカー（offset 0）は False（＝実タスク）。
+    assert extraction.is_deadline_companion(
+        {"deadline_group_id": "g1", "deadline_offset_days": -7}
+    ) is True
+    # offset 未設定でも締切グループに属していれば付随タスク扱い。
+    assert extraction.is_deadline_companion(
+        {"deadline_group_id": "g1", "deadline_offset_days": None}
+    ) is True
+    # 締切グループのアンカー（元タスク, offset 0）は実タスク。
+    assert extraction.is_deadline_companion(
+        {"deadline_group_id": "g1", "deadline_offset_days": 0}
+    ) is False
+    # 締切グループなし（通常の分割タスク）は実タスク。
+    assert extraction.is_deadline_companion(
+        {"deadline_group_id": None, "deadline_offset_days": None}
+    ) is False
+    assert extraction.is_deadline_companion({}) is False
 
 
 def test_merge_split_drafts_concatenates_content_without_source():
