@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getInfoById, deleteInfo, updateInfo, getAttachmentFileUrl, getAttachmentTranscription, rescheduleDeadline, getInfoList, revertSplitRegistered } from '../api';
+import { getInfoById, deleteInfo, updateInfo, getAttachmentFileUrl, getAttachmentTranscription, rescheduleDeadline, getInfoList, revertSplitRegistered, getLinkedTaskCount } from '../api';
 import type { Attachment, NurseryInfo } from '../types';
 import { STATUS_TYPES } from './infoFormOptions';
 import { countAgentSplitTasks, shouldShowRevertSplit } from '../utils/splitTasks';
@@ -175,6 +175,15 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
     enabled: Boolean(sourceInfoId),
   });
 
+  // SOT-1595: 写真（添付ありレコード）を基に生成された関連タスクの件数。1件以上あるときだけ
+  // 削除ダイアログに「関連タスクも削除する」チェックボックスを出すために取得する。
+  const itemHasPhoto = Boolean(item?.attachments && item.attachments.length > 0);
+  const { data: linkedTaskCount = 0 } = useQuery({
+    queryKey: ['linked-task-count', id],
+    queryFn: () => getLinkedTaskCount(id),
+    enabled: Boolean(id) && itemHasPhoto,
+  });
+
   // SOT-1577 / SOT-1584: 本登録後のタスク詳細でも「分割前のタスクに戻す」導線を出す。仮登録画面と
   // 同じく、エージェントが (1/4) のように2件以上へ分割した本登録タスクがある場合のみ表示する。
   // 兄弟件数は本登録一覧(RegisteredListPage と同じ queryKey)から数え、キャッシュを共有する。
@@ -276,7 +285,8 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
   };
 
   const deleteMutation = useMutation({
-    mutationFn: () => deleteInfo(id),
+    // SOT-1595: deleteLinkedTasks=true のとき、写真に紐づく関連タスクも併せて削除する。
+    mutationFn: (deleteLinkedTasks: boolean) => deleteInfo(id, deleteLinkedTasks),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['info'] });
       queryClient.invalidateQueries({ queryKey: ['tomorrow'] });
@@ -373,9 +383,24 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
 
   const handleDelete = async () => {
     if (deleteMutation.isPending || !item) return;
-    if (await confirm(t('records.confirmDelete', { title: item.title }))) {
+    const message = t('records.confirmDelete', { title: item.title });
+    // SOT-1595: 写真に紐づく関連タスクが1件以上あるときは、確認ダイアログに
+    // 「関連タスクも削除する」チェックボックスを出し、選択状態に応じて連鎖削除する。
+    if (linkedTaskCount > 0) {
+      const result = await confirm(message, {
+        checkbox: {
+          label: t('records.deleteLinkedTasks', { count: String(linkedTaskCount) }),
+          defaultChecked: false,
+        },
+      });
+      if (!result.confirmed) return;
       setDeleteError(null);
-      deleteMutation.mutate();
+      deleteMutation.mutate(result.checked);
+      return;
+    }
+    if (await confirm(message)) {
+      setDeleteError(null);
+      deleteMutation.mutate(false);
     }
   };
 

@@ -69,8 +69,23 @@ export const updateInfo = async (id: number | string, data: Partial<NurseryInfoC
   return response.data;
 };
 
-export const deleteInfo = async (id: number | string): Promise<void> => {
-  await api.delete(`/info/${id}`);
+// SOT-1595: 写真削除時に、その写真を基に生成された関連タスクも併せて削除するか選べる。
+// deleteLinkedTasks=true のとき delete_linked_tasks クエリを付け、バックエンドが連鎖削除する。
+export const deleteInfo = async (
+  id: number | string,
+  deleteLinkedTasks = false,
+): Promise<void> => {
+  await api.delete(
+    `/info/${id}`,
+    deleteLinkedTasks ? { params: { delete_linked_tasks: true } } : undefined,
+  );
+};
+
+// SOT-1595: 指定した写真(id)を基に生成された関連タスクの件数。写真削除ダイアログで
+// 「関連タスクも削除」の選択肢を出すか／件数を表示するために使う。
+export const getLinkedTaskCount = async (id: number | string): Promise<number> => {
+  const response = await api.get(`/info/${id}/linked-task-count`);
+  return response.data?.count ?? 0;
 };
 
 // 全データ削除 (SOT-1356)。全タスク + 全写真 + ストレージ実体を削除する。破壊的・不可逆。
