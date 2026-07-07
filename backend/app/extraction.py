@@ -599,7 +599,20 @@ def needs_deadline_investigation(info_type: str, text: str) -> bool:
         return True
     blob = text or ""
     lowered = blob.lower()
-    return any((kw in blob) or (kw in lowered) for kw in _DEADLINE_INVESTIGATION_KEYWORDS)
+    if any((kw in blob) or (kw in lowered) for kw in _DEADLINE_INVESTIGATION_KEYWORDS):
+        return True
+    # SOT-1564: 書類名が本文に明記されず手続き名だけのおたより（例: 現況確認の手続き）でも締切調査を
+    # 発火させる。PR #384 は抽出関数(extract_submission_documents)側に「手続き名→就労証明書」の辞書
+    # 到達を入れたが、そもそもこのゲートが手続きキーワードを知らず False を返すため、自動OCR経路
+    # (routers/attachments.py の needs_deadline_investigation ゲート)で締切調査が一度も起動していな
+    # かった。手続きキーワードは submission_agent の辞書を唯一の真実源として参照する（循環 import を
+    # 避けるため関数内 import）。never-throw: 判定不能時は安全側で False。
+    try:
+        from . import submission_agent
+
+        return submission_agent.text_has_procedure_keyword(blob)
+    except Exception:  # noqa: BLE001 - best-effort ゲート判定
+        return False
 
 
 def draft_title(text: str) -> str:
