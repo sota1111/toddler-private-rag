@@ -194,10 +194,12 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
   const showRevertSplit =
     sourceInfoId !== '' && item != null && shouldShowRevertSplit(item, splitSiblingCount);
 
-  // SOT-1577: 押下でこのタスクを含む分割グループを未分割の1タスクへまとめ直す。まとめ直すと
-  // 現在のタスクは削除されるため、生成された未分割タスクの詳細へ遷移する。
+  // SOT-1577 / SOT-1594: 押下でこのタスク(=表示中の (n/N) 分割タスク)が属する締切グループだけを
+  // 未分割の1タスクへまとめ直す。旧実装は source_info_id を渡し書類全タスクを潰していたため、この
+  // タスク自身の id を渡してグループを特定する。まとめ直すと現在のタスクは削除されるため、生成された
+  // 未分割タスクの詳細へ遷移する。
   const revertSplitMutation = useMutation({
-    mutationFn: () => revertSplitRegistered(sourceInfoId),
+    mutationFn: () => revertSplitRegistered(id),
     onSuccess: (merged) => {
       queryClient.invalidateQueries({ queryKey: ['info'] });
       queryClient.invalidateQueries({ queryKey: ['tomorrow'] });
@@ -210,7 +212,7 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
   });
 
   const handleRevertSplit = async () => {
-    if (revertSplitMutation.isPending || !sourceInfoId) return;
+    if (revertSplitMutation.isPending || !id) return;
     if (!(await confirm(t('drafts.confirmRevertSplit')))) return;
     setDeleteError(null);
     revertSplitMutation.mutate();

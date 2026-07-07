@@ -230,4 +230,89 @@ def test_revert_split_registered_excludes_deadline_companion_content():
 
     merged = client.post(f"/api/info/{sid}/revert-split-registered").json()
     assert merged["content"] == "Aの内容\n\nBの内容"
+
+
+# --- SOT-1594: 「分割を戻す」を締切逆算タスクの (n/N) 分割群単位に限定する ------------------
+def test_revert_split_registered_scoped_to_deadline_group():
+    """SOT-1594: 押下した (n/N) 分割タスクの締切グループだけを1つに戻し、同じ写真由来でも別書類・
+    別グループのタスクは残す（旧実装は source_info_id 単位で書類全タスクを潰していた）。"""
+    from app.submission_agent import SUBMISSION_TAG
+
+    photo = _create(title="運動会のお知らせ", content="写真全文")
+    sid = str(photo["id"])
+    # 締切グループ g1: アンカー(元タスク, offset0, タグ無) + (1/2)(2/2) 分割ステップ(付随タスク)。
+    anchor = _create(
+        title="就労証明書", content="アンカー本文", source_info_id=sid,
+        deadline_group_id="g1", deadline_offset_days=0,
+    )
+    step1 = _create(
+        title="就労証明書(1/2) 様式入手", content="手順1", source_info_id=sid,
+        deadline_group_id="g1", deadline_offset_days=-7, tags=SUBMISSION_TAG,
+    )
+    step2 = _create(
+        title="就労証明書(2/2) 提出", content="手順2", source_info_id=sid,
+        deadline_group_id="g1", deadline_offset_days=0, tags=SUBMISSION_TAG,
+    )
+    # 残すべき: 同じ写真由来の別書類タスク(グループ無) と 別グループ g2 のステップ。
+    _create(title="遠足のしおり", content="別書類本文", source_info_id=sid)
+    _create(
+        title="遠足(1/1) 持ち物", content="別グループ手順", source_info_id=sid,
+        deadline_group_id="g2", deadline_offset_days=-3, tags=SUBMISSION_TAG,
+    )
+
+    # 押下タスク = g1 の (1/2)。その締切グループだけが戻す対象。
+    resp = client.post(f"/api/info/{step1['id']}/revert-split-registered")
+    assert resp.status_code == 200, resp.text
+    merged = resp.json()
+    assert merged["registration_state"] == "registered"
+    assert str(merged["source_info_id"]) == sid
+
+    listed = client.get("/api/info/").json()
+    titles = {i["title"] for i in listed}
+    ids = {i["id"] for i in listed}
+    # g1 のメンバ(アンカー+ステップ)は置き換えられて消える。
+    assert anchor["id"] not in ids
+    assert step1["id"] not in ids
+    assert step2["id"] not in ids
+    # 別書類タスク・別グループ g2 のステップは残る（＝書類全体が1つに潰れない）。
+    assert "遠足のしおり" in titles
+    assert "遠足(1/1) 持ち物" in titles
+    # 統合本文は付随タスク(ステップ)を除外し、アンカー本文から復元する。
+    assert "アンカー本文" in merged["content"]
+    assert "手順1" not in merged["content"]
+
+
+def test_revert_split_drafts_scoped_to_deadline_group():
+    """SOT-1594: draft 版も締切グループ単位。別グループの draft は残す。"""
+    from app.submission_agent import SUBMISSION_TAG
+
+    photo = _create(title="写真", content="写真全文", registration_state="draft")
+    sid = str(photo["id"])
+    a1 = _create(
+        title="書類A(1/2)", content="A1", source_info_id=sid, registration_state="draft",
+        deadline_group_id="ga", deadline_offset_days=-7, tags=SUBMISSION_TAG,
+    )
+    a2 = _create(
+        title="書類A(2/2)", content="A2", source_info_id=sid, registration_state="draft",
+        deadline_group_id="ga", deadline_offset_days=0, tags=SUBMISSION_TAG,
+    )
+    _create(
+        title="書類B(1/1)", content="B1", source_info_id=sid, registration_state="draft",
+        deadline_group_id="gb", deadline_offset_days=-3, tags=SUBMISSION_TAG,
+    )
+
+    resp = client.post(f"/api/info/drafts/{a1['id']}/revert-split")
+    assert resp.status_code == 200, resp.text
+    merged = resp.json()
+    assert merged["registration_state"] == "draft"
+    assert str(merged["source_info_id"]) == sid
+
+    drafts = client.get("/api/info/drafts").json()
+    draft_titles = {i["title"] for i in drafts}
+    draft_ids = {i["id"] for i in drafts}
+    # ga のメンバは戻されて消える。
+    assert a1["id"] not in draft_ids
+    assert a2["id"] not in draft_ids
+    # 別グループ gb の draft は残る。
+    assert "書類B(1/1)" in draft_titles
     assert "付随タスクの内容" not in merged["content"]

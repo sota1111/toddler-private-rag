@@ -181,13 +181,14 @@ const DraftsPage: React.FC = () => {
     }
   };
 
-  // SOT-1577: 「分割前のタスクに戻す」。同一書類(source_info_id)由来の分割 draft 群を、
-  // 未分割の1 draft へまとめ直す。押下したグループ全体を置換するため、対象書類の source_info_id を渡す。
-  const handleRevertSplit = async (id: number | string, sourceInfoId: number | string) => {
+  // SOT-1577 / SOT-1594: 「分割前のタスクに戻す」。押下した (n/N) 分割タスク自身の id を渡し、その
+  // タスクが属する締切グループだけを未分割の1 draft へまとめ直す（同じ写真由来でも別書類・別グループの
+  // draft は残す）。旧実装は source_info_id を渡し書類全タスクを1つに潰していた。
+  const handleRevertSplit = async (id: number | string) => {
     if (!(await confirm(t('drafts.confirmRevertSplit')))) return;
     setBusyId(id);
     try {
-      await revertSplitDrafts(sourceInfoId);
+      await revertSplitDrafts(id);
       await refreshAll();
     } catch (e) {
       console.error('Failed to revert split drafts', e);
@@ -453,7 +454,7 @@ const DraftsPage: React.FC = () => {
                     {isSplitGroup && (
                       <button
                         type="button"
-                        onClick={() => handleRevertSplit(d.id, sourceInfoId)}
+                        onClick={() => handleRevertSplit(d.id)}
                         disabled={anyBusy}
                         className="px-4 py-2 text-sm font-medium text-brand-strong bg-surface border border-brand rounded-md hover:bg-accent-bg disabled:opacity-50"
                       >

@@ -434,25 +434,76 @@ def _genuine_split_dicts(group) -> list:
     return [d for d in dicts if not extraction.is_deadline_companion(d)]
 
 
-@router.post("/drafts/{source_info_id}/revert-split", response_model=schemas.NurseryInfoResponse)
+def _resolve_revert_group(repo, target_id, *, registered: bool):
+    """SOT-1594: 「分割前のタスクに戻す」の対象群を解決する。
+
+    症状: 旧実装は対象を source_info_id（＝写真1枚由来の全タスク）単位でまとめていたため、押下すると
+    書類全てのタスク（他書類の分割・締切逆算タスク含む）が1つに潰れていた。要件は「締切逆算タスクの
+    分割前に戻す」＝押下した (n/N) 分割群だけを1つに戻し、他書類・元タスクは残すこと。
+
+    そこで押下タスク(target_id)を起点に対象群を決める:
+    - 押下タスクが締切グループ(deadline_group_id)に属していれば、**その締切グループのメンバのみ**を
+      対象にする（同じ写真由来でも別グループのタスクは触らない）。
+    - グループを持たないレコードや書類ID（従来のフロント/後方互換）が渡された場合は、SOT-1577 の
+      従来挙動どおり source_info_id 単位にフォールバックする。
+
+    返り値: (members, source_dict, merged_source_id)。members が空なら呼び出し側で 404。
+    registered=True は本登録タスク、False は draft のみを対象にする。source_dict は統合時の
+    title / info_type 参照用（content には使わない, SOT-1577 REOPEN#2）。
+    """
+    rec = None
+    try:
+        rec = repo.get(target_id)
+    except (ValueError, TypeError):
+        rec = None
+
+    want_state = "registered" if registered else "draft"
+
+    def _state_ok(d) -> bool:
+        if getattr(d, "registration_state", None) != want_state:
+            return False
+        # 本登録はアーカイブ済みを除外（draft にアーカイブ概念はない）。
+        return not (registered and getattr(d, "is_archived", False))
+
+    def _source_dict(source_id):
+        if not source_id:
+            return None
+        try:
+            src = repo.get(source_id)
+        except (ValueError, TypeError):
+            src = None
+        return _draft_to_dict(src) if src is not None else None
+
+    group_id = getattr(rec, "deadline_group_id", None) if rec is not None else None
+    if group_id:
+        # 締切グループ単位（SOT-1594 本題）。当該登録状態のメンバのみを対象にする。
+        members = [d for d in repo.list_by_deadline_group(group_id) if _state_ok(d)]
+        merged_source_id = getattr(rec, "source_info_id", None)
+        merged_source_id = str(merged_source_id) if merged_source_id else None
+        return members, _source_dict(merged_source_id), merged_source_id
+
+    # 後方互換（SOT-1577）: source_info_id 単位。押下レコードが source_info_id を持てばそれを、
+    # 無ければ渡された target_id を source_info_id として扱う（＝従来の「書類IDを渡す」呼び出し）。
+    key = getattr(rec, "source_info_id", None) if rec is not None else None
+    key = str(key) if key else str(target_id)
+    members = (
+        repo.list_registered_by_source(key) if registered else repo.list_drafts_by_source(key)
+    )
+    return members, _source_dict(key), key
+
+
+@router.post("/drafts/{target_id}/revert-split", response_model=schemas.NurseryInfoResponse)
 def revert_split_drafts(
-    source_info_id: str,
+    target_id: str,
     repo: InfoRepository = Depends(get_info_repository),
     current_user: str = Depends(get_current_user),
 ):
-    # owner スコープ済み。当該書類由来の draft が無ければ 404。
-    group = repo.list_drafts_by_source(source_info_id)
+    # SOT-1594: 押下タスクの締切グループ単位で戻す（グループ無しは source_info_id 単位に後方互換）。
+    group, source_dict, merged_source_id = _resolve_revert_group(
+        repo, target_id, registered=False
+    )
     if not group:
-        raise HTTPException(status_code=404, detail="No split drafts for this source document")
-
-    # 書類全体（元の登録レコード）を owner スコープで取得（数値でなければ None 扱い）。
-    # SOT-1577 REOPEN#2: source は title / info_type にのみ使い、content(=全写真の文字起こし)は使わない。
-    source = None
-    try:
-        source = repo.get(source_info_id)
-    except (ValueError, TypeError):
-        source = None
-    source_dict = _draft_to_dict(source) if source is not None else None
+        raise HTTPException(status_code=404, detail="No split drafts for this task")
 
     # SOT-1577 REOPEN#2: 統合本文・日付・持ち物は分割タスク群自身から復元する。締切調査の付随タスクは
     # 除外し、実際の分割タスクだけを対象にする。全て付随だった場合のみ群全体にフォールバックする。
@@ -472,44 +523,37 @@ def revert_split_drafts(
             event_date=(merged["event_date"] or None),
             child_id=getattr(first, "child_id", None),
             owner_id=getattr(first, "owner_id", None),
-            source_info_id=str(source_info_id),
+            source_info_id=merged_source_id,
             status="未確認",
             priority="普通",
             registration_state="draft",
         )
     )
 
-    # 置換: 元の分割 draft 群を削除する（owner スコープの delete）。
+    # 置換: 対象群の draft のみを削除する（owner スコープの delete）。他書類・別グループは残る。
     for d in group:
         repo.delete(d.id)
 
     return created
 
 
-# SOT-1577: 「分割前のタスクに戻す」（本登録後版）。同一書類(source_info_id)から分割された
-# 本登録タスク群を、書類全体をまとめた未分割の1タスクへ置き換える。仮登録画面だけでなく、
-# 本登録後のタスク詳細画面にも「分割前に戻す」導線を出すためのエンドポイント。
-# 統合ロジックは draft 版と同じ merge_split_drafts_to_single を再利用する（重複ロジックを作らない）。
-@router.post("/{source_info_id}/revert-split-registered", response_model=schemas.NurseryInfoResponse)
+# SOT-1577: 「分割前のタスクに戻す」（本登録後版）。押下した (n/N) 分割群（同一 deadline_group_id）を
+# まとめた未分割の1タスクへ置き換える。仮登録画面だけでなく、本登録後のタスク詳細画面にも
+# 「分割前に戻す」導線を出すためのエンドポイント。統合ロジックは draft 版と同じ
+# merge_split_drafts_to_single / _resolve_revert_group を再利用する（重複ロジックを作らない）。
+@router.post("/{target_id}/revert-split-registered", response_model=schemas.NurseryInfoResponse)
 def revert_split_registered(
-    source_info_id: str,
+    target_id: str,
     background_tasks: BackgroundTasks,
     repo: InfoRepository = Depends(get_info_repository),
     current_user: str = Depends(get_current_user),
 ):
-    # owner スコープ済み。当該書類由来の本登録タスクが無ければ 404。
-    group = repo.list_registered_by_source(source_info_id)
+    # SOT-1594: 押下タスクの締切グループ単位で戻す（グループ無しは source_info_id 単位に後方互換）。
+    group, source_dict, merged_source_id = _resolve_revert_group(
+        repo, target_id, registered=True
+    )
     if not group:
-        raise HTTPException(status_code=404, detail="No split tasks for this source document")
-
-    # 書類全体（元の登録レコード）を owner スコープで取得（数値でなければ None 扱い）。
-    # SOT-1577 REOPEN#2: source は title / info_type にのみ使い、content(=全写真の文字起こし)は使わない。
-    source = None
-    try:
-        source = repo.get(source_info_id)
-    except (ValueError, TypeError):
-        source = None
-    source_dict = _draft_to_dict(source) if source is not None else None
+        raise HTTPException(status_code=404, detail="No split tasks for this task")
 
     # SOT-1577 REOPEN#2: 統合本文・日付・持ち物は分割タスク群自身から復元する。締切調査の付随タスクは
     # 除外し、実際の分割タスクだけを対象にする。全て付随だった場合のみ群全体にフォールバックする。
@@ -530,14 +574,14 @@ def revert_split_registered(
             event_date=(merged["event_date"] or None),
             child_id=getattr(first, "child_id", None),
             owner_id=getattr(first, "owner_id", None),
-            source_info_id=str(source_info_id),
+            source_info_id=merged_source_id,
             status=(getattr(first, "status", None) or "未確認"),
             priority=(getattr(first, "priority", None) or "普通"),
             registration_state="registered",
         )
     )
 
-    # 置換: 元の分割タスク群を削除する（owner スコープの delete）。
+    # 置換: 対象群の本登録タスクのみを削除する（owner スコープの delete）。他書類・別グループは残る。
     for d in group:
         repo.delete(d.id)
 
