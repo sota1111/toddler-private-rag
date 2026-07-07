@@ -198,3 +198,36 @@ def test_revert_split_registered_404_when_no_group():
     """当該書類由来の本登録タスクが無ければ 404。"""
     resp = client.post("/api/info/999999/revert-split-registered")
     assert resp.status_code == 404, resp.text
+
+
+def test_revert_split_registered_content_from_tasks_not_source_document():
+    """SOT-1577 REOPEN#2: 戻した本文が書類全体(全写真の文字起こし)ではなく分割タスク群の内容から復元される。"""
+    src = _create(title="運動会のお知らせ", content="写真全ての文字起こし（書類全文）")
+    sid = str(src["id"])
+    _create(title="タスクA", content="Aの内容", source_info_id=sid)
+    _create(title="タスクB", content="Bの内容", source_info_id=sid)
+
+    merged = client.post(f"/api/info/{sid}/revert-split-registered").json()
+    # 書類全文（全写真の文字起こし）は流し込まれない。
+    assert "写真全ての文字起こし" not in merged["content"]
+    assert merged["content"] == "Aの内容\n\nBの内容"
+
+
+def test_revert_split_registered_excludes_deadline_companion_content():
+    """SOT-1577 REOPEN#2: 締切調査の付随タスク(deadline_group_id + offset≠0)は統合本文に含めない。"""
+    src = _create(title="提出書類のお知らせ", content="書類全文")
+    sid = str(src["id"])
+    _create(title="タスクA", content="Aの内容", source_info_id=sid)
+    _create(title="タスクB", content="Bの内容", source_info_id=sid)
+    # 締切調査の付随タスク（別グループ・offset≠0）。統合対象外にする。
+    _create(
+        title="付随: 書類を印刷",
+        content="付随タスクの内容",
+        source_info_id=sid,
+        deadline_group_id="g-1",
+        deadline_offset_days=-7,
+    )
+
+    merged = client.post(f"/api/info/{sid}/revert-split-registered").json()
+    assert merged["content"] == "Aの内容\n\nBの内容"
+    assert "付随タスクの内容" not in merged["content"]

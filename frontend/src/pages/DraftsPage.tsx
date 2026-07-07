@@ -7,6 +7,7 @@ import { useConfirm } from '../components/confirmDialogContext';
 import RegisterMenu from '../components/RegisterMenu';
 import ScrollableDatePicker from '../components/ScrollableDatePicker';
 import { INFO_TYPES, STATUS_TYPES, PRIORITY_TYPES } from './infoFormOptions';
+import { isGenuineSplitTask } from '../utils/splitTasks';
 
 // 登録ページ (SOT-1113): 自動登録した写真の仮登録(draft)一覧。
 // 内容を確認のうえ本登録(finalize)、または破棄(delete)できる。
@@ -198,10 +199,13 @@ const DraftsPage: React.FC = () => {
 
   // SOT-1577: 同一書類から2件以上に分割された draft グループだけに「分割前に戻す」を出すため、
   // source_info_id ごとの件数を数える（source_info_id が無い手動 draft は対象外）。
+  // SOT-1577 REOPEN#2: 締切調査の付随タスクは分割件数に数えない（実タスク1件でボタンが出る誤表示を防ぐ）。
   const splitGroupCounts = new Map<string, number>();
   for (const d of drafts ?? []) {
     const key = d.source_info_id != null ? String(d.source_info_id) : '';
-    if (key) splitGroupCounts.set(key, (splitGroupCounts.get(key) ?? 0) + 1);
+    if (key && isGenuineSplitTask(d)) {
+      splitGroupCounts.set(key, (splitGroupCounts.get(key) ?? 0) + 1);
+    }
   }
 
   const inputCls = 'mt-1 block w-full border border-border rounded-md shadow-sm p-2 text-sm';
