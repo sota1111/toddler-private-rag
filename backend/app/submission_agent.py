@@ -573,17 +573,24 @@ def extract_submission_documents(
     採用する（LLM 抽出の書類別締切や本文検出より優先）。
     """
     safe_text = safe_text or ""
-    if not safe_text.strip() or not ai_client.gemini_available():
+    if not safe_text.strip():
         return []
 
-    try:
-        docs = _llm_extract_documents(safe_text, language)
-    except Exception as e:  # noqa: BLE001 - graceful degradation
-        logger.warning("submission document extraction failed: %s", e)
-        docs = []
+    # SOT-1564: LLM 抽出は Gemini 利用可能なときだけ試みる。以前はこの関数先頭で
+    # ``not ai_client.gemini_available()`` のとき即 [] を返しており、下の決定的辞書
+    # (_dictionary_inferred_documents) が一切効かず、SOT-1566 の「LLM 不在でも辞書だけで書類へ到達
+    # できる（オフライン土台）」が実運用で機能していなかった。gemini ゲートは LLM 抽出のみに限定し、
+    # 辞書由来の書類は Gemini 不在でも到達できるようにする（grounding は下で never-throw フォールバック）。
+    docs: List[dict] = []
+    if ai_client.gemini_available():
+        try:
+            docs = _llm_extract_documents(safe_text, language)
+        except Exception as e:  # noqa: BLE001 - graceful degradation
+            logger.warning("submission document extraction failed: %s", e)
+            docs = []
 
     # SOT-1566: 手続きキーワードから標準書類を推定する決定的な辞書候補を注入し、LLM抽出結果と
-    # 書類名でマージ（重複排除・明記優先）。LLM が失敗しても辞書だけで書類へ到達できる（オフライン土台）。
+    # 書類名でマージ（重複排除・明記優先）。LLM が失敗/不在でも辞書だけで書類へ到達できる（オフライン土台）。
     dict_docs = _dictionary_inferred_documents(safe_text)
     docs = _merge_document_candidates(list(docs) + dict_docs)[:_MAX_DOCUMENTS]
     if not docs:

@@ -223,6 +223,50 @@ def test_extract_documents_no_overdetection(monkeypatch):
     assert submission_agent.extract_submission_documents(GENERAL_NOTICE) == []
 
 
+# --- SOT-1564: Gemini 不在でも辞書だけで就労証明書へ到達（オフライン土台の実効化） ----------
+
+# 実運用で報告された OCR 結果そのまま（全角スペースの分かち書き＋年なし「1/31 まで」）。
+OCR_PROCEDURE_ONLY = "保育施設在籍にかかる現況確認の手 続きはお済でしょうか･･･ 1/31 まで"
+
+
+def test_extract_documents_procedure_only_reaches_without_gemini(monkeypatch):
+    """再現不具合(SOT-1564): Gemini 不在でも辞書で就労証明書へ到達する。
+
+    以前は extract_submission_documents 先頭で gemini 不可なら即 [] を返し、辞書が効かず
+    タスクが1件も生成されなかった。gemini ゲートを LLM 抽出のみに限定した修正後は、辞書由来の
+    就労証明書(inferred=True)へ到達する。grounding は Gemini 不在で失敗しても never-throw で
+    フォールバックし、書類自体は残る。
+    """
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: False)
+
+    docs = submission_agent.extract_submission_documents(
+        OCR_PROCEDURE_ONLY, language="ja"
+    )
+    assert len(docs) == 1
+    doc = docs[0]
+    assert doc["name"] == "就労証明書"
+    assert doc["inferred"] is True
+    # grounding は Gemini 不在で呼べないため手順は空だが、書類は破棄されない（後段で1タスク化）。
+    assert doc["steps"] == []
+
+
+def test_build_drafts_procedure_only_reaches_without_gemini(monkeypatch):
+    """再現不具合(SOT-1564) end-to-end: Gemini 不在でも就労証明書の準備タスク draft が生成される。"""
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: False)
+
+    drafts = submission_agent.build_submission_task_drafts(
+        OCR_PROCEDURE_ONLY, language="ja"
+    )
+    assert drafts, "就労証明書のタスクが1件も生成されていない（再現不具合）"
+    work = [d for d in drafts if "就労証明書" in d["title"]]
+    assert work, "就労証明書のタスクが含まれていない"
+    draft = work[0]
+    assert submission_agent.SUBMISSION_TAG in draft["tags"]
+    assert draft["inferred"] is True
+    # 推定由来のため「推定（要確認）」導線が本文に残る。
+    assert "推定" in draft["content"]
+
+
 def test_build_drafts_inferred_shows_notice(monkeypatch):
     """推定由来の書類は draft に inferred=True が伝播し、本文に「推定（要確認）」導線が出る。"""
     monkeypatch.setattr(ai_client, "gemini_available", lambda: True)
