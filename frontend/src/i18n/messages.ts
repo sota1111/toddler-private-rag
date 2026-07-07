@@ -376,7 +376,7 @@ export const messages: Record<Lang, Messages> = {
     'drafts.working': '処理中…',
     'drafts.confirmDiscard': 'この仮登録を破棄しますか？',
     'drafts.revertSplit': '分割前のタスクに戻す',
-    'drafts.confirmRevertSplit': '締切から逆算した準備開始日つきタスクを1つのタスクにまとめ直しますか？',
+    'drafts.confirmRevertSplit': '締切から逆算した準備開始日つきタスクを、1つのタスクにまとめ直しますか？',
     'drafts.actionFail': '操作に失敗しました。もう一度お試しください。',
     'drafts.refresh': '更新',
     'drafts.refreshing': '更新中…',
