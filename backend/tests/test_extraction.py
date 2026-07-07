@@ -123,6 +123,100 @@ def test_build_task_drafts_empty_text_is_safe():
     assert "event_date" in drafts[0]
 
 
+# --- 手続き名だけのおたよりでの締切調査補完 (SOT-1588) ---
+# 多トピックの長いおたよりを LLM が分割すると「現況確認の手続き…」の依頼が落ち、どの分割タスクも
+# 締切調査ゲートを通らず就労証明書の締切逆算タスクが生成されない不具合を固定する。
+
+# 実報告の文字起こし（複数トピックのお便り）。末尾の「お願いします」節に手続き依頼が埋もれている。
+_FULL_LETTER = """7月のおたより
+おたんじょうびおめでとう！ 9月生まれのおともだち
+7/7 (火) 七夕祭り 全児
+7/13(月) セイハ英語 幼児
+七夕祭りについて 7月7日 (火) に七夕祭りをします。短冊を7/1日に持って帰ります。
+ほっこりタイム絵本 絵本は魔法の力があります。
+お願いします
+●子どもたちが遊びに使う新聞紙がお家にありましたら頂けないでしょうか？
+●登園、帰園の時のカードを忘れないようにしてください。
+●保育施設在籍にかかる現況確認の手 続きはお済でしょうか･･･ 1/31 まで
+"""
+
+
+def test_build_task_drafts_supplements_procedure_when_llm_drops_it(monkeypatch):
+    """LLM 分割が手続き依頼を落としても、決定的な補完タスクで締切調査へ到達する。"""
+    monkeypatch.setattr(extraction.ai_client, "gemini_available", lambda: True)
+
+    def _fake_llm_tasks(text, language="ja"):
+        # LLM は七夕など目立つ行事だけ抽出し、「現況確認の手続き」を落とす状況を模擬。
+        return [
+            {"title": "七夕祭り", "date": "7月7日", "detail": "7月7日に七夕祭りをします", "category": "events"},
+            {"title": "セイハ英語", "date": "7月13日", "detail": "セイハ英語があります", "category": "events"},
+        ]
+
+    monkeypatch.setattr(extraction, "_llm_tasks", _fake_llm_tasks)
+    drafts = extraction.build_task_drafts(_FULL_LETTER, language="ja")
+
+    # 手続き文を保持した補完タスクが追加され、締切調査ゲートを通る。
+    proc = [d for d in drafts if "現況確認" in (d.get("content") or "")]
+    assert proc, "procedure supplement draft was not added"
+    assert proc[0]["needs_deadline_investigation"] is True
+    assert proc[0]["info_type"] == "提出物"
+    # 締切表記が content に保持され、submission_agent 側で拾える。
+    assert "1/31" in proc[0]["content"]
+
+
+def test_build_task_drafts_no_duplicate_when_llm_keeps_procedure(monkeypatch):
+    """LLM が手続きタスクを残した場合は補完しない（重複させない）。"""
+    monkeypatch.setattr(extraction.ai_client, "gemini_available", lambda: True)
+
+    def _fake_llm_tasks(text, language="ja"):
+        return [
+            {
+                "title": "現況確認の手続き",
+                "date": "",
+                "detail": "保育施設在籍にかかる現況確認の手続きはお済でしょうか 1/31まで",
+                "category": "submissions",
+            },
+        ]
+
+    monkeypatch.setattr(extraction, "_llm_tasks", _fake_llm_tasks)
+    drafts = extraction.build_task_drafts(_FULL_LETTER, language="ja")
+
+    proc = [d for d in drafts if "現況確認" in (d.get("content") or "")]
+    assert len(proc) == 1  # 補完で重複させない
+    assert proc[0]["needs_deadline_investigation"] is True
+
+
+def test_build_task_drafts_no_supplement_without_procedure_keyword(monkeypatch):
+    """手続きキーワードが無い一般的なおたよりでは補完せず、締切調査を過剰発火しない。"""
+    monkeypatch.setattr(extraction.ai_client, "gemini_available", lambda: True)
+
+    def _fake_llm_tasks(text, language="ja"):
+        return [
+            {"title": "運動会", "date": "5月10日", "detail": "運動会を開催します", "category": "events"},
+        ]
+
+    monkeypatch.setattr(extraction, "_llm_tasks", _fake_llm_tasks)
+    drafts = extraction.build_task_drafts("運動会と遠足のお知らせ", language="ja")
+
+    assert len(drafts) == 1  # 補完タスクは追加されない
+    assert all(not d.get("needs_deadline_investigation") for d in drafts)
+
+
+def test_procedure_supplement_draft_extracts_procedure_line():
+    """補完 draft は手続き文（＋同一行の締切表記）を保持する純関数。"""
+    draft = extraction._procedure_supplement_draft(_FULL_LETTER)
+    assert draft is not None
+    assert "現況確認" in draft["content"]
+    assert "1/31" in draft["content"]
+    assert draft["needs_deadline_investigation"] is True
+    # 明示アンカーは張らず（OCR 補正前の誤日付固定を避ける）本文検出＋補正に委ねる。
+    assert draft["event_date"] == ""
+
+
+def test_procedure_supplement_draft_none_without_keyword():
+    assert extraction._procedure_supplement_draft("運動会と遠足のお知らせ") is None
+
+
 # --- 設定言語でのタスク登録 (SOT-1315) ---
 
 

@@ -879,6 +879,65 @@ def _single_task_fallback(
     return fields
 
 
+def _procedure_keyword_in_drafts(drafts: List[dict]) -> bool:
+    """生成済み draft のいずれかの content に手続きキーワードが含まれるか (SOT-1588)。
+
+    含まれていればそのタスクは needs_deadline_investigation ゲートを通り（＝締切調査へ到達する）、
+    補完タスクは不要（重複させない）。never-throw: 判定不能時は False。
+    """
+    try:
+        from . import submission_agent  # 遅延 import: 循環参照回避
+    except Exception:  # noqa: BLE001 - best-effort
+        return False
+    for d in drafts:
+        try:
+            if submission_agent.text_has_procedure_keyword(d.get("content") or ""):
+                return True
+        except Exception:  # noqa: BLE001 - best-effort
+            continue
+    return False
+
+
+def _procedure_supplement_draft(safe_text: str) -> Optional[dict]:
+    """全文に手続きキーワードがあるのに LLM 分割で失われた場合の決定的な補完 draft (SOT-1588)。
+
+    多トピックの長いおたよりでは LLM のタスク分割が「保育施設在籍にかかる現況確認の手続き…」の
+    ような小さな依頼を落とす／語を変えることがあり、その結果どのタスクも締切調査ゲート
+    (needs_deadline_investigation)を通らず、就労証明書の締切逆算タスクが一度も生成されない
+    （＝SOT-1564 の辞書到達が実運用に届かない）。全文には手続きキーワードが決定的に存在するので、
+    それを含む文を保持した「提出物」タスクを1件補完し、締切調査(submission_agent)へ確実に到達させる。
+
+    締切表記（例「… 1/31 まで」）は手続き文と同じ行に載ることが多いので、キーワードを含む行を
+    そのまま content に残し、submission_agent 側で締切を拾って（発行月コンテキストで OCR 補正して）
+    逆算アンカーにできるようにする。event_date は敢えて空にする（明示アンカーにすると OCR 補正前の
+    誤った日付で固定されてしまうため、本文検出＋補正に委ねる）。手続きキーワードが無ければ None。
+    """
+    try:
+        from . import submission_agent  # 遅延 import: 循環参照回避
+    except Exception:  # noqa: BLE001 - best-effort
+        return None
+    if not submission_agent.text_has_procedure_keyword(safe_text or ""):
+        return None
+    # 手続きキーワードを含む行/文を抽出（締切表記を同じ行に保つため行/句単位で保持）。
+    segments = [seg.strip() for seg in re.split(r"[\n。]", safe_text or "") if seg.strip()]
+    proc_segments = [
+        seg for seg in segments if submission_agent.text_has_procedure_keyword(seg)
+    ]
+    content = "\n".join(proc_segments) if proc_segments else (safe_text or "")
+    title = draft_title(content)
+    category_dict = {k: [] for k in ALL_CONTENT_KEYS}
+    return {
+        "title": title,
+        "info_type": "提出物",  # 締切調査対象。needs_deadline_investigation も True になる。
+        "content": content,
+        "items": "",
+        "date": "",
+        "event_date": "",
+        "needs_deadline_investigation": True,
+        "categories": {"title": title, **category_dict},
+    }
+
+
 # SOT-1350: 同一日・同一イベントのタスクを1件に統合する後処理。
 # 共通接頭辞がこの文字数以上のとき「同じイベント」とみなす（過剰マージを防ぐ保守的な閾値）。
 _EVENT_MERGE_MIN_PREFIX = 3
@@ -1014,7 +1073,17 @@ def build_task_drafts(
 
     # SOT-1350: 同一日・同一イベントのタスクを draft 化前に1件へ統合する。
     tasks = _consolidate_tasks(tasks)
-    return [_task_to_draft(task, safe_text) for task in tasks]
+    drafts = [_task_to_draft(task, safe_text) for task in tasks]
+
+    # SOT-1588: 多トピックの長いおたよりでは LLM 分割が「現況確認の手続き…」のような手続き依頼を
+    # 落とし、どの分割タスクも締切調査ゲートを通らないことがある。全文に手続きキーワードが決定的に
+    # 存在するのに生成タスクのどれもそれを含まない場合は、決定的な補完タスクを1件追加して就労証明書の
+    # 締切逆算へ確実に到達させる（既に含むタスクがあれば重複させない）。best-effort。
+    if not _procedure_keyword_in_drafts(drafts):
+        supplement = _procedure_supplement_draft(safe_text)
+        if supplement is not None:
+            drafts.append(supplement)
+    return drafts
 
 
 def is_deadline_companion(record: dict) -> bool:
