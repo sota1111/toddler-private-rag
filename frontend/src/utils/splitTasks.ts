@@ -55,3 +55,18 @@ export function countAgentSplitTasks(
       String(it.source_info_id ?? '') === sourceInfoId && isAgentSplitTask(it),
   ).length;
 }
+
+/**
+ * このタスクに「分割前のタスクに戻す」ボタンを表示すべきか（SOT-1588）。
+ * 条件は AND:
+ *   - 表示中のタスク**自身**が (n/N) のエージェント分割タスクである（`isAgentSplitTask(item)`）。
+ *   - かつ同一 source_info_id の分割メンバが2件以上（`groupSplitCount >= 2`）＝実際に分割されたグループ。
+ * これにより、同じ写真から登録された分割マーカー無しの他タスク（1枚→複数の独立タスク／アンカー等）には
+ * ボタンが出ない。グループ件数だけを条件にしていた旧判定は、非分割の兄弟にもボタンを表示してしまっていた。
+ */
+export function shouldShowRevertSplit(
+  item: SplitTaskLike,
+  groupSplitCount: number,
+): boolean {
+  return groupSplitCount >= 2 && isAgentSplitTask(item);
+}

@@ -7,7 +7,7 @@ import { useConfirm } from '../components/confirmDialogContext';
 import RegisterMenu from '../components/RegisterMenu';
 import ScrollableDatePicker from '../components/ScrollableDatePicker';
 import { INFO_TYPES, STATUS_TYPES, PRIORITY_TYPES } from './infoFormOptions';
-import { isAgentSplitTask } from '../utils/splitTasks';
+import { isAgentSplitTask, shouldShowRevertSplit } from '../utils/splitTasks';
 
 // 登録ページ (SOT-1113): 自動登録した写真の仮登録(draft)一覧。
 // 内容を確認のうえ本登録(finalize)、または破棄(delete)できる。
@@ -315,9 +315,11 @@ const DraftsPage: React.FC = () => {
           // 多重リクエスト/状態競合を防ぐ（処理中の項目だけ「処理中…」表示を維持）。
           const anyBusy = busyId !== null || bulkBusy;
           const isEditing = editingId === d.id && editForm !== null;
-          // SOT-1584: 同一書類から (1/4) のように2件以上へ分割された draft なら「分割前に戻す」を表示。
+          // SOT-1584 / SOT-1588: 「分割前に戻す」は、同一書類から (1/4) のように2件以上へ分割された
+          // グループの、かつ **このカード自身が (n/N) 分割タスク** の場合にのみ表示する。グループ件数だけを
+          // 見ていた旧判定は、同じ写真から登録された非分割の他タスクにもボタンを出してしまっていた。
           const sourceInfoId = d.source_info_id != null ? String(d.source_info_id) : '';
-          const isSplitGroup = sourceInfoId !== '' && (splitGroupCounts.get(sourceInfoId) ?? 0) >= 2;
+          const isSplitGroup = shouldShowRevertSplit(d, splitGroupCounts.get(sourceInfoId) ?? 0);
           return (
             <div key={d.id} className="bg-surface shadow-sm border border-border rounded-lg p-5">
               <div className="flex flex-col sm:flex-row gap-4">

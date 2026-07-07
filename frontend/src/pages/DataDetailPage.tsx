@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { getInfoById, deleteInfo, updateInfo, getAttachmentFileUrl, getAttachmentTranscription, rescheduleDeadline, getInfoList, revertSplitRegistered } from '../api';
 import type { Attachment, NurseryInfo } from '../types';
 import { STATUS_TYPES } from './infoFormOptions';
-import { countAgentSplitTasks } from '../utils/splitTasks';
+import { countAgentSplitTasks, shouldShowRevertSplit } from '../utils/splitTasks';
 import { useI18n } from '../i18n/useI18n';
 import { useConfirm } from '../components/confirmDialogContext';
 
@@ -189,7 +189,10 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
     (registeredList ?? []) as NurseryInfo[],
     sourceInfoId,
   );
-  const isSplitGroup = sourceInfoId !== '' && splitSiblingCount >= 2;
+  // SOT-1588: グループ件数だけでなく、表示中のタスク自身が (n/N) の分割タスクである場合のみ表示する。
+  // これで同じ写真から登録された非分割の他タスクにはボタンが出ない。
+  const showRevertSplit =
+    sourceInfoId !== '' && item != null && shouldShowRevertSplit(item, splitSiblingCount);
 
   // SOT-1577: 押下でこのタスクを含む分割グループを未分割の1タスクへまとめ直す。まとめ直すと
   // 現在のタスクは削除されるため、生成された未分割タスクの詳細へ遷移する。
@@ -619,7 +622,7 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
           {/* SOT-1577: 「分割前のタスクに戻す」ボタン。本文と、写真リンク／アーカイブ行の間に配置する。
               仮登録画面(DraftsPage)と同じく、同一書類から2件以上に分割された本登録タスクの場合のみ表示し、
               押下でその分割グループを未分割の1タスクへまとめ直す。非写真タスク・編集モード以外で表示。 */}
-          {!hasPhoto && !isEditing && isSplitGroup && (
+          {!hasPhoto && !isEditing && showRevertSplit && (
             <div className="mt-4">
               <button
                 type="button"
