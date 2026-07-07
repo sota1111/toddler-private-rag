@@ -412,7 +412,8 @@ def list_processing_drafts(repo: InfoRepository = Depends(get_info_repository), 
 # "/{id}" より前に宣言してリテラルパスを優先させる。
 def _draft_to_dict(info) -> dict:
     """merge_split_drafts_to_single / is_deadline_companion が読む形へ ORM/レコードを写像する
-    （純データ変換）。SOT-1577 REOPEN#2: 付随タスク判定のため締切グループ情報も含める。"""
+    （純データ変換）。SOT-1577 REOPEN#2: 付随タスク判定のため締切グループ情報も含める。
+    SOT-1584: offset に依存せず付随タスクを判定できるよう、番兵タグ(tags)も含める。"""
     return {
         "title": getattr(info, "title", "") or "",
         "info_type": getattr(info, "info_type", "") or "",
@@ -420,6 +421,7 @@ def _draft_to_dict(info) -> dict:
         "items": getattr(info, "items", "") or "",
         "date": getattr(info, "date", "") or "",
         "event_date": getattr(info, "event_date", "") or "",
+        "tags": getattr(info, "tags", None),
         "deadline_group_id": getattr(info, "deadline_group_id", None),
         "deadline_offset_days": getattr(info, "deadline_offset_days", None),
     }

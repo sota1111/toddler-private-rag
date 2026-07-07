@@ -1005,17 +1005,31 @@ def build_task_drafts(
 
 
 def is_deadline_companion(record: dict) -> bool:
-    """SOT-1577 REOPEN#2: レコードが「締切調査の付随タスク」かを判定する純関数。
+    """SOT-1577 REOPEN#2 / SOT-1584: レコードが「締切調査の付随タスク」かを判定する純関数。
 
     写真1枚(source_info_id)からは build_task_drafts が生成する“実際の分割タスク”に加え、
     締切調査(submission_agent)が生成する付随タスクにも同じ source_info_id が付く。付随タスクは
-    締切グループ(deadline_group_id)に属し、基準日から前倒しされた offset(≠0)を持つ。分割の元
-    タスク(アンカー)は同グループでも offset 0。締切調査を要さない通常の分割タスクは group なし。
+    締切グループ(deadline_group_id)に属し、submission_agent が番兵タグ ``SUBMISSION_TAG``
+    (提出書類) を必ず付ける。分割の元タスク(アンカー)は同グループに束ねられても offset 0 で、
+    タグは持たない。締切調査を要さない通常の分割タスクは group もタグも無い。
 
-    したがって「deadline_group_id があり、かつ offset が 0 でない」レコードを付随タスクとみなす。
-    「分割前のタスクに戻す」ボタンの表示件数や統合対象からは付随タスクを除外し、分割していない
-    (=実タスク1件)のにボタンが出る誤表示を防ぐ。
+    判定規則(SOT-1584):
+    - ``SUBMISSION_TAG`` を持つレコードは付随タスク。これで offset に依存せず確実に除外できる。
+    - 後方互換のため、従来の「deadline_group_id があり offset≠0」も付随タスクとして扱う。
+
+    SOT-1584 修正前は offset のみで判定していたため、基準日当日に締切が来る付随タスク
+    (例: 提出手順 (2/2)、offset 0) がアンカーと同じ「実タスク」と誤カウントされ、分割していない
+    (=実タスク1件)のに「分割前のタスクに戻す」ボタンが出ていた。番兵タグを主判定に加えて是正する。
+    表示件数や統合対象からは付随タスクを除外する。
     """
+    # 番兵タグによる判定(主)。submission_agent と同じ SUBMISSION_TAG を単一の真実源として使う。
+    from .submission_agent import SUBMISSION_TAG  # 遅延 import で循環参照を避ける
+
+    tags = record.get("tags")
+    if tags and SUBMISSION_TAG in str(tags):
+        return True
+
+    # 後方互換: 締切グループに属し offset≠0 のレコードも付随タスクとして扱う。
     group = record.get("deadline_group_id")
     if group in (None, ""):
         return False

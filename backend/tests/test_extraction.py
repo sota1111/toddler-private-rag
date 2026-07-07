@@ -394,7 +394,7 @@ def test_is_deadline_companion_distinguishes_companion_from_split():
     assert extraction.is_deadline_companion(
         {"deadline_group_id": "g1", "deadline_offset_days": None}
     ) is True
-    # 締切グループのアンカー（元タスク, offset 0）は実タスク。
+    # 締切グループのアンカー（元タスク, offset 0, タグ無し）は実タスク。
     assert extraction.is_deadline_companion(
         {"deadline_group_id": "g1", "deadline_offset_days": 0}
     ) is False
@@ -403,6 +403,33 @@ def test_is_deadline_companion_distinguishes_companion_from_split():
         {"deadline_group_id": None, "deadline_offset_days": None}
     ) is False
     assert extraction.is_deadline_companion({}) is False
+
+
+def test_is_deadline_companion_detects_offset0_submission_task_by_tag():
+    # SOT-1584: 基準日当日締切の付随タスク（例: 提出手順(2/2)）は offset 0 だが、番兵タグ
+    # SUBMISSION_TAG を持つため付随タスクとして除外する。旧来の offset のみ判定では実タスクと
+    # 誤カウントされ、分割していないのに「分割前のタスクに戻す」ボタンが誤表示されていた。
+    from app.submission_agent import SUBMISSION_TAG
+
+    assert extraction.is_deadline_companion(
+        {
+            "deadline_group_id": "g1",
+            "deadline_offset_days": 0,
+            "tags": SUBMISSION_TAG,
+        }
+    ) is True
+    # offset≠0 のタグ付き付随タスクも当然 True（従来経路と一致）。
+    assert extraction.is_deadline_companion(
+        {"deadline_group_id": "g1", "deadline_offset_days": 11, "tags": SUBMISSION_TAG}
+    ) is True
+    # タグは持つが締切グループが無いケースでも付随タスクとして除外する。
+    assert extraction.is_deadline_companion(
+        {"deadline_group_id": None, "tags": SUBMISSION_TAG}
+    ) is True
+    # アンカー（元タスク）はタグを持たないので実タスクのまま（誤除外しない）。
+    assert extraction.is_deadline_companion(
+        {"deadline_group_id": "g1", "deadline_offset_days": 0, "tags": None}
+    ) is False
 
 
 def test_merge_split_drafts_concatenates_content_without_source():
