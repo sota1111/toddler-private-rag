@@ -50,6 +50,22 @@ _PROCEDURE_DOCUMENT_RULES = (
     ),
 )
 
+
+def text_has_procedure_keyword(text: str) -> bool:
+    """本文に『手続き名→標準書類』辞書(_PROCEDURE_DOCUMENT_RULES)の手続きキーワードが含まれるか。
+
+    SOT-1564: 書類名が本文に明記されず手続き名だけのおたより（例:「保育施設在籍にかかる現況確認の
+    手続き」）でも、締切調査（提出書類エージェント＝就労証明書への到達）を発火させるためのゲート判定に
+    使う純粋関数。締切調査の要否ゲート(extraction.needs_deadline_investigation)から、辞書の手続き
+    キーワードを唯一の真実源として参照する。手続きキーワードが無ければ False（＝一般文で誤発火させ
+    ない）。常に never-throw。
+    """
+    if not text:
+        return False
+    return any(
+        kw in text for keywords, _doc in _PROCEDURE_DOCUMENT_RULES for kw in keywords
+    )
+
 # おたより本文から締切候補を拾うための日付パターン（ocr.py の検出と同等）。
 _DATE_PATTERNS = (
     r"\d{4}[-/]\d{1,2}[-/]\d{1,2}",          # 2026-07-31, 2026/7/31

@@ -345,6 +345,18 @@ def test_needs_deadline_investigation_generic_notice_false():
     assert extraction.needs_deadline_investigation("行事", "明日は運動会です") is False
 
 
+def test_needs_deadline_investigation_procedure_name_only():
+    # SOT-1564: 書類名(就労証明書)が本文に明記されず、手続き名(現況確認)だけのおたよりでも、
+    # 締切調査ゲートは True を返す（→ 就労証明書への辞書到達フローが起動する）。
+    # OCR 分かち書き「手 続き」でも手続きキーワード「現況確認」は連続なので判定できる。
+    text = "保育施設在籍にかかる現況確認の手 続きはお済でしょうか･･･ 1/31 まで"
+    assert extraction.needs_deadline_investigation("資料", text) is True
+    # 手続きキーワードを含まない一般文は依然 False（過検出しない）。
+    assert (
+        extraction.needs_deadline_investigation("資料", "来週の遠足のお知らせです") is False
+    )
+
+
 def test_task_to_draft_sets_needs_deadline_investigation():
     task = {"title": "就労証明書の提出", "detail": "勤務先で記入してもらう", "category": "submissions"}
     draft = extraction._task_to_draft(task, "")

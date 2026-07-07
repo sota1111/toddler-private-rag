@@ -146,6 +146,21 @@ def test_dictionary_no_keyword_returns_empty():
     assert submission_agent._dictionary_inferred_documents("   ") == []
 
 
+def test_text_has_procedure_keyword():
+    """SOT-1564: 締切調査ゲートが参照する手続きキーワード判定（辞書を唯一の真実源とする）。"""
+    # 手続き名だけ（書類名が本文に無い）でも True。OCR 分かち書き「手 続き」でも現況確認は連続で拾える。
+    assert submission_agent.text_has_procedure_keyword(PROCEDURE_ONLY) is True
+    assert (
+        submission_agent.text_has_procedure_keyword(
+            "保育施設在籍にかかる現況確認の手 続きはお済でしょうか"
+        )
+        is True
+    )
+    # 手続きキーワードが無い一般文・空文字は False（過検出しない・never-throw）。
+    assert submission_agent.text_has_procedure_keyword(GENERAL_NOTICE) is False
+    assert submission_agent.text_has_procedure_keyword("") is False
+
+
 def test_merge_candidates_explicit_wins_and_dedup():
     """マージ: 同一書類名は重複排除し、明記(inferred=False)が推定に勝つ。締切は明記を優先。"""
     merged = submission_agent._merge_document_candidates(
