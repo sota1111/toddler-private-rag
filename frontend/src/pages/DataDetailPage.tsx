@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { getInfoById, deleteInfo, updateInfo, getAttachmentFileUrl, getAttachmentTranscription, rescheduleDeadline, getInfoList, revertSplitRegistered } from '../api';
 import type { Attachment, NurseryInfo } from '../types';
 import { STATUS_TYPES } from './infoFormOptions';
-import { countGenuineSplitTasks } from '../utils/splitTasks';
+import { countAgentSplitTasks } from '../utils/splitTasks';
 import { useI18n } from '../i18n/useI18n';
 import { useConfirm } from '../components/confirmDialogContext';
 
@@ -175,16 +175,17 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
     enabled: Boolean(sourceInfoId),
   });
 
-  // SOT-1577: 本登録後のタスク詳細でも「分割前のタスクに戻す」導線を出す。仮登録画面と同じく、
-  // 同一書類(source_info_id)から2件以上に分割された本登録タスクがある場合のみ表示する。
+  // SOT-1577 / SOT-1584: 本登録後のタスク詳細でも「分割前のタスクに戻す」導線を出す。仮登録画面と
+  // 同じく、エージェントが (1/4) のように2件以上へ分割した本登録タスクがある場合のみ表示する。
   // 兄弟件数は本登録一覧(RegisteredListPage と同じ queryKey)から数え、キャッシュを共有する。
   const { data: registeredList } = useQuery({
     queryKey: ['info', 'registered'],
     queryFn: () => getInfoList(),
     enabled: Boolean(sourceInfoId),
   });
-  // SOT-1577 REOPEN#2: 締切調査の付随タスクは分割件数に数えない（実タスク1件でボタンが出る誤表示を防ぐ）。
-  const splitSiblingCount = countGenuineSplitTasks(
+  // SOT-1584: (n/N) 分割マーカーを持つエージェント分割タスクだけを数える（1枚→複数の独立タスクや
+  // 実タスク1件ではマーカーが無く 0 件となり、ボタンは表示されない）。
+  const splitSiblingCount = countAgentSplitTasks(
     (registeredList ?? []) as NurseryInfo[],
     sourceInfoId,
   );

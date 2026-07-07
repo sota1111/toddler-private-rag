@@ -7,7 +7,7 @@ import { useConfirm } from '../components/confirmDialogContext';
 import RegisterMenu from '../components/RegisterMenu';
 import ScrollableDatePicker from '../components/ScrollableDatePicker';
 import { INFO_TYPES, STATUS_TYPES, PRIORITY_TYPES } from './infoFormOptions';
-import { isGenuineSplitTask } from '../utils/splitTasks';
+import { isAgentSplitTask } from '../utils/splitTasks';
 
 // 登録ページ (SOT-1113): 自動登録した写真の仮登録(draft)一覧。
 // 内容を確認のうえ本登録(finalize)、または破棄(delete)できる。
@@ -197,13 +197,13 @@ const DraftsPage: React.FC = () => {
     }
   };
 
-  // SOT-1577: 同一書類から2件以上に分割された draft グループだけに「分割前に戻す」を出すため、
-  // source_info_id ごとの件数を数える（source_info_id が無い手動 draft は対象外）。
-  // SOT-1577 REOPEN#2: 締切調査の付随タスクは分割件数に数えない（実タスク1件でボタンが出る誤表示を防ぐ）。
+  // SOT-1584: 「分割前に戻す」は、エージェントが (1/4) のように分割したタスク群にのみ出す。
+  // source_info_id ごとに「(n/N) 分割マーカーを持つ分割タスク」の件数を数える（手動 draft や、
+  // 1枚から複数の独立タスクが出ただけのケースはマーカーが無いので対象外）。
   const splitGroupCounts = new Map<string, number>();
   for (const d of drafts ?? []) {
     const key = d.source_info_id != null ? String(d.source_info_id) : '';
-    if (key && isGenuineSplitTask(d)) {
+    if (key && isAgentSplitTask(d)) {
       splitGroupCounts.set(key, (splitGroupCounts.get(key) ?? 0) + 1);
     }
   }
@@ -315,7 +315,7 @@ const DraftsPage: React.FC = () => {
           // 多重リクエスト/状態競合を防ぐ（処理中の項目だけ「処理中…」表示を維持）。
           const anyBusy = busyId !== null || bulkBusy;
           const isEditing = editingId === d.id && editForm !== null;
-          // SOT-1577: 同一書類から2件以上に分割された draft なら「分割前に戻す」を表示。
+          // SOT-1584: 同一書類から (1/4) のように2件以上へ分割された draft なら「分割前に戻す」を表示。
           const sourceInfoId = d.source_info_id != null ? String(d.source_info_id) : '';
           const isSplitGroup = sourceInfoId !== '' && (splitGroupCounts.get(sourceInfoId) ?? 0) >= 2;
           return (
