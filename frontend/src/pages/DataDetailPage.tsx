@@ -464,13 +464,14 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
 
           {/* SOT-1468: 写真ありレコードでは登録月(created_at)を変更できる。
               写真一覧はこの登録月でグルーピングされるため、ここでの変更が一覧の月グループに反映される。
-              SOT-1563(再オープン): 見た目をやることリストのステータス変更(status セレクト, SOT-1337)と同じ
-              オレンジ(brand-accent)基調に揃える（brand ラベル＋accent 枠/amber 背景/brand フォーカスの入力欄、
-              変更ボタンはリスケジュール保存ボタンと同じ brand-accent）。機能は変更しない。 */}
+              SOT-1563(再オープン#2): 年月表示を、やることリストの年月日チップ
+              (DatedInfoList の日付チップ = text-xs px-2 py-1 rounded-full + 緑 getStatusDateChipClass)と
+              同じ大きさ・緑色・長丸(pill)枠に揃える。前回のオレンジ(brand-accent)基調を緑基調へ戻す。
+              機能は変更しない。 */}
           {hasPhoto && (
             <div className="mb-4">
               <div className="flex flex-wrap items-center gap-2">
-                <label htmlFor="registered-month" className="inline-flex items-center gap-1 text-sm font-medium text-brand-strong">
+                <label htmlFor="registered-month" className="inline-flex items-center gap-1 text-sm font-medium text-green-800">
                   📅 {t('records.registeredMonth')}
                 </label>
                 <input
@@ -482,19 +483,19 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
                     setMonthMessage(null);
                   }}
                   disabled={monthMutation.isPending}
-                  className="border border-accent-border bg-accent-bg text-brand-strong rounded-md shadow-sm focus:ring-brand focus:border-brand text-sm p-2 disabled:opacity-60"
+                  className="border border-green-200 bg-green-100 text-green-800 rounded-full shadow-sm focus:ring-green-500 focus:border-green-500 text-xs px-2 py-1 disabled:opacity-60"
                 />
                 <button
                   type="button"
                   onClick={handleSaveMonth}
                   disabled={monthMutation.isPending || !(monthInput ?? toMonthInput(item.created_at))}
-                  className="text-sm font-medium text-brand-strong border border-accent-border bg-accent-bg hover:opacity-90 px-3 py-1.5 rounded-md disabled:opacity-60 transition-colors"
+                  className="text-xs font-medium text-green-800 border border-green-200 bg-green-100 hover:bg-green-200 px-3 py-1 rounded-full disabled:opacity-60 transition-colors"
                 >
                   {monthMutation.isPending ? t('records.rescheduling') : t('records.registeredMonthSave')}
                 </button>
               </div>
               {monthMessage && (
-                <div className="mt-2 p-3 rounded-lg bg-accent-bg border border-accent-border text-brand-strong text-sm">
+                <div className="mt-2 p-3 rounded-lg bg-green-100 border border-green-200 text-green-800 text-sm">
                   {monthMessage}
                 </div>
               )}
