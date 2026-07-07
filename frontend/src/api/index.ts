@@ -97,21 +97,24 @@ export const getProcessingDrafts = async (): Promise<NurseryInfo[]> => {
   return response.data;
 };
 
-// SOT-1577: 「分割前のタスクに戻す」。同一書類(source_info_id)から分割された仮登録(draft)群を、
-// 未分割の1 draft へ置き換える。分割が不要だったケースの戻し導線。返り値は生成された未分割 draft。
+// SOT-1577 / SOT-1594: 「分割前のタスクに戻す」。押下した (n/N) 分割タスク自身の id を渡すと、その
+// タスクが属する締切グループ(deadline_group_id)だけを未分割の1 draft へまとめ直す。同じ写真由来でも
+// 別書類・別グループの draft は残る（SOT-1594: 旧実装は source_info_id 単位で書類全タスクを潰していた）。
+// 返り値は生成された未分割 draft。
 export const revertSplitDrafts = async (
-  sourceInfoId: number | string,
+  taskId: number | string,
 ): Promise<NurseryInfo> => {
-  const response = await api.post(`/info/drafts/${sourceInfoId}/revert-split`);
+  const response = await api.post(`/info/drafts/${taskId}/revert-split`);
   return response.data;
 };
 
-// SOT-1577: 「分割前のタスクに戻す」（本登録後版）。同一書類(source_info_id)から分割された本登録
-// タスク群を、未分割の1タスクへ置き換える。本登録後のタスク詳細画面の戻し導線。返り値は生成された未分割タスク。
+// SOT-1577 / SOT-1594: 「分割前のタスクに戻す」（本登録後版）。押下した (n/N) 分割タスク自身の id を
+// 渡すと、そのタスクが属する締切グループだけを未分割の1タスクへまとめ直す。本登録後のタスク詳細画面の
+// 戻し導線。返り値は生成された未分割タスク。
 export const revertSplitRegistered = async (
-  sourceInfoId: number | string,
+  taskId: number | string,
 ): Promise<NurseryInfo> => {
-  const response = await api.post(`/info/${sourceInfoId}/revert-split-registered`);
+  const response = await api.post(`/info/${taskId}/revert-split-registered`);
   return response.data;
 };
 
