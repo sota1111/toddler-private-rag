@@ -24,7 +24,7 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
 
   const confirm = useCallback(
     (message: string, options?: ConfirmCheckboxOptions) => {
-      return new Promise((resolve) => {
+      return new Promise<boolean | ConfirmWithCheckboxResult>((resolve) => {
         // 既に表示中のものがあれば「キャンセル扱い」で畳んでから新しいものを出す。
         setState((prev) => {
           if (prev) prev.resolve(prev.options ? { confirmed: false, checked: false } : false);

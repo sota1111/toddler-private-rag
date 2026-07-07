@@ -24,7 +24,11 @@ export interface ConfirmFn {
   (message: string, options: ConfirmCheckboxOptions): Promise<ConfirmWithCheckboxResult>;
 }
 
-export const ConfirmContext = createContext<ConfirmFn>((() => Promise.resolve(false)) as ConfirmFn);
+// 既定値は Provider 外で呼ばれたときのフォールバック。オーバーロード型(ConfirmFn)は
+// 単一実装関数からは直接代入できないため unknown 経由でキャストする。
+const defaultConfirm = (_message: string, options?: ConfirmCheckboxOptions) =>
+  Promise.resolve(options ? { confirmed: false, checked: false } : false);
+export const ConfirmContext = createContext<ConfirmFn>(defaultConfirm as unknown as ConfirmFn);
 
 export function useConfirm(): ConfirmFn {
   return useContext(ConfirmContext);
