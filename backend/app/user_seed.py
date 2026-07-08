@@ -49,6 +49,44 @@ _INFO_COPY_FIELDS = (
     "memo",
 )
 
+# SOT-1600: 写真(添付)のうちコピーするスカラー列。id / info_id / created_at と、
+# 実体ファイルを指す stored_filename / object_key は別途（新しい実体コピーとして）作り直すため除外。
+_ATTACHMENT_COPY_FIELDS = (
+    "original_filename",
+    "mime_type",
+    "file_size",
+    "storage_backend",
+    "ocr_text",
+    "ocr_status",
+    "translations",
+    "language",
+    "municipality",
+)
+
+
+def _copy_attachment_blob(
+    src_stored_filename: str, src_object_key: Optional[str], original_filename: str, mime_type: str
+) -> tuple:
+    """SOT-1600: 既定オーナーの写真実体を読み出し、新しいキーで独立した実体コピーを保存する。
+
+    元データを削除しても配布先の写真が壊れないよう、参照(共有)ではなく実体を複製する。
+    返り値は新しい ``(stored_filename, object_key)``。読み出せない場合は例外を送出する
+    （呼び出し側が best-effort でスキップする）。
+    """
+    from . import storage as storage_mod
+
+    backend = storage_mod.get_storage()
+    src_key = src_object_key or src_stored_filename
+    if backend.name == "gcs":
+        content = backend.read(src_key)
+    else:
+        content = storage_mod.get_file_path(src_key).read_bytes()
+
+    new_stored = storage_mod.generate_stored_filename(original_filename)
+    new_key = storage_mod.build_object_key(new_stored)
+    backend.save(new_key, content, mime_type)
+    return new_stored, new_key
+
 
 def ensure_user_seeded(owner_id: str) -> bool:
     """``owner_id`` がまだ本登録タスクを持たなければ既定オーナーの初期データをコピーする。
@@ -115,12 +153,17 @@ def _seed_sqlite(owner_id: str) -> bool:
             .order_by(models.NurseryInfo.id)
             .all()
         )
+        copied_attachments = 0
         for info in src_infos:
             payload = {field: getattr(info, field) for field in _INFO_COPY_FIELDS}
             # child_id を新オーナーの Child.id にリマップ（対応が無ければ紐付け無し）。
             mapped = child_id_map.get(str(info.child_id)) if info.child_id else None
             payload["child_id"] = str(mapped.id) if mapped else None
-            db.add(models.NurseryInfo(owner_id=owner_id, **payload))
+            new_info = models.NurseryInfo(owner_id=owner_id, **payload)
+            db.add(new_info)
+            db.flush()  # new_info.id を確定させる（添付の info_id に使う）
+            # SOT-1600: 写真(添付)も独立した実体コピーとして配布する。
+            copied_attachments += _copy_sqlite_attachments(db, info, new_info.id)
 
         # 配布実績マーカー（監査用）。再同期で既に存在する場合があるため重複挿入を避ける。
         marker_exists = (
@@ -132,13 +175,42 @@ def _seed_sqlite(owner_id: str) -> bool:
             db.add(models.SeededOwner(owner_id=owner_id))
         db.commit()
         logger.info(
-            "seeded initial data: %d infos, %d children",
+            "seeded initial data: %d infos, %d children, %d attachments",
             len(src_infos),
             len(src_children),
+            copied_attachments,
         )
         return True
     finally:
         db.close()
+
+
+def _copy_sqlite_attachments(db, src_info, new_info_id: int) -> int:
+    """SOT-1600: 既定オーナーの info に紐づく写真(添付)を新 info へ独立コピーする。
+
+    実体ファイルの読み出しに失敗した添付は best-effort でスキップし（配布を止めない）、
+    実際にコピーできた件数を返す。
+    """
+    count = 0
+    for att in src_info.attachments:
+        try:
+            new_stored, new_key = _copy_attachment_blob(
+                att.stored_filename, att.object_key, att.original_filename, att.mime_type
+            )
+        except Exception:  # pragma: no cover - best-effort（実体が無い等）
+            logger.warning("skip copying attachment blob during seeding (info_id=%s)", new_info_id)
+            continue
+        payload = {field: getattr(att, field) for field in _ATTACHMENT_COPY_FIELDS}
+        db.add(
+            models.Attachment(
+                info_id=new_info_id,
+                stored_filename=new_stored,
+                object_key=new_key,
+                **payload,
+            )
+        )
+        count += 1
+    return count
 
 
 def _seed_firestore(owner_id: str) -> bool:
@@ -191,7 +263,44 @@ def _seed_firestore(owner_id: str) -> bool:
         # child_id を新オーナーの Child doc.id にリマップ（対応が無ければ紐付け無し）。
         old_child: Optional[str] = data.get("child_id")
         new_data["child_id"] = child_id_map.get(str(old_child)) if old_child else None
-        client.collection("nursery_info").add(new_data)
+        _, new_info_ref = client.collection("nursery_info").add(new_data)
+        # SOT-1600: 写真(添付)も独立した実体コピーとして配布する。
+        _copy_firestore_attachments(client, doc.id, new_info_ref.id)
 
     marker_ref.set({"owner_id": owner_id, "created_at": firestore.SERVER_TIMESTAMP})
     return True
+
+
+def _copy_firestore_attachments(client, src_info_id: str, new_info_id: str) -> int:
+    """SOT-1600: 既定オーナーの info(doc) に紐づく写真(添付)を新 info へ独立コピーする。
+
+    実体 blob の読み出し/保存に失敗した添付は best-effort でスキップする（配布を止めない）。
+    """
+    count = 0
+    for att in (
+        client.collection("attachments").where("info_id", "==", str(src_info_id)).stream()
+    ):
+        data = att.to_dict() or {}
+        try:
+            new_stored, new_key = _copy_attachment_blob(
+                data.get("stored_filename", ""),
+                data.get("object_key"),
+                data.get("original_filename", ""),
+                data.get("mime_type", ""),
+            )
+        except Exception:  # pragma: no cover - best-effort（実体が無い等）
+            logger.warning(
+                "skip copying attachment blob during seeding (info_id=%s)", new_info_id
+            )
+            continue
+        new_att = {
+            key: value
+            for key, value in data.items()
+            if key not in ("info_id", "stored_filename", "object_key", "created_at")
+        }
+        new_att["info_id"] = str(new_info_id)
+        new_att["stored_filename"] = new_stored
+        new_att["object_key"] = new_key
+        client.collection("attachments").add(new_att)
+        count += 1
+    return count

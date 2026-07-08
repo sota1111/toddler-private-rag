@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app import database, models
+from app import storage as storage_mod
 from app.identity import DEFAULT_OWNER_ID
 from app.user_seed import ensure_user_seeded
 
@@ -202,6 +203,113 @@ def test_existing_user_without_data_is_resynced():
     titles = sorted(i.title for i in _infos_for("existingEmpty"))
     assert titles == ["健康診断票の提出", "遠足のお知らせ"]
     assert [c.name for c in _children_for("existingEmpty")] == ["あお"]
+
+
+def _add_default_owner_photo(info_title, upload_dir, content=b"PHOTOBYTES", write_blob=True):
+    """SOT-1600: 既定オーナーの指定タスクに写真(添付)1件（と実体ファイル）を用意する。"""
+    stored = storage_mod.generate_stored_filename("photo.png")
+    object_key = storage_mod.build_object_key(stored)
+    if write_blob:
+        (upload_dir / object_key).write_bytes(content)
+    db = TestingSessionLocal()
+    try:
+        info = (
+            db.query(models.NurseryInfo)
+            .filter(
+                models.NurseryInfo.owner_id == DEFAULT_OWNER_ID,
+                models.NurseryInfo.title == info_title,
+            )
+            .first()
+        )
+        db.add(
+            models.Attachment(
+                info_id=info.id,
+                stored_filename=stored,
+                original_filename="photo.png",
+                mime_type="image/png",
+                file_size=len(content),
+                storage_backend="local",
+                object_key=object_key,
+                ocr_text="運動会は10月",
+                ocr_status="done",
+            )
+        )
+        db.commit()
+        return stored, object_key
+    finally:
+        db.close()
+
+
+def _attachments_for_owner(owner_id):
+    db = TestingSessionLocal()
+    try:
+        ids = [i.id for i in _infos_for(owner_id)]
+        if not ids:
+            return []
+        return (
+            db.query(models.Attachment)
+            .filter(models.Attachment.info_id.in_(ids))
+            .all()
+        )
+    finally:
+        db.close()
+
+
+def test_photos_are_copied_from_default_owner(monkeypatch, tmp_path):
+    """SOT-1600: 既定オーナーの写真(添付)も新オーナーへ独立した実体コピーとして配布される。"""
+    monkeypatch.setenv("STORAGE_BACKEND", "local")
+    monkeypatch.setattr(storage_mod, "UPLOAD_DIR", tmp_path)
+    _seed_default_owner_data()
+    src_stored, src_key = _add_default_owner_photo("遠足のお知らせ", tmp_path, b"PHOTOBYTES")
+
+    assert ensure_user_seeded("ownerX") is True
+
+    atts = _attachments_for_owner("ownerX")
+    assert len(atts) == 1
+    att = atts[0]
+    # スカラー項目（原文/OCR/種別等）はそのままコピーされる。
+    assert att.original_filename == "photo.png"
+    assert att.mime_type == "image/png"
+    assert att.ocr_text == "運動会は10月"
+    assert att.ocr_status == "done"
+    assert att.file_size == len(b"PHOTOBYTES")
+    # 実体は独立コピー（stored_filename / object_key は作り直され、元を指さない）。
+    assert att.stored_filename != src_stored
+    assert att.object_key != src_key
+    # 新しいキーで実体ファイルが存在し、内容が一致する。
+    assert (tmp_path / att.object_key).read_bytes() == b"PHOTOBYTES"
+    # 元オーナーの実体ファイルは残っている（破壊しない）。
+    assert (tmp_path / src_key).read_bytes() == b"PHOTOBYTES"
+
+
+def test_photo_is_attached_to_the_matching_copied_task(monkeypatch, tmp_path):
+    """写真は正しいコピー先タスク（同一タイトル）に紐づく。"""
+    monkeypatch.setenv("STORAGE_BACKEND", "local")
+    monkeypatch.setattr(storage_mod, "UPLOAD_DIR", tmp_path)
+    _seed_default_owner_data()
+    _add_default_owner_photo("遠足のお知らせ", tmp_path)
+
+    assert ensure_user_seeded("ownerX") is True
+
+    infos = {i.title: i for i in _infos_for("ownerX")}
+    atts = _attachments_for_owner("ownerX")
+    assert len(atts) == 1
+    assert atts[0].info_id == infos["遠足のお知らせ"].id
+
+
+def test_seeding_skips_photo_when_blob_missing(monkeypatch, tmp_path):
+    """SOT-1600: 実体ファイルが無い添付は best-effort でスキップし、配布は止めない。"""
+    monkeypatch.setenv("STORAGE_BACKEND", "local")
+    monkeypatch.setattr(storage_mod, "UPLOAD_DIR", tmp_path)
+    _seed_default_owner_data()
+    # 実体ファイルを作らずに添付レコードだけ用意する。
+    _add_default_owner_photo("遠足のお知らせ", tmp_path, write_blob=False)
+
+    assert ensure_user_seeded("ownerX") is True
+
+    # タスク自体は配布され、壊れた添付レコードは作られない。
+    assert sorted(i.title for i in _infos_for("ownerX")) == ["健康診断票の提出", "遠足のお知らせ"]
+    assert _attachments_for_owner("ownerX") == []
 
 
 def test_existing_user_with_own_data_is_not_overwritten():
