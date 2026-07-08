@@ -1121,6 +1121,7 @@ def is_deadline_companion(record: dict) -> bool:
 def merge_split_drafts_to_single(
     drafts: List[dict],
     source: Optional[dict] = None,
+    anchor: Optional[dict] = None,
 ) -> dict:
     """SOT-1577: 同一書類から分割された複数タスク draft を「未分割の1タスク」へ統合する。
 
@@ -1128,6 +1129,11 @@ def merge_split_drafts_to_single(
     LLM 呼び出しや I/O を行わない純関数。返り値のキー集合は build_task_drafts の各要素と同形
     （title / info_type / content / items / date / event_date）。
 
+    - anchor (SOT-1594): 締切逆算タスクの分割群を戻すときの「分割前のタスク」（＝締切調査の元タスク、
+      締切グループに offset 0・番兵タグ無しで束ねられるアンカー）。渡された場合は title / content /
+      info_type / items / date / event_date をアンカー（＝文字起こし後のタスク内容, 手順1の状態）から
+      復元する。締切調査の付随タスク（手順）の本文（調査結果の羅列）や写真書類のタイトルは使わない。
+      anchor が無い（SOT-1577 の非締切分割）ときは従来どおりの下記挙動。
     - content: SOT-1577 REOPEN#2 で是正。書類全体(source.content=全写真の文字起こし)は流し込まず、
       分割タスク群自身の本文を出現順に重複なく連結する（「戻す」で全写真分が出るのを防ぐ）。
     - title / info_type: source を優先し、無ければ先頭 draft、いずれも無ければフォールバック。
@@ -1138,6 +1144,7 @@ def merge_split_drafts_to_single(
     drafts = [d for d in drafts if d]
     first = drafts[0] if drafts else {}
     source = source or {}
+    anchor = anchor or {}
 
     def _clean(v) -> str:
         return str(v).strip() if v is not None else ""
@@ -1150,12 +1157,25 @@ def merge_split_drafts_to_single(
         c = _clean(d.get("content"))
         if c and c not in seen:
             seen.append(c)
-    content = "\n\n".join(seen)
+    joined_content = "\n\n".join(seen)
 
-    title = _clean(source.get("title")) or _clean(first.get("title")) or draft_title(content)
+    # SOT-1594: アンカー（分割前タスク）があれば、その content（文字起こし後のタスク内容＝手順1の状態）
+    # へ戻す。締切調査の付随タスク本文（調査結果）は使わない。アンカー content が空なら退行を避けるため
+    # 分割群の連結本文へフォールバックする。
+    anchor_content = _clean(anchor.get("content"))
+    content = anchor_content or joined_content if anchor else joined_content
+
+    # title: SOT-1594。アンカー（締切分割前タスク）の title を最優先。写真書類(source)のタイトルには
+    # しない。アンカーが無ければ従来どおり source → 先頭 draft → 生成。
+    title = (
+        _clean(anchor.get("title"))
+        or _clean(source.get("title"))
+        or _clean(first.get("title"))
+        or draft_title(content)
+    )
     title = title[:40]
 
-    info_type = _clean(source.get("info_type"))
+    info_type = _clean(anchor.get("info_type")) or _clean(source.get("info_type"))
     if info_type not in INFO_TYPES:
         info_type = _clean(first.get("info_type"))
     if info_type not in INFO_TYPES:
@@ -1170,12 +1190,24 @@ def merge_split_drafts_to_single(
         it = _clean(d.get("items"))
         if it and it not in items_seen:
             items_seen.append(it)
+    joined_items = "\n".join(items_seen)
+
+    # items / date / event_date: アンカーがあれば分割前タスク(手順1)の値へ復元し、空なら分割群の集約へ
+    # フォールバックする。
+    if anchor:
+        items = _clean(anchor.get("items")) or joined_items
+        date = _clean(anchor.get("date")) or _earliest("date")
+        event_date = _clean(anchor.get("event_date")) or _earliest("event_date")
+    else:
+        items = joined_items
+        date = _earliest("date")
+        event_date = _earliest("event_date")
 
     return {
         "title": title,
         "info_type": info_type,
         "content": content,
-        "items": "\n".join(items_seen),
-        "date": _earliest("date"),
-        "event_date": _earliest("event_date"),
+        "items": items,
+        "date": date,
+        "event_date": event_date,
     }

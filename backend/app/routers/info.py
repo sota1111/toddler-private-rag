@@ -434,6 +434,31 @@ def _genuine_split_dicts(group) -> list:
     return [d for d in dicts if not extraction.is_deadline_companion(d)]
 
 
+def _find_anchor_dict(group) -> Optional[dict]:
+    """SOT-1594: 締切グループから「分割前のタスク(アンカー)」を1件選んで dict 化する。
+
+    アンカーは締切調査の元タスクで、締切グループに offset 0・番兵タグ無しで束ねられる
+    （is_deadline_companion=False）。その title/content は「締切分割前のタイトル」「文字起こし後の
+    タスク内容(手順1の状態)」そのもの。戻す先の title/content をここから復元する。
+
+    登録状態に依らず群の全メンバから探す（draft の分割群を戻すとき、アンカーが本登録側に居ることが
+    あるため）。付随タスク（手順=調査結果）しかない、またはアンカーが見つからなければ None を返し、
+    呼び出し側は従来（SOT-1577）の分割群連結挙動へフォールバックする。
+    """
+    non_companions = [
+        _draft_to_dict(d)
+        for d in group
+        if not extraction.is_deadline_companion(_draft_to_dict(d))
+    ]
+    if not non_companions:
+        return None
+    # offset 0（基準日＝分割前タスク）を最優先。無ければ先頭の非付随タスク。
+    for d in non_companions:
+        if d.get("deadline_offset_days") == 0:
+            return d
+    return non_companions[0]
+
+
 def _resolve_revert_group(repo, target_id, *, registered: bool):
     """SOT-1594: 「分割前のタスクに戻す」の対象群を解決する。
 
@@ -447,9 +472,11 @@ def _resolve_revert_group(repo, target_id, *, registered: bool):
     - グループを持たないレコードや書類ID（従来のフロント/後方互換）が渡された場合は、SOT-1577 の
       従来挙動どおり source_info_id 単位にフォールバックする。
 
-    返り値: (members, source_dict, merged_source_id)。members が空なら呼び出し側で 404。
+    返り値: (members, source_dict, merged_source_id, anchor_dict)。members が空なら呼び出し側で 404。
     registered=True は本登録タスク、False は draft のみを対象にする。source_dict は統合時の
-    title / info_type 参照用（content には使わない, SOT-1577 REOPEN#2）。
+    title / info_type 参照用（content には使わない, SOT-1577 REOPEN#2）。anchor_dict は SOT-1594 で、
+    締切グループの「分割前のタスク（アンカー）」があればその dict。戻し先の title/content をここから
+    復元する。非締切分割（後方互換）や見つからないときは None。
     """
     rec = None
     try:
@@ -476,11 +503,15 @@ def _resolve_revert_group(repo, target_id, *, registered: bool):
 
     group_id = getattr(rec, "deadline_group_id", None) if rec is not None else None
     if group_id:
-        # 締切グループ単位（SOT-1594 本題）。当該登録状態のメンバのみを対象にする。
-        members = [d for d in repo.list_by_deadline_group(group_id) if _state_ok(d)]
+        # 締切グループ単位（SOT-1594 本題）。置換対象は当該登録状態のメンバのみ。
+        full_group = repo.list_by_deadline_group(group_id)
+        members = [d for d in full_group if _state_ok(d)]
         merged_source_id = getattr(rec, "source_info_id", None)
         merged_source_id = str(merged_source_id) if merged_source_id else None
-        return members, _source_dict(merged_source_id), merged_source_id
+        # SOT-1594: 戻し先の title/content は「分割前のタスク（アンカー）」から復元する。アンカーは
+        # 登録状態が異なりうる（draft の分割群を戻すとき本登録側に居る）ため、全メンバから探す。
+        anchor_dict = _find_anchor_dict(full_group)
+        return members, _source_dict(merged_source_id), merged_source_id, anchor_dict
 
     # 後方互換（SOT-1577）: source_info_id 単位。押下レコードが source_info_id を持てばそれを、
     # 無ければ渡された target_id を source_info_id として扱う（＝従来の「書類IDを渡す」呼び出し）。
@@ -489,7 +520,7 @@ def _resolve_revert_group(repo, target_id, *, registered: bool):
     members = (
         repo.list_registered_by_source(key) if registered else repo.list_drafts_by_source(key)
     )
-    return members, _source_dict(key), key
+    return members, _source_dict(key), key, None
 
 
 @router.post("/drafts/{target_id}/revert-split", response_model=schemas.NurseryInfoResponse)
@@ -499,7 +530,7 @@ def revert_split_drafts(
     current_user: str = Depends(get_current_user),
 ):
     # SOT-1594: 押下タスクの締切グループ単位で戻す（グループ無しは source_info_id 単位に後方互換）。
-    group, source_dict, merged_source_id = _resolve_revert_group(
+    group, source_dict, merged_source_id, anchor_dict = _resolve_revert_group(
         repo, target_id, registered=False
     )
     if not group:
@@ -507,8 +538,12 @@ def revert_split_drafts(
 
     # SOT-1577 REOPEN#2: 統合本文・日付・持ち物は分割タスク群自身から復元する。締切調査の付随タスクは
     # 除外し、実際の分割タスクだけを対象にする。全て付随だった場合のみ群全体にフォールバックする。
+    # SOT-1594: アンカー（分割前タスク）があれば title/content はそこから復元する（写真タイトルや
+    # 締切調査結果ではなく手順1の状態へ戻す）。
     merge_from = _genuine_split_dicts(group) or [_draft_to_dict(d) for d in group]
-    merged = extraction.merge_split_drafts_to_single(merge_from, source_dict)
+    merged = extraction.merge_split_drafts_to_single(
+        merge_from, source_dict, anchor=anchor_dict
+    )
 
     # 未分割の1 draft を作成（写真/子ども/owner・元書類参照は分割 draft から継承）。
     # owner はリクエスト経路のリポジトリが current user に強制するため、なりすましは効かない。
@@ -549,7 +584,7 @@ def revert_split_registered(
     current_user: str = Depends(get_current_user),
 ):
     # SOT-1594: 押下タスクの締切グループ単位で戻す（グループ無しは source_info_id 単位に後方互換）。
-    group, source_dict, merged_source_id = _resolve_revert_group(
+    group, source_dict, merged_source_id, anchor_dict = _resolve_revert_group(
         repo, target_id, registered=True
     )
     if not group:
@@ -557,8 +592,12 @@ def revert_split_registered(
 
     # SOT-1577 REOPEN#2: 統合本文・日付・持ち物は分割タスク群自身から復元する。締切調査の付随タスクは
     # 除外し、実際の分割タスクだけを対象にする。全て付随だった場合のみ群全体にフォールバックする。
+    # SOT-1594: アンカー（分割前タスク）があれば title/content はそこから復元する（写真タイトルや
+    # 締切調査結果ではなく手順1の状態へ戻す）。
     merge_from = _genuine_split_dicts(group) or [_draft_to_dict(d) for d in group]
-    merged = extraction.merge_split_drafts_to_single(merge_from, source_dict)
+    merged = extraction.merge_split_drafts_to_single(
+        merge_from, source_dict, anchor=anchor_dict
+    )
 
     # 未分割の1タスクを作成（子ども/owner・元書類参照は分割タスクから継承）。draft 版と違い
     # 本登録タスクなので registration_state は registered、status/priority は先頭タスクを継承する。

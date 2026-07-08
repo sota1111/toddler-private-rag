@@ -566,3 +566,34 @@ def test_merge_split_drafts_falls_back_info_type():
         {"title": "t", "info_type": "存在しない種別", "content": "本文", "items": "", "date": "", "event_date": ""},
     ])
     assert merged["info_type"] == "資料"
+
+
+def test_merge_split_drafts_restores_from_anchor():
+    # SOT-1594: anchor（締切分割前タスク）が渡されたら title / content / info_type は写真書類(source)や
+    # 締切調査の付随タスク本文でなくアンカー（手順1の状態）から復元する。
+    drafts = [
+        {"title": "就労証明書(1/2) 様式入手", "info_type": "提出物", "content": "市役所で様式入手（調査結果1）", "items": "", "date": "2026-05-01", "event_date": "2026-05-01"},
+        {"title": "就労証明書(2/2) 提出", "info_type": "提出物", "content": "園に提出（調査結果2）", "items": "", "date": "2026-05-08", "event_date": "2026-05-08"},
+    ]
+    source = {"title": "7月のおたより", "info_type": "お知らせ", "content": "写真全文", "items": "", "date": "", "event_date": ""}
+    anchor = {"title": "就労証明書の提出", "info_type": "提出物", "content": "就労証明書を園に提出する", "items": "提出書類", "date": "2026-05-10", "event_date": "2026-05-10"}
+    merged = extraction.merge_split_drafts_to_single(drafts, source, anchor=anchor)
+    # title は写真書類でなくアンカー（分割前タスク）。
+    assert merged["title"] == "就労証明書の提出"
+    # content は調査結果の羅列でなくアンカー（文字起こし後のタスク内容）。
+    assert merged["content"] == "就労証明書を園に提出する"
+    assert "調査結果" not in merged["content"]
+    assert merged["items"] == "提出書類"
+
+
+def test_merge_split_drafts_anchor_empty_content_falls_back_to_group():
+    # SOT-1594: アンカーの content が空なら退行を避けるため分割群の連結本文へフォールバックする
+    # （title はアンカーを維持）。
+    drafts = [
+        {"title": "s1", "info_type": "提出物", "content": "手順1本文", "items": "", "date": "", "event_date": ""},
+        {"title": "s2", "info_type": "提出物", "content": "手順2本文", "items": "", "date": "", "event_date": ""},
+    ]
+    anchor = {"title": "分割前タスク", "info_type": "提出物", "content": "", "items": "", "date": "", "event_date": ""}
+    merged = extraction.merge_split_drafts_to_single(drafts, None, anchor=anchor)
+    assert merged["title"] == "分割前タスク"
+    assert merged["content"] == "手順1本文\n\n手順2本文"
