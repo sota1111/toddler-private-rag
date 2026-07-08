@@ -324,51 +324,6 @@ async def extract_info_draft(
     )
 
 
-@router.post("/transcribe", response_model=schemas.InfoTranscription)
-async def transcribe_file(
-    file: UploadFile = File(...),
-    current_user: str = Depends(get_current_user),
-):
-    """ファイル(PDF/画像)の文字起こし(OCR原文)だけを返す (SOT-1593, DB未保存)。
-
-    埋め込みテキストが読める PDF はそのテキストを、読めない場合は OCR にフォールバック
-    する（ocr.extract_text の source of truth をそのまま利用）。/info/extract と異なり
-    enrich(LLM生成)は行わないので低レイテンシで、確認フェーズで登録前に中身を確認できる。
-    """
-    # バリデーション (extract_info_draft と同一基準)
-    content_type = file.content_type or ""
-    if content_type != "application/pdf" and not content_type.startswith("image/"):
-        raise HTTPException(
-            status_code=400,
-            detail="Unsupported file type. Allowed types: image/*, application/pdf",
-        )
-
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Maximum size is {MAX_FILE_SIZE / (1024 * 1024)}MB",
-        )
-
-    # OCR は実ファイルパスを必要とするため一時ファイルに書き出す
-    suffix = os.path.splitext(file.filename or "")[1]
-    tmp_path: Optional[str] = None
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(content)
-            tmp_path = tmp.name
-        # OCR はブロッキングなので別スレッドへ逃がす（イベントループを塞がない）。
-        raw = await asyncio.to_thread(ocr.extract_text, tmp_path, content_type)
-    except Exception as e:  # OCR 失敗時も空文字で返す（確認表示用途のため throw しない）
-        logger.warning("OCR transcription failed in /info/transcribe: %s", e)
-        raw = ""
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.remove(tmp_path)
-
-    return schemas.InfoTranscription(text=redact_pii(raw or ""))
-
-
 @router.post("/", response_model=schemas.NurseryInfoResponse)
 def create_info(info: schemas.NurseryInfoCreate, background_tasks: BackgroundTasks, repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
     created = repo.create(info)
