@@ -105,11 +105,6 @@ export interface InfoExtractDraft {
   categories?: ExtractedCategories
 }
 
-// SOT-1593: 未保存ファイル(PDF/画像)の文字起こし(OCR原文)のみ。確認フェーズで登録前に中身を確認する。
-export interface InfoTranscription {
-  text: string
-}
-
 export interface InfoTagSuggestion {
   info_type: string
   priority: string

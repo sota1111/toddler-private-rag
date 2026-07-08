@@ -63,12 +63,6 @@ class AttachmentTranscriptionResponse(BaseModel):
     language: str = "ja"
 
 
-class InfoTranscription(BaseModel):
-    """未保存ファイル(PDF/画像)の文字起こし(OCR原文)のみを返す (SOT-1593)。
-    /info/extract と違い enrich(LLM生成)を行わず OCR だけを実行するため軽量。
-    確認フェーズで PDF の中身を登録前に確認する用途に使う。"""
-    text: str = ""
-
 # --- 子供 (SOT-1368: option A, 1家族で複数の子供) ---
 
 class ChildBase(BaseModel):

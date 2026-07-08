@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createInfo, uploadAttachmentSmart, getInfoById, getChildren, deleteInfo, transcribeFile } from '../api';
+import { createInfo, uploadAttachmentSmart, getInfoById, getChildren, deleteInfo } from '../api';
 import type { Child, NurseryInfo, NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import { useSettings } from '../settings/useSettings';
@@ -19,9 +19,6 @@ type Phase = 'idle' | 'confirm' | 'saving' | 'done';
 // SOT-1593: 選択したファイルが PDF かどうか（MIME か拡張子で判定）。
 const isPdfFile = (file?: File | null): boolean =>
   file?.type === 'application/pdf' || /\.pdf$/i.test(file?.name ?? '');
-
-// SOT-1593: 確認フェーズで表示する PDF の文字起こし(OCR原文)の取得状態。
-type TranscriptionState = { status: 'loading' | 'done' | 'error'; text: string };
 
 const AutoRegisterPage: React.FC = () => {
   const { t, lang } = useI18n();
@@ -53,9 +50,6 @@ const AutoRegisterPage: React.FC = () => {
   // SOT-1498: 複数枚選択に対応するため配列で保持する。
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
-  // SOT-1593: 選択した PDF の文字起こし(OCR原文)を、確認フェーズで PDF の下に表示する。
-  // 選択順の index をキーに取得状態を保持する。
-  const [transcriptions, setTranscriptions] = useState<Record<number, TranscriptionState>>({});
   // SOT-1368: 紐づけるお子さま。確認フェーズで選択し、初期 createInfo に付与する。
   const [children, setChildren] = useState<Child[]>([]);
   const [childId, setChildId] = useState('');
@@ -75,8 +69,6 @@ const AutoRegisterPage: React.FC = () => {
       return [];
     });
     setPendingFiles([]);
-    // SOT-1593: プレビュー破棄時に文字起こしの取得状態もクリアする。
-    setTranscriptions({});
   };
 
   // アンマウント時に objectURL を解放する
@@ -119,28 +111,6 @@ const AutoRegisterPage: React.FC = () => {
     previewUrls.forEach((url) => URL.revokeObjectURL(url));
     setPendingFiles(files);
     setPreviewUrls(files.map((file) => URL.createObjectURL(file)));
-    // SOT-1593: 選択した PDF は確認フェーズで文字起こし(OCR原文)を取得し、PDF の下に表示する。
-    // 画像はサムネイルで中身が見えるため対象外。世代(seq)ガードで、選び直し/新規選択後に
-    // 古いリクエスト結果が新しい画面を上書きしないようにする。
-    const seq = uploadSeqRef.current;
-    const initialTranscriptions: Record<number, TranscriptionState> = {};
-    files.forEach((file, i) => {
-      if (isPdfFile(file)) initialTranscriptions[i] = { status: 'loading', text: '' };
-    });
-    setTranscriptions(initialTranscriptions);
-    files.forEach((file, i) => {
-      if (!isPdfFile(file)) return;
-      transcribeFile(file)
-        .then((res) => {
-          if (uploadSeqRef.current !== seq) return;
-          setTranscriptions((prev) => ({ ...prev, [i]: { status: 'done', text: res.text ?? '' } }));
-        })
-        .catch((e) => {
-          console.warn('Failed to transcribe PDF for preview', e);
-          if (uploadSeqRef.current !== seq) return;
-          setTranscriptions((prev) => ({ ...prev, [i]: { status: 'error', text: '' } }));
-        });
-    });
     // SOT-1322: 確認中に画像圧縮を先行実行しておく(失敗時は元ファイルにフォールバックし throw しない)。
     // 古い圧縮結果を使わないよう、新しいファイル群の圧縮で必ず上書きする。
     compressedRef.current = files.map((file) => compressImageFile(file));
@@ -375,37 +345,6 @@ const AutoRegisterPage: React.FC = () => {
                 );
               })}
             </div>
-            {/* SOT-1593: 選択した PDF の文字起こし(OCR原文)を PDF の下に表示する。
-                登録前に何が読み取れたか（テキスト抽出 or OCR）を確認できる。 */}
-            {pendingFiles.some((f) => isPdfFile(f)) && (
-              <div className="space-y-3">
-                {pendingFiles.map((file, i) => {
-                  if (!isPdfFile(file)) return null;
-                  const tr = transcriptions[i];
-                  // SOT-1593 REOPEN: 「文字起こし中…」の loading 表示は不要。
-                  // 取得中(未着手/loading)は当該カードを出さず、完了(done/error)後にのみ表示する。
-                  if (!tr || tr.status === 'loading') return null;
-                  return (
-                    <div
-                      key={`transcription-${i}`}
-                      className="text-left bg-surface border border-border rounded-md p-3"
-                    >
-                      <p className="text-xs font-medium text-muted-foreground mb-1">
-                        {t('create.confirmTranscriptionHeading')}
-                        {isMulti && file?.name ? `（${file.name}）` : ''}
-                      </p>
-                      {tr.status === 'error' ? (
-                        <p className="text-sm text-red-600">{t('create.confirmTranscribeFail')}</p>
-                      ) : tr.text.trim() ? (
-                        <p className="text-sm text-foreground whitespace-pre-wrap max-h-60 overflow-auto">{tr.text}</p>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">{t('create.confirmTranscribeEmpty')}</p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
             {children.length > 0 && (
               <label className="block text-sm max-w-xs mx-auto w-full">
                 <span className="mb-1 block font-medium text-foreground text-center">{t('child.fieldLabel')}</span>

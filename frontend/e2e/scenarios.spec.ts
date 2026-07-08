@@ -442,7 +442,7 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page.locator('a[href="/create/auto"]')).toBeVisible()
   })
 
-  test('S19: 自動登録で PDF を選択でき、確認画面で PDF プレースホルダを表示して登録できる (SOT-1593)', async ({ page }) => {
+  test('S19: 自動登録で PDF を選択でき、確認画面で PDF プレースホルダを表示して登録できる（文字起こしは表示しない） (SOT-1593)', async ({ page }) => {
     await installApiMocks(page, { authed: true })
     await login(page)
 
@@ -463,9 +463,8 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page.getByText('この写真でよろしいですか？')).toBeVisible()
     await expect(page.getByText('sample.pdf')).toBeVisible()
 
-    // SOT-1593: PDF の下に文字起こし(OCR原文)が表示される（登録前に中身を確認できる）
-    await expect(page.getByText('文字起こし', { exact: true })).toBeVisible()
-    await expect(page.getByText('お知らせ 7月の予定 プール 水着 タオル')).toBeVisible()
+    // SOT-1593 REOPEN: 確認画面に文字起こしの表示自体を出さない（完了時も同様）。
+    await expect(page.getByText('文字起こし', { exact: true })).toHaveCount(0)
 
     // そのまま登録でき、完了カードが表示される（画像と同じ自動登録フロー）
     await page.getByRole('button', { name: 'この写真で登録' }).click()
