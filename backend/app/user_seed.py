@@ -8,23 +8,48 @@
 - 「一度きりのマーカー」ではなく「**そのユーザーがまだ本登録タスクを1件も持っていないか**」で
   判定する。これにより、新規ユーザーだけでなく、まだデータを持たない既存ユーザー
   （例: demo.user@example.com）も次回ログイン時に初期データを受け取る（＝再同期）。
-- **すでに自分のデータを持っているユーザーは上書きしない**（各自の編集を保護する）。破壊的な
-  「強制置換」は行わない。
+- **すでに自分のデータを持っている（実）ユーザーは上書きしない**（各自の編集を保護する）。
+  破壊的な「強制置換」は行わない。
 - 既定オーナー自身にはコピーしない（そのデータが正のため）。
-- 添付ファイルのバイナリはコピーしない（タスク本体のスカラー項目と子ども情報のみ配布する）。
+- SOT-1600: 写真(添付)も独立した実体コピーとして配布する。
 - ``SeededOwner`` マーカーは配布実績の監査用に記録する（判定には使わない）。
 - ベストエフォート: 失敗しても例外を送出せず ``False`` を返す（呼び出し側のログインを止めない）。
 - SQLite / Firestore の両バックエンドに対応する。
+
+デモアカウントの再配布（SOT-1600 再オープン対応）:
+- 環境変数 ``SEED_REFRESH_EMAILS``（既定 ``demo.user@example.com``、カンマ区切り）で指定した
+  「デモアカウント」は、**常に既定オーナーの最新データを映す鏡**として扱う。ログインのたびに
+  既存のシード済みデータ（やることタスク・子ども・写真の実体）を一旦クリアして、既定オーナーの
+  現在のデータを再コピーする（＝既定オーナーが変更したら次回ログインで反映）。
+- この強制リフレッシュは ``SEED_REFRESH_EMAILS`` に列挙されたアカウント **のみ** に適用され、
+  実ユーザーの編集保護（上書きしない）には一切影響しない。既定オーナー自身は対象外。
 """
 import logging
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, Set
 
 from . import database, models
-from .identity import DEFAULT_OWNER_ID
+from .identity import DEFAULT_OWNER_ID, owner_id_for_email
 from .repository import get_database_type
 
 logger = logging.getLogger(__name__)
+
+# SOT-1600: 「デモアカウント」= 常に既定オーナーの最新初期データを映す鏡として扱うアカウント。
+# ここに列挙されたメールの owner_id は、ログイン毎に既存データをクリアして再配布(refresh)する。
+_DEFAULT_REFRESH_EMAILS = "demo.user@example.com"
+
+
+def _refresh_owner_ids() -> Set[str]:
+    """再配布(refresh)対象＝デモアカウントの owner_id 集合を環境変数から解決する。
+
+    ``SEED_REFRESH_EMAILS`` はカンマ区切りのメール一覧（既定 ``demo.user@example.com``）。
+    空文字を設定すれば「デモ再配布なし＝従来どおり全ユーザー上書きしない」に戻せる。既定オーナー
+    自身は（誤設定されても）安全のため常に除外する。
+    """
+    raw = os.getenv("SEED_REFRESH_EMAILS", _DEFAULT_REFRESH_EMAILS)
+    ids = {owner_id_for_email(e.strip()) for e in raw.split(",") if e.strip()}
+    ids.discard(DEFAULT_OWNER_ID)
+    return ids
 
 # コピー対象の NurseryInfo スカラー列。id / owner_id / created_at / updated_at と
 # リレーション attachments は除外する。child_id は別途リマップするためここには含めない。
@@ -91,22 +116,24 @@ def _copy_attachment_blob(
 def ensure_user_seeded(owner_id: str) -> bool:
     """``owner_id`` がまだ本登録タスクを持たなければ既定オーナーの初期データをコピーする。
 
-    コピーしたら ``True``。既定オーナー自身・すでにデータを持つオーナー・空の owner_id は
-    スキップして ``False`` を返す（既存データは上書きしない）。ベストエフォートのため、
-    いかなる失敗でも例外を送出しない。
+    コピーしたら ``True``。既定オーナー自身・すでにデータを持つ（実）オーナー・空の owner_id は
+    スキップして ``False`` を返す（既存データは上書きしない）。ただし ``SEED_REFRESH_EMAILS`` で
+    指定された**デモアカウント**は例外で、既存データがあってもクリアして最新を再配布する
+    （SOT-1600）。ベストエフォートのため、いかなる失敗でも例外を送出しない。
     """
     if not owner_id or owner_id == DEFAULT_OWNER_ID:
         return False
+    force_refresh = owner_id in _refresh_owner_ids()
     try:
         if get_database_type() == "firestore":
-            return _seed_firestore(owner_id)
-        return _seed_sqlite(owner_id)
+            return _seed_firestore(owner_id, force_refresh)
+        return _seed_sqlite(owner_id, force_refresh)
     except Exception:  # pragma: no cover - best-effort（ログインを止めない）
         logger.exception("initial-data seeding failed for owner")
         return False
 
 
-def _seed_sqlite(owner_id: str) -> bool:
+def _seed_sqlite(owner_id: str, force_refresh: bool = False) -> bool:
     from .repository import _sqlite_owner_filter, _sqlite_registered_only
 
     db = database.SessionLocal()
@@ -123,7 +150,10 @@ def _seed_sqlite(owner_id: str) -> bool:
             .first()
         )
         if has_data is not None:
-            return False
+            if not force_refresh:
+                return False
+            # SOT-1600: デモアカウントは最新を映す鏡。既存のシード済みデータをクリアして再配布する。
+            _clear_owner_data_sqlite(db, owner_id)
 
         # 子ども: 既定オーナーの Child を新オーナーへコピーし、旧 id → 新 Child のマップを作る。
         child_id_map: Dict[str, models.Child] = {}
@@ -185,6 +215,41 @@ def _seed_sqlite(owner_id: str) -> bool:
         db.close()
 
 
+def _clear_owner_data_sqlite(db, owner_id: str) -> None:
+    """SOT-1600: デモアカウントの再配布前に、そのオーナーの既存データを実体ごとクリアする。
+
+    やることタスク・子ども・写真の実体ファイルを削除する（DBの添付行は cascade で消える）。
+    実ユーザーには呼ばれない（``SEED_REFRESH_EMAILS`` のデモアカウント限定）。実体削除は
+    best-effort（失敗しても DB クリアと再配布は続行する）。
+    """
+    from .repository import _sqlite_owner_filter
+
+    infos = (
+        db.query(models.NurseryInfo)
+        .filter(_sqlite_owner_filter(models.NurseryInfo, owner_id))
+        .all()
+    )
+    backend = None
+    for info in infos:
+        for att in info.attachments:
+            if backend is None:
+                from . import storage as storage_mod
+
+                backend = storage_mod.get_storage()
+            try:
+                backend.delete(att.object_key or att.stored_filename)
+            except Exception:  # pragma: no cover - best-effort（実体が無い等）
+                logger.warning("skip deleting attachment blob during refresh (owner)")
+        db.delete(info)  # attachments は cascade で削除される
+    for child in (
+        db.query(models.Child)
+        .filter(_sqlite_owner_filter(models.Child, owner_id))
+        .all()
+    ):
+        db.delete(child)
+    db.flush()
+
+
 def _copy_sqlite_attachments(db, src_info, new_info_id: int) -> int:
     """SOT-1600: 既定オーナーの info に紐づく写真(添付)を新 info へ独立コピーする。
 
@@ -213,7 +278,7 @@ def _copy_sqlite_attachments(db, src_info, new_info_id: int) -> int:
     return count
 
 
-def _seed_firestore(owner_id: str) -> bool:
+def _seed_firestore(owner_id: str, force_refresh: bool = False) -> bool:
     from google.cloud import firestore
 
     from .repository import _is_registered_data, _owner_of
@@ -224,12 +289,16 @@ def _seed_firestore(owner_id: str) -> bool:
     )
 
     # 再同期対応(SOT-1507): マーカーではなく「本登録タスクを既に持っているか」で判定する。
-    # 既にデータを持つユーザーは上書きしない（各自の編集を保護）。
+    # 既にデータを持つ（実）ユーザーは上書きしない（各自の編集を保護）。ただしデモアカウント
+    # (SOT-1600) は既存データをクリアして最新を再配布する。
     marker_ref = client.collection("seeded_owners").document(owner_id)
     for doc in client.collection("nursery_info").stream():
         data = doc.to_dict()
         if _owner_of(data) == owner_id and _is_registered_data(data):
-            return False
+            if not force_refresh:
+                return False
+            _clear_owner_data_firestore(client, owner_id)
+            break
 
     # 子ども: 既定オーナーの Child をコピーし、旧 doc.id → 新 doc.id マップを作る。
     child_id_map: Dict[str, str] = {}
@@ -269,6 +338,40 @@ def _seed_firestore(owner_id: str) -> bool:
 
     marker_ref.set({"owner_id": owner_id, "created_at": firestore.SERVER_TIMESTAMP})
     return True
+
+
+def _clear_owner_data_firestore(client, owner_id: str) -> None:
+    """SOT-1600: デモアカウントの再配布前に、そのオーナーの既存データを実体ごとクリアする。
+
+    やることタスク(doc)・紐づく添付(doc)と実体 blob・子ども(doc) を削除する。実ユーザーには
+    呼ばれない（``SEED_REFRESH_EMAILS`` のデモアカウント限定）。実体削除は best-effort。
+    """
+    from .repository import _owner_of
+
+    backend = None
+    for doc in client.collection("nursery_info").stream():
+        data = doc.to_dict()
+        if _owner_of(data) != owner_id:
+            continue
+        for att in (
+            client.collection("attachments").where("info_id", "==", str(doc.id)).stream()
+        ):
+            adata = att.to_dict() or {}
+            key = adata.get("object_key") or adata.get("stored_filename")
+            if key:
+                if backend is None:
+                    from . import storage as storage_mod
+
+                    backend = storage_mod.get_storage()
+                try:
+                    backend.delete(key)
+                except Exception:  # pragma: no cover - best-effort（実体が無い等）
+                    logger.warning("skip deleting attachment blob during refresh (owner)")
+            att.reference.delete()
+        doc.reference.delete()
+    for child in client.collection("children").stream():
+        if _owner_of(child.to_dict()) == owner_id:
+            child.reference.delete()
 
 
 def _copy_firestore_attachments(client, src_info_id: str, new_info_id: str) -> int:
