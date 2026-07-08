@@ -414,3 +414,45 @@ def test_revert_split_drafts_finds_anchor_in_registered_state():
     assert merged["title"] == "面談の予約"
     assert merged["content"] == "担任と面談を予約する"
     assert "調査結果" not in merged["content"]
+
+
+def test_revert_split_registered_restores_task_not_raw_transcription():
+    """SOT-1594 REOPEN#3: 戻す先は「文字起こし後にタスク分解して、（締切逆算）エージェントを起動する
+    前」のタスク本文であること。元書類(写真)の生の文字起こし全文（＝「文字起こし後の状態」）にしない。
+
+    実フロー再現: 元書類(写真)の content は全文文字起こし。手順1で分解されたタスク（アンカー, offset0,
+    タグ無し）の content はそのタスク分の本文。締切逆算の (n/N) 付随タスク（SUBMISSION_TAG）は調査結果。
+    「分割を戻す」を押したら、生の文字起こし全文でも調査結果でもなく、タスク分解後（手順1）の本文へ戻る。
+    """
+    from app.submission_agent import SUBMISSION_TAG
+
+    raw = "写真全文の文字起こし（お知らせ・持ち物・締切…全部）"
+    photo = _create(title="7月のおたより", content=raw)
+    sid = str(photo["id"])
+    # アンカー = 手順1でタスク分解した本文（締切エージェント起動前の状態）。
+    anchor = _create(
+        title="就労証明書の提出", content="就労証明書を園に提出する",
+        source_info_id=sid, deadline_group_id="gR3", deadline_offset_days=0,
+    )
+    step1 = _create(
+        title="就労証明書の提出(1/2) 様式入手", content="市役所で様式を入手（調査結果1）",
+        source_info_id=sid, deadline_group_id="gR3", deadline_offset_days=-7,
+        tags=SUBMISSION_TAG,
+    )
+    _create(
+        title="就労証明書の提出(2/2) 提出", content="園に提出（調査結果2）",
+        source_info_id=sid, deadline_group_id="gR3", deadline_offset_days=0,
+        tags=SUBMISSION_TAG,
+    )
+
+    merged = client.post(f"/api/info/{step1['id']}/revert-split-registered").json()
+    # タスク分解後（手順1）の本文へ戻る。
+    assert merged["content"] == "就労証明書を園に提出する"
+    # 生の文字起こし全文（文字起こし後の状態）は出さない。
+    assert merged["content"] != raw
+    assert "写真全文の文字起こし" not in merged["content"]
+    # 調査結果の羅列にもしない。
+    assert "調査結果" not in merged["content"]
+    # タイトルも写真書類でなくアンカー。
+    assert merged["title"] == "就労証明書の提出"
+    assert anchor["id"]  # アンカーレコードは前提として存在
