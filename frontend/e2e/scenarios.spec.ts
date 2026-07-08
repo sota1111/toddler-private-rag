@@ -463,6 +463,10 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page.getByText('この写真でよろしいですか？')).toBeVisible()
     await expect(page.getByText('sample.pdf')).toBeVisible()
 
+    // SOT-1593: PDF の下に文字起こし(OCR原文)が表示される（登録前に中身を確認できる）
+    await expect(page.getByText('文字起こし', { exact: true })).toBeVisible()
+    await expect(page.getByText('お知らせ 7月の予定 プール 水着 タオル')).toBeVisible()
+
     // そのまま登録でき、完了カードが表示される（画像と同じ自動登録フロー）
     await page.getByRole('button', { name: 'この写真で登録' }).click()
     await expect(page.getByText('アップ完了（登録しました）')).toBeVisible()
