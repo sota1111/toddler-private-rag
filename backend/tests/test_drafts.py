@@ -316,3 +316,101 @@ def test_revert_split_drafts_scoped_to_deadline_group():
     # 別グループ gb の draft は残る。
     assert "書類B(1/1)" in draft_titles
     assert "付随タスクの内容" not in merged["content"]
+
+
+# --- SOT-1594 REOPEN: 戻し先の title/content を「分割前のタスク（アンカー）」から復元する ------
+def test_revert_split_registered_restores_anchor_title_not_photo():
+    """SOT-1594 REOPEN: 戻すと title が写真書類のタイトルではなく締切分割前タスク（アンカー）の
+    title になり、content が締切調査結果の羅列ではなく手順1（文字起こし後）のタスク内容になる。"""
+    from app.submission_agent import SUBMISSION_TAG
+
+    photo = _create(
+        title="7月のおたよりと七夕祭りのお知らせ", content="写真全文の文字起こし"
+    )
+    sid = str(photo["id"])
+    # アンカー（締切調査の元タスク, offset0, タグ無し）＝手順1の状態（文字起こし後のタスク）。
+    anchor = _create(
+        title="就労証明書の提出", content="就労証明書を園に提出する",
+        source_info_id=sid, deadline_group_id="gX", deadline_offset_days=0,
+    )
+    # (n/N) 分割ステップ（付随タスク）。本文は締切調査の調査結果。
+    step1 = _create(
+        title="就労証明書の提出(1/2) 様式入手", content="市役所で様式を入手する（調査結果1）",
+        source_info_id=sid, deadline_group_id="gX", deadline_offset_days=-7,
+        tags=SUBMISSION_TAG,
+    )
+    _create(
+        title="就労証明書の提出(2/2) 提出", content="園に提出する（調査結果2）",
+        source_info_id=sid, deadline_group_id="gX", deadline_offset_days=0,
+        tags=SUBMISSION_TAG,
+    )
+
+    merged = client.post(f"/api/info/{step1['id']}/revert-split-registered").json()
+    # AC1: 写真書類のタイトルにならず、分割前タスク（アンカー）のタイトルになる。
+    assert merged["title"] == "就労証明書の提出"
+    assert merged["title"] != "7月のおたよりと七夕祭りのお知らせ"
+    # AC2: 締切調査の調査結果を羅列せず、手順1（文字起こし後）のタスク内容へ戻る。
+    assert merged["content"] == "就労証明書を園に提出する"
+    assert "調査結果" not in merged["content"]
+
+
+def test_revert_split_drafts_restores_anchor_title_and_content():
+    """SOT-1594 REOPEN(draft 版): draft の締切分割群を戻すと、アンカー（分割前タスク）の
+    title/content へ戻る。"""
+    from app.submission_agent import SUBMISSION_TAG
+
+    photo = _create(title="おたより", content="写真全文", registration_state="draft")
+    sid = str(photo["id"])
+    _create(
+        title="健康診断の申込", content="健康診断を申し込む",
+        source_info_id=sid, registration_state="draft",
+        deadline_group_id="gd", deadline_offset_days=0,
+    )
+    step1 = _create(
+        title="健康診断の申込(1/2) 用紙記入", content="用紙に記入（調査結果1）",
+        source_info_id=sid, registration_state="draft",
+        deadline_group_id="gd", deadline_offset_days=-5, tags=SUBMISSION_TAG,
+    )
+    _create(
+        title="健康診断の申込(2/2) 提出", content="窓口に提出（調査結果2）",
+        source_info_id=sid, registration_state="draft",
+        deadline_group_id="gd", deadline_offset_days=0, tags=SUBMISSION_TAG,
+    )
+
+    merged = client.post(f"/api/info/drafts/{step1['id']}/revert-split").json()
+    assert merged["title"] == "健康診断の申込"
+    assert merged["title"] != "おたより"
+    assert merged["content"] == "健康診断を申し込む"
+    assert "調査結果" not in merged["content"]
+
+
+def test_revert_split_drafts_finds_anchor_in_registered_state():
+    """SOT-1594 REOPEN(実フロー): 締切調査は本登録タスク上で走ることがあり、アンカーは本登録・
+    (n/N) 分割ステップは draft という状態違いになりうる。draft 側の分割群を戻すときも、登録状態に
+    依らずアンカー（本登録側）の title/content を復元する。"""
+    from app.submission_agent import SUBMISSION_TAG
+
+    photo = _create(title="写真タイトル", content="写真全文")
+    sid = str(photo["id"])
+    # アンカーは本登録（手順1のタスク）。
+    _create(
+        title="面談の予約", content="担任と面談を予約する",
+        source_info_id=sid, deadline_group_id="gm", deadline_offset_days=0,
+    )
+    # 分割ステップは draft。
+    step1 = _create(
+        title="面談の予約(1/2) 候補日確認", content="候補日を確認（調査結果1）",
+        source_info_id=sid, registration_state="draft",
+        deadline_group_id="gm", deadline_offset_days=-3, tags=SUBMISSION_TAG,
+    )
+    _create(
+        title="面談の予約(2/2) 連絡", content="担任へ連絡（調査結果2）",
+        source_info_id=sid, registration_state="draft",
+        deadline_group_id="gm", deadline_offset_days=0, tags=SUBMISSION_TAG,
+    )
+
+    merged = client.post(f"/api/info/drafts/{step1['id']}/revert-split").json()
+    assert merged["registration_state"] == "draft"
+    assert merged["title"] == "面談の予約"
+    assert merged["content"] == "担任と面談を予約する"
+    assert "調査結果" not in merged["content"]
