@@ -471,4 +471,27 @@ test.describe('toddler-private-rag シナリオ', () => {
     await page.getByRole('button', { name: 'この写真で登録' }).click()
     await expect(page.getByText('アップ完了（登録しました）')).toBeVisible()
   })
+
+  test('S: 写真削除ダイアログの「関連タスクも削除」チェックボックスをタップでON/OFFできる (SOT-1595)', async ({ page }) => {
+    // 関連タスクが1件以上あるときだけチェックボックスが出る。3件で固定する。
+    await installApiMocks(page, { authed: true, linkedTaskCount: 3 })
+    await login(page)
+
+    await page.goto('/data/1')
+    await page.getByRole('button', { name: '削除' }).click()
+
+    // 確認ダイアログとチェックボックスが表示され、初期は未チェック。
+    await expect(page.getByRole('dialog')).toBeVisible()
+    const checkbox = page.getByRole('checkbox')
+    await expect(checkbox).toBeVisible()
+    await expect(checkbox).not.toBeChecked()
+
+    // ラベル文言をタップしてチェックON（行全体がタップ領域）。
+    await page.getByText(/関連タスクも削除/).click()
+    await expect(checkbox).toBeChecked()
+
+    // もう一度タップでOFFに戻る（iOS の二重発火で元に戻る不具合の回帰防止）。
+    await page.getByText(/関連タスクも削除/).click()
+    await expect(checkbox).not.toBeChecked()
+  })
 })
