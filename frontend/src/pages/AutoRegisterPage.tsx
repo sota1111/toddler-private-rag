@@ -382,6 +382,9 @@ const AutoRegisterPage: React.FC = () => {
                 {pendingFiles.map((file, i) => {
                   if (!isPdfFile(file)) return null;
                   const tr = transcriptions[i];
+                  // SOT-1593 REOPEN: 「文字起こし中…」の loading 表示は不要。
+                  // 取得中(未着手/loading)は当該カードを出さず、完了(done/error)後にのみ表示する。
+                  if (!tr || tr.status === 'loading') return null;
                   return (
                     <div
                       key={`transcription-${i}`}
@@ -391,15 +394,7 @@ const AutoRegisterPage: React.FC = () => {
                         {t('create.confirmTranscriptionHeading')}
                         {isMulti && file?.name ? `（${file.name}）` : ''}
                       </p>
-                      {!tr || tr.status === 'loading' ? (
-                        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden>
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                          </svg>
-                          {t('create.confirmTranscribing')}
-                        </p>
-                      ) : tr.status === 'error' ? (
+                      {tr.status === 'error' ? (
                         <p className="text-sm text-red-600">{t('create.confirmTranscribeFail')}</p>
                       ) : tr.text.trim() ? (
                         <p className="text-sm text-foreground whitespace-pre-wrap max-h-60 overflow-auto">{tr.text}</p>
