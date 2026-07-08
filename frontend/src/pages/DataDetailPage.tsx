@@ -203,10 +203,10 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
   const showRevertSplit =
     sourceInfoId !== '' && item != null && shouldShowRevertSplit(item, splitSiblingCount);
 
-  // SOT-1577 / SOT-1594: 押下でこのタスク(=表示中の (n/N) 分割タスク)が属する締切グループだけを
-  // 未分割の1タスクへまとめ直す。旧実装は source_info_id を渡し書類全タスクを潰していたため、この
-  // タスク自身の id を渡してグループを特定する。
-  // SOT-1596: まとめ直すと現在のタスクは削除されるため、やることリスト一覧ページへ遷移する。
+  // SOT-1597: 押下でこのタスク(=表示中の (n/N) 分割タスク)が属する締切グループの (n/N) 分割ステップを
+  // すべて削除する（統合タスクは作らない＝写真の文字起こしを再生成しない）。分割前のタスク（アンカー）は
+  // 残る。グループ特定のためこのタスク自身の id を渡す。
+  // SOT-1596: 現在のタスク(押下した分割ステップ)は削除されるため、やることリスト一覧ページへ遷移する。
   const revertSplitMutation = useMutation({
     mutationFn: () => revertSplitRegistered(id),
     onSuccess: () => {

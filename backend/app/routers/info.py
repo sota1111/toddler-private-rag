@@ -3,6 +3,7 @@ import datetime
 import json
 import logging
 import os
+import re
 import tempfile
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File, Body
@@ -427,11 +428,23 @@ def _draft_to_dict(info) -> dict:
     }
 
 
-def _genuine_split_dicts(group) -> list:
-    """SOT-1577 REOPEN#2: 分割グループから締切調査の付随タスクを除いた“実際の分割タスク”のみを
-    dict 化して返す。統合本文・件数はこれを基準にする（全て付随なら空リストになりうる）。"""
-    dicts = [_draft_to_dict(d) for d in group]
-    return [d for d in dicts if not extraction.is_deadline_companion(d)]
+# SOT-1597: タイトル中の (n/N)（分母 N≥2）分割マーカー。フロント splitTasks.ts の SPLIT_MARKER と同義。
+# 半角/全角の括弧・スラッシュを許容する。エージェントが `{書類名}({i+1}/{total})` で付与するマーカーで、
+# 「分割前のタスク（アンカー, マーカー無し）」や締切調査の単発準備タスクとは区別できる。
+_SPLIT_MARKER_RE = re.compile(r"[（(]\s*(\d+)\s*[／/]\s*(\d+)\s*[）)]")
+
+
+def _has_split_marker(title) -> bool:
+    """タイトルに (n/N)（N≥2）の分割マーカーがあれば True（＝エージェント分割ステップタスク）。"""
+    if not title:
+        return False
+    m = _SPLIT_MARKER_RE.search(str(title))
+    if not m:
+        return False
+    try:
+        return int(m.group(2)) >= 2
+    except (TypeError, ValueError):
+        return False
 
 
 def _find_anchor_dict(group) -> Optional[dict]:
@@ -523,110 +536,56 @@ def _resolve_revert_group(repo, target_id, *, registered: bool):
     return members, _source_dict(key), key, None
 
 
-@router.post("/drafts/{target_id}/revert-split", response_model=schemas.NurseryInfoResponse)
+@router.post("/drafts/{target_id}/revert-split")
 def revert_split_drafts(
     target_id: str,
     repo: InfoRepository = Depends(get_info_repository),
     current_user: str = Depends(get_current_user),
 ):
-    # SOT-1594: 押下タスクの締切グループ単位で戻す（グループ無しは source_info_id 単位に後方互換）。
-    group, source_dict, merged_source_id, anchor_dict = _resolve_revert_group(
+    # SOT-1594: 押下タスクの締切グループ単位で対象を解決する（グループ無しは source_info_id 単位に後方互換）。
+    group, _source_dict, _merged_source_id, _anchor_dict = _resolve_revert_group(
         repo, target_id, registered=False
     )
     if not group:
         raise HTTPException(status_code=404, detail="No split drafts for this task")
 
-    # SOT-1577 REOPEN#2: 統合本文・日付・持ち物は分割タスク群自身から復元する。締切調査の付随タスクは
-    # 除外し、実際の分割タスクだけを対象にする。全て付随だった場合のみ群全体にフォールバックする。
-    # SOT-1594: アンカー（分割前タスク）があれば title/content はそこから復元する（写真タイトルや
-    # 締切調査結果ではなく手順1の状態へ戻す）。
-    merge_from = _genuine_split_dicts(group) or [_draft_to_dict(d) for d in group]
-    merged = extraction.merge_split_drafts_to_single(
-        merge_from, source_dict, anchor=anchor_dict
-    )
+    # SOT-1597: 「分割を戻す」= (n/N) 分割ステップタスクを全て削除する。旧実装は分割群を1タスクへ統合し
+    # 直していたが、その本文が写真の文字起こし相当になってしまうため、統合タスクは作らず削除のみに変える。
+    # 削除対象は (n/N) マーカーを持つ分割ステップ draft のみ。分割前のタスク（アンカー, マーカー無し）や
+    # 締切調査の単発準備タスクは残す（＝分割前の状態へ戻る）。マーカーが1件も無い後方互換経路
+    # (source_info_id 単位) では従来どおり解決群全体を削除する。
+    to_delete = [d for d in group if _has_split_marker(getattr(d, "title", None))] or list(group)
+    deleted_ids = [d.id for d in to_delete if repo.delete(d.id)]
 
-    # 未分割の1 draft を作成（写真/子ども/owner・元書類参照は分割 draft から継承）。
-    # owner はリクエスト経路のリポジトリが current user に強制するため、なりすましは効かない。
-    first = group[0]
-    created = repo.create(
-        schemas.NurseryInfoCreate(
-            title=merged["title"],
-            info_type=merged["info_type"],
-            content=merged["content"],
-            items=(merged["items"] or None),
-            date=(merged["date"] or None),
-            event_date=(merged["event_date"] or None),
-            child_id=getattr(first, "child_id", None),
-            owner_id=getattr(first, "owner_id", None),
-            source_info_id=merged_source_id,
-            status="未確認",
-            priority="普通",
-            registration_state="draft",
-        )
-    )
-
-    # 置換: 対象群の draft のみを削除する（owner スコープの delete）。他書類・別グループは残る。
-    for d in group:
-        repo.delete(d.id)
-
-    return created
+    return {"message": "Successfully reverted", "deleted_count": len(deleted_ids), "deleted_ids": deleted_ids}
 
 
-# SOT-1577: 「分割前のタスクに戻す」（本登録後版）。押下した (n/N) 分割群（同一 deadline_group_id）を
-# まとめた未分割の1タスクへ置き換える。仮登録画面だけでなく、本登録後のタスク詳細画面にも
-# 「分割前に戻す」導線を出すためのエンドポイント。統合ロジックは draft 版と同じ
-# merge_split_drafts_to_single / _resolve_revert_group を再利用する（重複ロジックを作らない）。
-@router.post("/{target_id}/revert-split-registered", response_model=schemas.NurseryInfoResponse)
+# SOT-1577 / SOT-1597: 「分割タスクを戻す」（本登録後版）。押下した (n/N) 分割群（同一 deadline_group_id）
+# の分割ステップを削除する。仮登録画面だけでなく、本登録後のタスク詳細画面にも「分割前に戻す」導線を
+# 出すためのエンドポイント。対象解決は draft 版と同じ _resolve_revert_group を再利用する（重複ロジックを
+# 作らない）。SOT-1597 で統合タスクの再作成をやめ、分割ステップの削除のみに変更した。
+@router.post("/{target_id}/revert-split-registered")
 def revert_split_registered(
     target_id: str,
-    background_tasks: BackgroundTasks,
     repo: InfoRepository = Depends(get_info_repository),
     current_user: str = Depends(get_current_user),
 ):
-    # SOT-1594: 押下タスクの締切グループ単位で戻す（グループ無しは source_info_id 単位に後方互換）。
-    group, source_dict, merged_source_id, anchor_dict = _resolve_revert_group(
+    # SOT-1594: 押下タスクの締切グループ単位で対象を解決する（グループ無しは source_info_id 単位に後方互換）。
+    group, _source_dict, _merged_source_id, _anchor_dict = _resolve_revert_group(
         repo, target_id, registered=True
     )
     if not group:
         raise HTTPException(status_code=404, detail="No split tasks for this task")
 
-    # SOT-1577 REOPEN#2: 統合本文・日付・持ち物は分割タスク群自身から復元する。締切調査の付随タスクは
-    # 除外し、実際の分割タスクだけを対象にする。全て付随だった場合のみ群全体にフォールバックする。
-    # SOT-1594: アンカー（分割前タスク）があれば title/content はそこから復元する（写真タイトルや
-    # 締切調査結果ではなく手順1の状態へ戻す）。
-    merge_from = _genuine_split_dicts(group) or [_draft_to_dict(d) for d in group]
-    merged = extraction.merge_split_drafts_to_single(
-        merge_from, source_dict, anchor=anchor_dict
-    )
+    # SOT-1597: 「分割を戻す」= (n/N) 分割ステップタスクを全て削除する。旧実装は分割群を1タスクへ統合し
+    # 直していたが、その本文が写真の文字起こし相当になってしまうため、統合タスクは作らず削除のみに変える。
+    # 削除対象は (n/N) マーカーを持つ本登録の分割ステップのみ。分割前のタスク（アンカー, offset0・
+    # マーカー無し）や締切調査の単発準備タスクは残す（＝分割前の状態へ戻る）。マーカーが1件も無い後方互換
+    # 経路 (source_info_id 単位) では従来どおり解決群全体を削除する。
+    to_delete = [d for d in group if _has_split_marker(getattr(d, "title", None))] or list(group)
+    deleted_ids = [d.id for d in to_delete if repo.delete(d.id)]
 
-    # 未分割の1タスクを作成（子ども/owner・元書類参照は分割タスクから継承）。draft 版と違い
-    # 本登録タスクなので registration_state は registered、status/priority は先頭タスクを継承する。
-    # owner はリクエスト経路のリポジトリが current user に強制するため、なりすましは効かない。
-    first = group[0]
-    created = repo.create(
-        schemas.NurseryInfoCreate(
-            title=merged["title"],
-            info_type=merged["info_type"],
-            content=merged["content"],
-            items=(merged["items"] or None),
-            date=(merged["date"] or None),
-            event_date=(merged["event_date"] or None),
-            child_id=getattr(first, "child_id", None),
-            owner_id=getattr(first, "owner_id", None),
-            source_info_id=merged_source_id,
-            status=(getattr(first, "status", None) or "未確認"),
-            priority=(getattr(first, "priority", None) or "普通"),
-            registration_state="registered",
-        )
-    )
-
-    # 置換: 対象群の本登録タスクのみを削除する（owner スコープの delete）。他書類・別グループは残る。
-    for d in group:
-        repo.delete(d.id)
-
-    # 本登録タスクなので通常の登録と同じくベクトル化して検索対象にする (SOT-1294)。best-effort。
-    background_tasks.add_task(index_info_id, getattr(created, "id", None))
-    return created
+    return {"message": "Successfully reverted", "deleted_count": len(deleted_ids), "deleted_ids": deleted_ids}
 
 
 # アーカイブ一覧 (SOT-1500)。"/{id}" より前に宣言してリテラルパスを優先させる。
