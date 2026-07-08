@@ -267,7 +267,7 @@ export const messages: Record<Lang, Messages> = {
     // create
     'create.title': '情報登録',
     'create.autoTitle': '自動登録（データ登録）',
-    'create.autoDesc': '写真を選ぶと内容を自動で読み取り、確認画面へ進みます。複数枚をまとめて選ぶこともできます。',
+    'create.autoDesc': '写真やPDFを選ぶと内容を自動で読み取り、確認画面へ進みます。複数枚をまとめて選ぶこともできます。',
     'create.confirmHeading': 'この写真でよろしいですか？',
     'create.confirmHeadingMulti': 'この{count}枚の写真でよろしいですか？',
     'create.confirmImageAlt': '選択した写真のプレビュー',
@@ -301,7 +301,7 @@ export const messages: Record<Lang, Messages> = {
     'create.photoDesc':
       '掲示物の写真を選ぶと、解析を待たずにそのまま一時登録へ保存します。内容は自動で読み取ってフォームに反映され、次の確認画面で確認・修正してから登録できます。',
     'create.photoAnalyzing': '解析中…',
-    'create.photoButton': '写真を選択して自動入力',
+    'create.photoButton': '写真やPDFを選択して自動入力',
     'create.photoErrorSuffix': '（このまま手入力で登録できます）',
     'create.extractSuccess':
       '写真から内容を自動入力しました。内容を確認・修正して登録してください。',
