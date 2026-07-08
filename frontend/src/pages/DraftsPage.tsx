@@ -183,9 +183,9 @@ const DraftsPage: React.FC = () => {
     }
   };
 
-  // SOT-1577 / SOT-1594: 「分割前のタスクに戻す」。押下した (n/N) 分割タスク自身の id を渡し、その
-  // タスクが属する締切グループだけを未分割の1 draft へまとめ直す（同じ写真由来でも別書類・別グループの
-  // draft は残す）。旧実装は source_info_id を渡し書類全タスクを1つに潰していた。
+  // SOT-1597: 「分割前のタスクに戻す」。押下した (n/N) 分割タスク自身の id を渡し、その締切グループの
+  // (n/N) 分割ステップ draft をすべて削除する（統合 draft は作らない）。分割前のタスク（アンカー）や
+  // 別グループの draft は残す。
   const handleRevertSplit = async (id: number | string) => {
     if (!(await confirm(t('drafts.confirmRevertSplit')))) return;
     setBusyId(id);

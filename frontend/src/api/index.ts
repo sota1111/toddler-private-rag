@@ -112,23 +112,30 @@ export const getProcessingDrafts = async (): Promise<NurseryInfo[]> => {
   return response.data;
 };
 
-// SOT-1577 / SOT-1594: 「分割前のタスクに戻す」。押下した (n/N) 分割タスク自身の id を渡すと、その
-// タスクが属する締切グループ(deadline_group_id)だけを未分割の1 draft へまとめ直す。同じ写真由来でも
-// 別書類・別グループの draft は残る（SOT-1594: 旧実装は source_info_id 単位で書類全タスクを潰していた）。
-// 返り値は生成された未分割 draft。
+// SOT-1597 で返り値を「削除結果サマリ」に変更（旧: 生成した未分割タスク）。
+export interface RevertSplitResult {
+  message: string;
+  deleted_count: number;
+  deleted_ids: (number | string)[];
+}
+
+// SOT-1597: 「分割タスクを戻す」。押下した (n/N) 分割タスク自身の id を渡すと、その締切グループ
+// (deadline_group_id) の (n/N) 分割ステップ draft を**全て削除**する。旧実装は分割群を未分割の1 draft へ
+// まとめ直していたが、その本文が写真の文字起こし相当になってしまうため、統合タスクは作らず削除に変えた。
+// 分割前のタスク（アンカー, マーカー無し）や別グループの draft は残る。
 export const revertSplitDrafts = async (
   taskId: number | string,
-): Promise<NurseryInfo> => {
+): Promise<RevertSplitResult> => {
   const response = await api.post(`/info/drafts/${taskId}/revert-split`);
   return response.data;
 };
 
-// SOT-1577 / SOT-1594: 「分割前のタスクに戻す」（本登録後版）。押下した (n/N) 分割タスク自身の id を
-// 渡すと、そのタスクが属する締切グループだけを未分割の1タスクへまとめ直す。本登録後のタスク詳細画面の
-// 戻し導線。返り値は生成された未分割タスク。
+// SOT-1597: 「分割タスクを戻す」（本登録後版）。押下した (n/N) 分割タスク自身の id を渡すと、その締切
+// グループの (n/N) 分割ステップ（本登録）を**全て削除**する。統合タスクは作らない。分割前のタスク
+// （アンカー）や別グループのタスクは残る。本登録後のタスク詳細画面の戻し導線。
 export const revertSplitRegistered = async (
   taskId: number | string,
-): Promise<NurseryInfo> => {
+): Promise<RevertSplitResult> => {
   const response = await api.post(`/info/${taskId}/revert-split-registered`);
   return response.data;
 };
