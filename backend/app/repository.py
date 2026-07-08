@@ -129,6 +129,32 @@ class InfoRepository(abc.ABC):
             if str(getattr(d, "source_info_id", None) or "") == key
         ]
 
+    def list_all_by_source_info_id(self, source_info_id) -> List[Any]:
+        """SOT-1595: 指定した写真(source_info_id)を基に生成された関連タスクを、
+        仮登録(draft)・本登録(registered)・アーカイブ済みを問わず全て返す（id 重複除去）。
+
+        写真削除時に「関連タスクも削除」で連鎖削除する対象を集めるための群取得。
+        owner スコープ済みの list 系（list_drafts/list/list_archived）を Python 側で
+        source_info_id 一致にフィルタするため、Sqlite/Firestore 双方で追加実装なく
+        他 owner のデータを混ぜずに動く。source_info_id が自身の id を指す異常データや、
+        写真本体（source_info_id=None）は対象に含めない。
+        """
+        key = str(source_info_id)
+        if not key:
+            return []
+        seen: set = set()
+        result: List[Any] = []
+        for group in (self.list_drafts(), self.list(), self.list_archived()):
+            for d in group:
+                if str(getattr(d, "source_info_id", None) or "") != key:
+                    continue
+                did = str(getattr(d, "id", ""))
+                if not did or did == key or did in seen:
+                    continue
+                seen.add(did)
+                result.append(d)
+        return result
+
     @abc.abstractmethod
     def count_processing(self) -> int:
         pass

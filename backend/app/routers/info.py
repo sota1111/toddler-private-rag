@@ -833,18 +833,47 @@ def delete_all_info(repo: InfoRepository = Depends(get_info_repository), current
     return {"message": "Successfully deleted all data", "deleted": deleted_count}
 
 
+@router.get("/{id}/linked-task-count")
+def linked_task_count(id: Union[int, str], repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
+    """SOT-1595: この写真(id)を基に生成された関連タスク（draft/registered/archived）の件数。
+    写真削除ダイアログで「関連タスクも削除」の選択肢を出すか／件数表示するために使う。"""
+    tasks = repo.list_all_by_source_info_id(id)
+    return {"count": len(tasks)}
+
+
 @router.delete("/{id}")
-def delete_info(id: Union[int, str], repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
-    # List attachments to delete physical files
-    attachments = repo.list_attachments_for_info(id)
-    
-    # Delete physical files
+def delete_info(
+    id: Union[int, str],
+    delete_linked_tasks: bool = False,
+    repo: InfoRepository = Depends(get_info_repository),
+    current_user: str = Depends(get_current_user),
+):
     backend = storage.get_storage()
+
+    # SOT-1595: 写真を基に生成された関連タスク(draft/registered/archived)を、任意で連鎖削除する。
+    # 既定 False のため、オプション未指定なら従来どおり写真のみ削除する（後方互換）。
+    deleted_linked_tasks = 0
+    if delete_linked_tasks:
+        for task in repo.list_all_by_source_info_id(id):
+            tid = getattr(task, "id", None)
+            if tid is None or str(tid) == str(id):
+                continue
+            # 関連タスクに添付があれば blob も削除（通常タスクは無いが安全側で best-effort）。
+            for att in repo.list_attachments_for_info(tid):
+                try:
+                    backend.delete(att.object_key or att.stored_filename)
+                except Exception:
+                    logger.warning("Failed to delete storage object for linked task %s", tid)
+            if repo.delete(tid):
+                deleted_linked_tasks += 1
+
+    # 写真本体の添付(blob)を削除
+    attachments = repo.list_attachments_for_info(id)
     for attachment in attachments:
         backend.delete(attachment.object_key or attachment.stored_filename)
 
     if not repo.delete(id):
         raise HTTPException(status_code=404, detail="Info not found")
-        
-    return {"message": "Successfully deleted"}
+
+    return {"message": "Successfully deleted", "deleted_linked_tasks": deleted_linked_tasks}
 
