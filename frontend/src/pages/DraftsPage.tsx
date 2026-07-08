@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDrafts, finalizeInfo, deleteInfo, updateInfo, getAttachmentFileUrl, getProcessingDrafts, revertSplitDrafts } from '../api';
 import type { NurseryInfo, NurseryInfoCreate } from '../types';
@@ -15,6 +16,7 @@ import { isAgentSplitTask, shouldShowRevertSplit } from '../utils/splitTasks';
 const DraftsPage: React.FC = () => {
   const { t } = useI18n();
   const confirm = useConfirm();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: drafts, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['drafts'],
@@ -190,6 +192,8 @@ const DraftsPage: React.FC = () => {
     try {
       await revertSplitDrafts(id);
       await refreshAll();
+      // SOT-1596: 分割を戻したあとはやることリスト一覧ページへ遷移する。
+      navigate('/tasks');
     } catch (e) {
       console.error('Failed to revert split drafts', e);
       window.alert(t('drafts.actionFail'));

@@ -205,17 +205,16 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
 
   // SOT-1577 / SOT-1594: 押下でこのタスク(=表示中の (n/N) 分割タスク)が属する締切グループだけを
   // 未分割の1タスクへまとめ直す。旧実装は source_info_id を渡し書類全タスクを潰していたため、この
-  // タスク自身の id を渡してグループを特定する。まとめ直すと現在のタスクは削除されるため、生成された
-  // 未分割タスクの詳細へ遷移する。
+  // タスク自身の id を渡してグループを特定する。
+  // SOT-1596: まとめ直すと現在のタスクは削除されるため、やることリスト一覧ページへ遷移する。
   const revertSplitMutation = useMutation({
     mutationFn: () => revertSplitRegistered(id),
-    onSuccess: (merged) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['info'] });
       queryClient.invalidateQueries({ queryKey: ['tomorrow'] });
       queryClient.invalidateQueries({ queryKey: ['weekly'] });
       queryClient.invalidateQueries({ queryKey: ['pending'] });
-      const nextId = merged?.id != null ? String(merged.id) : '';
-      navigate(nextId ? `/data/${nextId}` : '/registered');
+      navigate('/tasks');
     },
     onError: () => setDeleteError(t('drafts.actionFail')),
   });
