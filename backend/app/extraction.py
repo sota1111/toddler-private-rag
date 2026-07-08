@@ -1163,6 +1163,15 @@ def merge_split_drafts_to_single(
     # へ戻す。締切調査の付随タスク本文（調査結果）は使わない。アンカー content が空なら退行を避けるため
     # 分割群の連結本文へフォールバックする。
     anchor_content = _clean(anchor.get("content"))
+    # SOT-1594 REOPEN#3: 戻す先は「文字起こし後にタスク分解して、（締切逆算）エージェントを起動する前」の
+    # タスク本文であること。元書類(写真)の生の文字起こし全文（＝ユーザーの言う「文字起こし後の状態」,
+    # source.content）にはしない。アンカー解決が万一その生文字起こしと同一になった場合（例: アンカーが
+    # 元書類そのものに落ちた／単一トピックで手順1本文が全文と一致）でも、生文字起こしをそのまま出さず、
+    # 分割タスク(手順1)群自身の本文へフォールバックさせる。これにより「分割を戻す」で全文文字起こしが
+    # 出るのを防ぐ。分割タスク群も生文字起こししか無ければ、それ以上戻せる状態が無いので従来どおり。
+    source_content = _clean(source.get("content"))
+    if anchor_content and source_content and anchor_content == source_content:
+        anchor_content = ""
     content = anchor_content or joined_content if anchor else joined_content
 
     # title: SOT-1594。アンカー（締切分割前タスク）の title を最優先。写真書類(source)のタイトルには

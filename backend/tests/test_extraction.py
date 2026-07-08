@@ -597,3 +597,20 @@ def test_merge_split_drafts_anchor_empty_content_falls_back_to_group():
     merged = extraction.merge_split_drafts_to_single(drafts, None, anchor=anchor)
     assert merged["title"] == "分割前タスク"
     assert merged["content"] == "手順1本文\n\n手順2本文"
+
+
+def test_merge_split_drafts_anchor_equal_raw_transcription_falls_back_to_task():
+    # SOT-1594 REOPEN#3: 戻す先は「文字起こし後にタスク分解して、エージェント起動前」のタスク本文。
+    # アンカー content が元書類(写真)の生の文字起こし全文（＝source.content, 「文字起こし後の状態」）と
+    # 一致してしまった場合でも、その生文字起こしをそのまま返さず、分割タスク(手順1)群の本文へ戻す。
+    raw = "写真全文の文字起こし（見出しから連絡事項まで全部）"
+    drafts = [
+        {"title": "就労証明書の提出", "info_type": "提出物", "content": "就労証明書を園に提出する", "items": "", "date": "", "event_date": ""},
+    ]
+    source = {"title": "7月のおたより", "info_type": "お知らせ", "content": raw, "items": "", "date": "", "event_date": ""}
+    anchor = {"title": "就労証明書の提出", "info_type": "提出物", "content": raw, "items": "", "date": "", "event_date": ""}
+    merged = extraction.merge_split_drafts_to_single(drafts, source, anchor=anchor)
+    # 生の文字起こし全文（文字起こし後の状態）は「分割を戻す」に出さない。
+    assert merged["content"] != raw
+    # タスク分解後（手順1）の本文へ戻る。
+    assert merged["content"] == "就労証明書を園に提出する"
