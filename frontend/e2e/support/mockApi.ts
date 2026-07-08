@@ -124,12 +124,16 @@ export interface MockApiOptions {
   authed?: boolean
   records?: MockRecord[]
   children?: MockChild[]
+  // SOT-1595: 写真削除ダイアログの「関連タスクも削除」チェックボックスは
+  // linked-task-count > 0 のときだけ出る。テストで件数を固定するためのフック。
+  linkedTaskCount?: number
 }
 
 // `/api/**` をすべてモックする。戻り値のストアを使ってテスト側でアサートできる。
 export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
   const authed = opts.authed ?? true
   const store: MockRecord[] = opts.records ?? defaultRecords()
+  const linkedTaskCount = opts.linkedTaskCount ?? 0
   // SOT-1435: 子どもストア。既定は空配列（従来どおり「お子さま未登録」）で、既存スペックの挙動は不変。
   const childStore: MockChild[] = opts.children ?? []
   let nextId = Math.max(0, ...store.map(r => r.id)) + 1
@@ -305,6 +309,11 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
         }
       }
       return json(route, 200, att)
+    }
+    // SOT-1595: 写真に紐づく関連タスクの件数。削除ダイアログのチェックボックス表示に使う。
+    const linkedCountMatch = path.match(/^\/info\/(\d+)\/linked-task-count$/)
+    if (linkedCountMatch && method === 'GET') {
+      return json(route, 200, { count: linkedTaskCount })
     }
     const idMatch = path.match(/^\/info\/(\d+)$/)
     if (idMatch) {
