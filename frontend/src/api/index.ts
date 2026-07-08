@@ -8,6 +8,7 @@ import type {
   AttachmentTranscription,
   RagAnswer,
   InfoExtractDraft,
+  InfoTranscription,
   InfoTagSuggestion,
   HybridSearchResponse,
   ReminderFeed,
@@ -278,6 +279,19 @@ export const extractInfoDraft = async (file: File): Promise<InfoExtractDraft> =>
   const formData = new FormData();
   formData.append('file', file);
   const response = await api.post<InfoExtractDraft>('/info/extract', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};
+
+// SOT-1593: 未保存ファイル(PDF/画像)の文字起こし(OCR原文)だけを取得する。確認フェーズで
+// 登録前に PDF の中身を確認する用途。/info/extract と違い enrich を伴わないため軽量。
+export const transcribeFile = async (file: File): Promise<InfoTranscription> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await api.post<InfoTranscription>('/info/transcribe', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },

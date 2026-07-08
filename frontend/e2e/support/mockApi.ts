@@ -226,6 +226,10 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
         },
       })
     }
+    // SOT-1593: 未保存ファイル(PDF/画像)の文字起こし(OCR原文)のみ。確認フェーズで PDF の下に表示する。
+    if (path === '/info/transcribe' && method === 'POST') {
+      return json(route, 200, { text: 'お知らせ 7月の予定 プール 水着 タオル' })
+    }
     if (path === '/info/ask' && method === 'POST') {
       return json(route, 200, { answer: '', sources: [] })
     }
