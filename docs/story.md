@@ -152,9 +152,20 @@ dataset に対する eval スイートの実測値です。閾値を割ると `e
 
 > **数値の出所（誇張なし）:** 閾値は `backend/tests/test_eval_ocr.py` / `test_eval_rag.py` /
 > `test_eval_agent.py` の `MIN_*` 定数、現在値は同スイートを golden dataset（OCR 6 / RAG 5＋corpus 3 /
-> エージェント 5 ケース）に通した実測出力です。eval は外部 LLM・embedding・Google Search grounding の
-> 各境界を**決定論的にスタブしてオフライン実行**するため、ここで測っているのは抽出解析・検索ランキング・
-> 締切逆算といった**確定的ロジックの品質**（ネットワーク非依存で再現可能）です。
+> エージェント 5 ケース、`backend/tests/eval/dataset.py`）に通した実測出力です。eval は外部 LLM・embedding・
+> Google Search grounding の各境界を**決定論的にスタブしてオフライン実行**するため、ここで測っているのは
+> 抽出解析・検索ランキング・締切逆算といった**確定的ロジックの品質**（ネットワーク非依存で再現可能）です。
+>
+> **データセットは易しい入力に寄せていません。** 満点が「テストが緩いから」ではないことの担保として、
+> golden ケースには意図的に**難所**を含めています — OCR は複数の日付表記（`令和5年10月25日` / `2023/12/01` /
+> `2023-12-24` / `12月25日`）と混在した箇条書き記号（`・ * - ● ○ 〇`）、持ち物ゼロ・空入力・「特になし」を、
+> RAG は PDF 由来コーパスと **範囲外クエリの拒否**（株価・天気）を、エージェントは**複数書類からの締切逆算**と
+> **締切不明時に最終提出期限を捏造しないフォールバック**を含みます。
+>
+> **満点でない2セルこそ「本当に測っている」証拠です。** 持ち物の precision 0.97 / F1 0.98 は、`standard_letter`
+> ケースで結びの定型文「よろしくお願いします。」を持ち物として1件だけ拾う**過検出**に由来します（6ケース平均で
+> precision 0.9667 ≒ 0.97、F1 ≒ 0.98）。これは**取りこぼしゼロ（recall 1.00）を優先した保守的な検出**の裏返しで、
+> 数値を丸めず素の実測を出すことで、他の 1.00 が甘い採点ではないことを示しています。
 >
 > **本番の応答品質は別ゲート（監視 SLO）で守ります:** p99 レイテンシ < 2,000ms／5xx エラー率 < 0.1 req/s
 > ／LLM 呼び出し失敗率 < 0.05 /s／grounding 劣化率 < 0.1 /s を超えるとアラート（既定値は
@@ -179,7 +190,7 @@ GCP は名目ではなく、**エージェントの中核機能そのもの**に
 | 公式手順の自律調査 | **Google Search grounding** | `backend/app/submission_agent.py` |
 | メタデータ / 添付 / 秘匿 / 定期ジョブ / 監視 | Firestore / Cloud Storage / Secret Manager / Cloud Scheduler / Cloud Monitoring | `infra/terraform/` |
 
-- **IaC** — Terraform 17ファイルで GCP をコード管理（state は GCS リモートバックエンド）。
+- **IaC** — Terraform 19ファイル（`infra/terraform/*.tf`、＋ `terraform.tfvars.example`）で GCP をコード管理（state は GCS リモートバックエンド）。
 - **CI/CD** — GitHub Actions 4ワークフロー、**Workload Identity Federation（JSONキーレス）**、
   backend は **canary デプロイ + 自動ロールバック**（`/health` 失敗で旧リビジョン維持）。
 - **サプライチェーン** — `pip-audit` / `npm audit`（ブロッキング）/ Trivy / SBOM（CycloneDX）/
