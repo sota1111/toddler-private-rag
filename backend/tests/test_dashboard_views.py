@@ -139,3 +139,61 @@ def test_weekly_and_next_week_include_non_event_types(monkeypatch):
 
     assert "belonging-this-week" in weekly_titles
     assert "submission-next-week" in next_week_titles
+
+
+def _archive(info_id: int):
+    resp = client.put(f"/api/info/{info_id}", json={"is_archived": True})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["is_archived"] is True
+
+
+def test_archived_items_are_hidden_from_today_and_tomorrow(monkeypatch):
+    """SOT-1605: アーカイブ済みは掲示板の「今日やること」「明日」枠から消える。"""
+    import datetime as _dt
+
+    fixed_today = _dt.date(2026, 7, 1)
+    tomorrow = fixed_today + _dt.timedelta(days=1)
+    monkeypatch.setattr(clock, "today", lambda: fixed_today)
+
+    today_keep = _create(title="today-keep", info_type="行事", event_date=fixed_today.isoformat())
+    today_arch = _create(title="today-arch", info_type="行事", event_date=fixed_today.isoformat())
+    tomorrow_keep = _create(title="tomorrow-keep", info_type="行事", event_date=tomorrow.isoformat())
+    tomorrow_arch = _create(title="tomorrow-arch", info_type="行事", event_date=tomorrow.isoformat())
+
+    _archive(today_arch["id"])
+    _archive(tomorrow_arch["id"])
+
+    today_titles = {i["title"] for i in client.get("/api/info/today").json()}
+    tomorrow_titles = {i["title"] for i in client.get("/api/info/tomorrow").json()}
+
+    assert "today-keep" in today_titles
+    assert "today-arch" not in today_titles
+    assert "tomorrow-keep" in tomorrow_titles
+    assert "tomorrow-arch" not in tomorrow_titles
+
+
+def test_archived_items_are_hidden_from_weekly_and_next_week(monkeypatch):
+    """SOT-1605: アーカイブ済みは掲示板の「今週の予定」「来週の予定」枠から消える。"""
+    import datetime as _dt
+
+    fixed_today = _dt.date(2026, 7, 1)  # Wednesday
+    monkeypatch.setattr(clock, "today", lambda: fixed_today)
+
+    this_week_end = fixed_today + _dt.timedelta(days=(6 - fixed_today.weekday()))
+    next_monday = this_week_end + _dt.timedelta(days=1)
+
+    weekly_keep = _create(title="weekly-keep", info_type="行事", event_date=this_week_end.isoformat())
+    weekly_arch = _create(title="weekly-arch", info_type="行事", event_date=this_week_end.isoformat())
+    next_keep = _create(title="next-keep", info_type="行事", event_date=next_monday.isoformat())
+    next_arch = _create(title="next-arch", info_type="行事", event_date=next_monday.isoformat())
+
+    _archive(weekly_arch["id"])
+    _archive(next_arch["id"])
+
+    weekly_titles = {i["title"] for i in client.get("/api/info/weekly").json()}
+    next_week_titles = {i["title"] for i in client.get("/api/info/next-week").json()}
+
+    assert "weekly-keep" in weekly_titles
+    assert "weekly-arch" not in weekly_titles
+    assert "next-keep" in next_week_titles
+    assert "next-arch" not in next_week_titles

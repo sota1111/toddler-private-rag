@@ -354,9 +354,11 @@ class SqliteInfoRepository(InfoRepository):
 
     def list_today(self) -> List[models.NurseryInfo]:
         # 今日やること: 本日が日付/行事日/提出期限のいずれかに該当する情報 (SOT-1093)
+        # SOT-1605: アーカイブ済みは掲示板のアクティブ枠から除外する。
         today = clock.today()
         return self._scoped(self.db.query(models.NurseryInfo).filter(
             _sqlite_registered_only(),
+            _sqlite_not_archived(),
             or_(
                 models.NurseryInfo.date == today,
                 models.NurseryInfo.event_date == today,
@@ -365,9 +367,11 @@ class SqliteInfoRepository(InfoRepository):
         )).all()
 
     def list_tomorrow(self) -> List[models.NurseryInfo]:
+        # SOT-1605: アーカイブ済みは掲示板のアクティブ枠から除外する。
         tomorrow = clock.today() + datetime.timedelta(days=1)
         return self._scoped(self.db.query(models.NurseryInfo).filter(
             _sqlite_registered_only(),
+            _sqlite_not_archived(),
             or_(
                 models.NurseryInfo.event_date == tomorrow,
                 (models.NurseryInfo.info_type == "持ち物") & (models.NurseryInfo.date == tomorrow)
@@ -379,10 +383,12 @@ class SqliteInfoRepository(InfoRepository):
         # 種別(info_type)で絞らない: 行事だけに限定すると、写真OCRから分割された
         # 持ち物/提出物等のタスク(event_date を持つ)が「予定」枠から落ち、「一部は載るが
         # 一部は載らない」状態になっていた。今日/明日の枠と同じく種別を問わず日付で集計する。
+        # SOT-1605: アーカイブ済みは掲示板のアクティブ枠から除外する。
         today = clock.today()
         this_week_end, _, _ = _calendar_week_bounds(today)
         return self._scoped(self.db.query(models.NurseryInfo).filter(
             _sqlite_registered_only(),
+            _sqlite_not_archived(),
             models.NurseryInfo.event_date >= today,
             models.NurseryInfo.event_date <= this_week_end
         )).order_by(models.NurseryInfo.event_date.asc()).all()
@@ -392,10 +398,12 @@ class SqliteInfoRepository(InfoRepository):
         # 本日起点のローリング窓だと、カレンダー上「来週」でも本日から7日以内の予定は
         # 「今週」枠に入り「来週」枠が空白になっていた。カレンダー週境界に揃える。
         # また種別(info_type)では絞らない(list_weekly と同じ理由)。
+        # SOT-1605: アーカイブ済みは掲示板のアクティブ枠から除外する。
         today = clock.today()
         _, next_week_start, next_week_end = _calendar_week_bounds(today)
         return self._scoped(self.db.query(models.NurseryInfo).filter(
             _sqlite_registered_only(),
+            _sqlite_not_archived(),
             models.NurseryInfo.event_date >= next_week_start,
             models.NurseryInfo.event_date <= next_week_end
         )).order_by(models.NurseryInfo.event_date.asc()).all()
@@ -917,6 +925,8 @@ class FirestoreInfoRepository(InfoRepository):
                 continue
             if not _is_registered_data(data):  # 仮登録は除外 (SOT-1113)
                 continue
+            if bool(data.get("is_archived")):  # SOT-1605: アーカイブ済みは掲示板から除外
+                continue
             att_refs = self.db.collection("attachments").where("info_id", "==", doc_id).stream()
             attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
             results.append(_info_doc_to_obj(doc_id, data, attachments))
@@ -942,6 +952,8 @@ class FirestoreInfoRepository(InfoRepository):
             if not self._owner_ok(data):  # SOT-1431: owner 絞り
                 continue
             if not _is_registered_data(data):  # 仮登録は除外 (SOT-1113)
+                continue
+            if bool(data.get("is_archived")):  # SOT-1605: アーカイブ済みは掲示板から除外
                 continue
             att_refs = self.db.collection("attachments").where("info_id", "==", doc_id).stream()
             attachments = [_att_doc_to_obj(att.id, att.to_dict()) for att in att_refs]
@@ -970,6 +982,8 @@ class FirestoreInfoRepository(InfoRepository):
             if not self._owner_ok(data):  # SOT-1431: owner 絞り
                 continue
             if not _is_registered_data(data):  # 仮登録は除外 (SOT-1113)
+                continue
+            if bool(data.get("is_archived")):  # SOT-1605: アーカイブ済みは掲示板から除外
                 continue
             event_date = data.get("event_date")
             if not event_date or not (today_str <= event_date <= week_end_str):
@@ -1001,6 +1015,8 @@ class FirestoreInfoRepository(InfoRepository):
             if not self._owner_ok(data):  # SOT-1431: owner 絞り
                 continue
             if not _is_registered_data(data):  # 仮登録は除外 (SOT-1113)
+                continue
+            if bool(data.get("is_archived")):  # SOT-1605: アーカイブ済みは掲示板から除外
                 continue
             event_date = data.get("event_date")
             if not event_date or not (next_week_start_str <= event_date <= next_week_end_str):
