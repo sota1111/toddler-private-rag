@@ -603,8 +603,10 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
                   {rescheduleMutation.isPending ? t('records.rescheduling') : t('records.rescheduleSave')}
                 </button>
               </div>
+              {/* SOT-1606 REOPEN#1: 成功メッセージ（付随タスクの日付をまとめてずらした旨）の
+                  文字・枠・背景を、上の入力欄/ボタンと同じ青(blue)基調に揃える。 */}
               {rescheduleMessage && (
-                <div className="mt-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">
+                <div className="mt-2 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm">
                   {rescheduleMessage}
                 </div>
               )}
