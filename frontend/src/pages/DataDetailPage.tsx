@@ -574,10 +574,14 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
               締切の基準日(最終提出期限)を変更できる。基準日を変えると同じグループの子タスクが保存済み
               オフセットで一緒にずれる。子タスク(offset > 0)には基準日変更UIを出さない（再オープン対応）。
               基準日変更UIは編集画面(編集モード)のときだけ表示する（再オープン対応: isEditing ゲート）。 */}
+          {/* SOT-1606: 提出目標日のボタンデザインを整える。同じ画面の日付欄（イベント日 event_date,
+              emerald 基調・text-sm p-2）とサイズを揃えつつ、色は青(blue)基調に変更して緑のイベント日と
+              視覚的に区別する。入力欄は sm:text-sm → text-sm に統一（イベント日と同一サイズ）、変更ボタンも
+              日付欄と同じ高さになるよう p-2 に揃える。 */}
           {!hasPhoto && isEditing && item.deadline_group_id && item.deadline_offset_days === 0 && (
             <div className="mb-4">
               <div className="flex flex-wrap items-center gap-2">
-                <label htmlFor="reschedule-base-date" className="text-sm font-medium text-foreground">
+                <label htmlFor="reschedule-base-date" className="text-sm font-medium text-blue-800">
                   {t('records.rescheduleBaseDate')}
                 </label>
                 <input
@@ -586,7 +590,7 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
                   value={baseDateInput ?? item.deadline_base_date ?? item.due_date ?? ''}
                   onChange={(e) => setBaseDateInput(e.target.value)}
                   disabled={rescheduleMutation.isPending}
-                  className="border border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2 disabled:opacity-60"
+                  className="border border-blue-300 bg-blue-50 text-blue-900 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm p-2 disabled:opacity-60"
                 />
                 <button
                   type="button"
@@ -594,7 +598,7 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
                     handleReschedule(baseDateInput ?? item.deadline_base_date ?? item.due_date ?? '')
                   }
                   disabled={rescheduleMutation.isPending}
-                  className="text-sm font-medium text-brand-strong border border-accent-border bg-accent-bg hover:opacity-90 px-3 py-1.5 rounded-md disabled:opacity-60 transition-colors"
+                  className="text-sm font-medium text-white bg-blue-600 border border-blue-600 hover:bg-blue-700 p-2 rounded-md disabled:opacity-60 transition-colors"
                 >
                   {rescheduleMutation.isPending ? t('records.rescheduling') : t('records.rescheduleSave')}
                 </button>
