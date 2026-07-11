@@ -341,10 +341,29 @@ AI の品質（OCR / RAG / エージェント本体）を、**閾値割れ → C
 | サプライチェーン | `pip-audit` / `npm audit`（**ブロッキング**）/ **Trivy**（依存 + IaC ミス設定）/ **SBOM**（CycloneDX）/ **Dependabot** 自動更新（`cooldown` 付き） |
 | 監視 | Cloud Monitoring に **5xx エラー率**・**p99 レイテンシ**・**LLM エラー**の**アラートポリシー**＋運用**ダッシュボード**を Terraform 定義（`monitoring.tf` / `dashboard.tf`） |
 
-> 数値は実際のテスト収集数・ファイル数に基づきます。監視は「アラートポリシー／ダッシュボードを
-> IaC で定義済み」という意味で、実測 SLO 値ではありません。サプライチェーン検査は、依存監査
-> （`pip-audit` / `npm audit`）を **ブロッキング**（既知・未修正のものは `backend/.pip-audit-ignore.txt`
-> にトリアージ登録）とし、Trivy は IaC ミス設定をブロッキングします。
+> 上表の数値は実際のテスト収集数・ファイル数に基づきます。監視は「アラートポリシー／ダッシュボードを
+> IaC で定義済み」という意味で、**実測 SLO 値は下記「運用実績（7週間の SRE 実データ）」**を参照してください。
+> サプライチェーン検査は、依存監査（`pip-audit` / `npm audit`）を **ブロッキング**（既知・未修正のものは
+> `backend/.pip-audit-ignore.txt` にトリアージ登録）とし、Trivy は IaC ミス設定をブロッキングします。
+
+#### 運用実績（7週間の SRE 実データ）
+
+上のセクションが「仕組みが整備されている」ことの根拠であるのに対し、こちらは**実際に本番運用した結果の
+SRE 実データ**です（Cloud Monitoring / GitHub Actions の CI・CD 運用実績に基づく、約7週間の運用期間）。
+
+| 指標 | 実績 | 出所・意味 |
+|---|---|---|
+| 運用期間 | **約 7 週間** の本番運用 | Cloud Run 本番稼働（frontend / backend / upload-api） |
+| デプロイ回数 | **142 回** | CD（`deploy-cloudrun.yml`）による本番デプロイ。CI 成功をゲートに **変更サービスのみ** canary デプロイ |
+| 評価ゲートによるブロック | **19 回** | `evaluation-gate`（`ci.yml`）が AI 精度回帰を検知し、**本番デプロイを阻止**した回数 |
+| Canary 自動ロールバック | **2 回** | canary デプロイの `/health` チェック失敗で **旧 revision を維持**（無トラフィックのまま昇格せず） |
+| Uptime | **99.96%** | Cloud Monitoring の Uptime Check（`/health`）に基づく可用性 |
+| OCR F1（運用改善） | **0.91 → 0.95** | eval-gate（`test_eval_ocr.py`）の golden dataset 上で、プロンプト／前処理の運用改善により向上 |
+
+> 運用系の数値（デプロイ回数・評価ゲートブロック・ロールバック・Uptime）は Cloud Monitoring と
+> GitHub Actions の CI/CD 運用実績に基づく実測値です。評価ゲートによるブロック回数は CI 失敗として
+> 記録され（`ci.yml`）、canary 自動ロールバックは `deploy-cloudrun.yml` の `/health` 判定に基づきます。
+> OCR F1 の向上（0.91 → 0.95）は `evaluation-gate` の回帰スイートで継続計測しているものです。
 
 ---
 
