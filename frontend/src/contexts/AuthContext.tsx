@@ -84,6 +84,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await establishGoogleSession(idToken)
   }
 
+  // SOT-1600: 未ログインユーザー向けのゲスト(デモ)セッション。パスワード不要でデモアカウントの
+  // セッションを発行し、既定オーナーの最新サンプルデータをそのまま閲覧できる。バックエンド側で
+  // DEMO_LOGIN_ENABLED が無効なら 404 になる（呼び出し側でエラー表示）。
+  const loginAsGuest = async () => {
+    const res = await fetch('/api/auth/demo', { method: 'POST', credentials: 'include' })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      throw new Error(data.detail ?? 'デモの開始に失敗しました')
+    }
+    setIsAuthenticated(true)
+    setEmail(data.email ?? null)
+  }
+
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
     setIsAuthenticated(false)
@@ -91,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, loading, email, login, loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, loading, email, login, loginWithGoogle, loginAsGuest, logout }}>
       {children}
     </AuthContext.Provider>
   )
