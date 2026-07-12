@@ -146,6 +146,21 @@ def test_dictionary_no_keyword_returns_empty():
     assert submission_agent._dictionary_inferred_documents("   ") == []
 
 
+def test_text_has_procedure_keyword():
+    """SOT-1564: 締切調査ゲートが参照する手続きキーワード判定（辞書を唯一の真実源とする）。"""
+    # 手続き名だけ（書類名が本文に無い）でも True。OCR 分かち書き「手 続き」でも現況確認は連続で拾える。
+    assert submission_agent.text_has_procedure_keyword(PROCEDURE_ONLY) is True
+    assert (
+        submission_agent.text_has_procedure_keyword(
+            "保育施設在籍にかかる現況確認の手 続きはお済でしょうか"
+        )
+        is True
+    )
+    # 手続きキーワードが無い一般文・空文字は False（過検出しない・never-throw）。
+    assert submission_agent.text_has_procedure_keyword(GENERAL_NOTICE) is False
+    assert submission_agent.text_has_procedure_keyword("") is False
+
+
 def test_merge_candidates_explicit_wins_and_dedup():
     """マージ: 同一書類名は重複排除し、明記(inferred=False)が推定に勝つ。締切は明記を優先。"""
     merged = submission_agent._merge_document_candidates(
@@ -221,6 +236,50 @@ def test_extract_documents_no_overdetection(monkeypatch):
         lambda prompt, **k: (_enrich_json(), []),
     )
     assert submission_agent.extract_submission_documents(GENERAL_NOTICE) == []
+
+
+# --- SOT-1564: Gemini 不在でも辞書だけで就労証明書へ到達（オフライン土台の実効化） ----------
+
+# 実運用で報告された OCR 結果そのまま（全角スペースの分かち書き＋年なし「1/31 まで」）。
+OCR_PROCEDURE_ONLY = "保育施設在籍にかかる現況確認の手 続きはお済でしょうか･･･ 1/31 まで"
+
+
+def test_extract_documents_procedure_only_reaches_without_gemini(monkeypatch):
+    """再現不具合(SOT-1564): Gemini 不在でも辞書で就労証明書へ到達する。
+
+    以前は extract_submission_documents 先頭で gemini 不可なら即 [] を返し、辞書が効かず
+    タスクが1件も生成されなかった。gemini ゲートを LLM 抽出のみに限定した修正後は、辞書由来の
+    就労証明書(inferred=True)へ到達する。grounding は Gemini 不在で失敗しても never-throw で
+    フォールバックし、書類自体は残る。
+    """
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: False)
+
+    docs = submission_agent.extract_submission_documents(
+        OCR_PROCEDURE_ONLY, language="ja"
+    )
+    assert len(docs) == 1
+    doc = docs[0]
+    assert doc["name"] == "就労証明書"
+    assert doc["inferred"] is True
+    # grounding は Gemini 不在で呼べないため手順は空だが、書類は破棄されない（後段で1タスク化）。
+    assert doc["steps"] == []
+
+
+def test_build_drafts_procedure_only_reaches_without_gemini(monkeypatch):
+    """再現不具合(SOT-1564) end-to-end: Gemini 不在でも就労証明書の準備タスク draft が生成される。"""
+    monkeypatch.setattr(ai_client, "gemini_available", lambda: False)
+
+    drafts = submission_agent.build_submission_task_drafts(
+        OCR_PROCEDURE_ONLY, language="ja"
+    )
+    assert drafts, "就労証明書のタスクが1件も生成されていない（再現不具合）"
+    work = [d for d in drafts if "就労証明書" in d["title"]]
+    assert work, "就労証明書のタスクが含まれていない"
+    draft = work[0]
+    assert submission_agent.SUBMISSION_TAG in draft["tags"]
+    assert draft["inferred"] is True
+    # 推定由来のため「推定（要確認）」導線が本文に残る。
+    assert "推定" in draft["content"]
 
 
 def test_build_drafts_inferred_shows_notice(monkeypatch):
@@ -463,6 +522,39 @@ def test_build_drafts_forward_schedule_when_no_due(monkeypatch):
         assert d["event_date"] == d["due_date"]
         assert d["due_date"]  # 空文字でない
         assert "この手順の締切" in d["content"]
+        # SOT-1598: 最終提出期限が不明なときは、本文にその旨と目安である旨を明記する。
+        assert "最終提出期限: 不明" in d["content"]
+        assert "本日起点の目安" in d["content"]
+
+
+def test_build_step_content_marks_deadline_unknown_when_due_empty():
+    """SOT-1598: 手順タスク本文は、最終提出期限が空のとき「不明」を明記する。"""
+    doc = {"name": "在籍証明書", "due_date": ""}
+    step = {"name": "証明書発行", "lead_time_days": 14, "due_iso": "2026-07-17"}
+    ja = submission_agent._build_step_content(doc, step, 1, 3, "ja")
+    assert "最終提出期限: 不明" in ja
+    assert "本日起点の目安" in ja
+    en = submission_agent._build_step_content(doc, step, 1, 3, "en")
+    assert "Final submission deadline: unknown" in en
+    # 期限が判明していれば従来どおり具体日付を出し、「不明」は出さない。
+    known = submission_agent._build_step_content(
+        {"name": "在籍証明書", "due_date": "2026-07-31"}, step, 1, 3, "ja"
+    )
+    assert "最終提出期限: 2026-07-31" in known
+    assert "不明" not in known
+
+
+def test_build_content_marks_deadline_unknown_when_due_empty():
+    """SOT-1598: 手順なし書類の本文も、提出期限が空のとき「不明」を明記する。"""
+    unknown = submission_agent._build_content({"name": "在籍証明書", "due_date": ""}, "ja")
+    assert "提出期限: 不明" in unknown
+    en = submission_agent._build_content({"name": "在籍証明書", "due_date": ""}, "en")
+    assert "Submission deadline: unknown" in en
+    known = submission_agent._build_content(
+        {"name": "在籍証明書", "due_date": "2026-07-31"}, "ja"
+    )
+    assert "提出期限: 2026-07-31" in known
+    assert "不明" not in known
 
 
 def test_build_drafts_backward_from_text_date_when_doc_due_empty(monkeypatch):

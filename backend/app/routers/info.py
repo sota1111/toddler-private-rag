@@ -3,6 +3,7 @@ import datetime
 import json
 import logging
 import os
+import re
 import tempfile
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File, Body
@@ -407,6 +408,186 @@ def list_processing_drafts(repo: InfoRepository = Depends(get_info_repository), 
     return repo.list_processing()
 
 
+# SOT-1577: 「分割前のタスクに戻す」。同一書類(source_info_id)から分割された仮登録(draft)群を、
+# 書類全体をまとめた未分割の1 draft へ置き換える。分割が不要だったケースの戻し導線。
+# "/{id}" より前に宣言してリテラルパスを優先させる。
+def _draft_to_dict(info) -> dict:
+    """merge_split_drafts_to_single / is_deadline_companion が読む形へ ORM/レコードを写像する
+    （純データ変換）。SOT-1577 REOPEN#2: 付随タスク判定のため締切グループ情報も含める。
+    SOT-1584: offset に依存せず付随タスクを判定できるよう、番兵タグ(tags)も含める。"""
+    return {
+        "title": getattr(info, "title", "") or "",
+        "info_type": getattr(info, "info_type", "") or "",
+        "content": getattr(info, "content", "") or "",
+        "items": getattr(info, "items", "") or "",
+        "date": getattr(info, "date", "") or "",
+        "event_date": getattr(info, "event_date", "") or "",
+        "tags": getattr(info, "tags", None),
+        "deadline_group_id": getattr(info, "deadline_group_id", None),
+        "deadline_offset_days": getattr(info, "deadline_offset_days", None),
+    }
+
+
+# SOT-1597: タイトル中の (n/N)（分母 N≥2）分割マーカー。フロント splitTasks.ts の SPLIT_MARKER と同義。
+# 半角/全角の括弧・スラッシュを許容する。エージェントが `{書類名}({i+1}/{total})` で付与するマーカーで、
+# 「分割前のタスク（アンカー, マーカー無し）」や締切調査の単発準備タスクとは区別できる。
+_SPLIT_MARKER_RE = re.compile(r"[（(]\s*(\d+)\s*[／/]\s*(\d+)\s*[）)]")
+
+
+def _has_split_marker(title) -> bool:
+    """タイトルに (n/N)（N≥2）の分割マーカーがあれば True（＝エージェント分割ステップタスク）。"""
+    if not title:
+        return False
+    m = _SPLIT_MARKER_RE.search(str(title))
+    if not m:
+        return False
+    try:
+        return int(m.group(2)) >= 2
+    except (TypeError, ValueError):
+        return False
+
+
+def _find_anchor_dict(group) -> Optional[dict]:
+    """SOT-1594: 締切グループから「分割前のタスク(アンカー)」を1件選んで dict 化する。
+
+    アンカーは締切調査の元タスクで、締切グループに offset 0・番兵タグ無しで束ねられる
+    （is_deadline_companion=False）。その title/content は「締切分割前のタイトル」「文字起こし後の
+    タスク内容(手順1の状態)」そのもの。戻す先の title/content をここから復元する。
+
+    登録状態に依らず群の全メンバから探す（draft の分割群を戻すとき、アンカーが本登録側に居ることが
+    あるため）。付随タスク（手順=調査結果）しかない、またはアンカーが見つからなければ None を返し、
+    呼び出し側は従来（SOT-1577）の分割群連結挙動へフォールバックする。
+    """
+    non_companions = [
+        _draft_to_dict(d)
+        for d in group
+        if not extraction.is_deadline_companion(_draft_to_dict(d))
+    ]
+    if not non_companions:
+        return None
+    # offset 0（基準日＝分割前タスク）を最優先。無ければ先頭の非付随タスク。
+    for d in non_companions:
+        if d.get("deadline_offset_days") == 0:
+            return d
+    return non_companions[0]
+
+
+def _resolve_revert_group(repo, target_id, *, registered: bool):
+    """SOT-1594: 「分割前のタスクに戻す」の対象群を解決する。
+
+    症状: 旧実装は対象を source_info_id（＝写真1枚由来の全タスク）単位でまとめていたため、押下すると
+    書類全てのタスク（他書類の分割・締切逆算タスク含む）が1つに潰れていた。要件は「締切逆算タスクの
+    分割前に戻す」＝押下した (n/N) 分割群だけを1つに戻し、他書類・元タスクは残すこと。
+
+    そこで押下タスク(target_id)を起点に対象群を決める:
+    - 押下タスクが締切グループ(deadline_group_id)に属していれば、**その締切グループのメンバのみ**を
+      対象にする（同じ写真由来でも別グループのタスクは触らない）。
+    - グループを持たないレコードや書類ID（従来のフロント/後方互換）が渡された場合は、SOT-1577 の
+      従来挙動どおり source_info_id 単位にフォールバックする。
+
+    返り値: (members, source_dict, merged_source_id, anchor_dict)。members が空なら呼び出し側で 404。
+    registered=True は本登録タスク、False は draft のみを対象にする。source_dict は統合時の
+    title / info_type 参照用（content には使わない, SOT-1577 REOPEN#2）。anchor_dict は SOT-1594 で、
+    締切グループの「分割前のタスク（アンカー）」があればその dict。戻し先の title/content をここから
+    復元する。非締切分割（後方互換）や見つからないときは None。
+    """
+    rec = None
+    try:
+        rec = repo.get(target_id)
+    except (ValueError, TypeError):
+        rec = None
+
+    want_state = "registered" if registered else "draft"
+
+    def _state_ok(d) -> bool:
+        if getattr(d, "registration_state", None) != want_state:
+            return False
+        # 本登録はアーカイブ済みを除外（draft にアーカイブ概念はない）。
+        return not (registered and getattr(d, "is_archived", False))
+
+    def _source_dict(source_id):
+        if not source_id:
+            return None
+        try:
+            src = repo.get(source_id)
+        except (ValueError, TypeError):
+            src = None
+        return _draft_to_dict(src) if src is not None else None
+
+    group_id = getattr(rec, "deadline_group_id", None) if rec is not None else None
+    if group_id:
+        # 締切グループ単位（SOT-1594 本題）。置換対象は当該登録状態のメンバのみ。
+        full_group = repo.list_by_deadline_group(group_id)
+        members = [d for d in full_group if _state_ok(d)]
+        merged_source_id = getattr(rec, "source_info_id", None)
+        merged_source_id = str(merged_source_id) if merged_source_id else None
+        # SOT-1594: 戻し先の title/content は「分割前のタスク（アンカー）」から復元する。アンカーは
+        # 登録状態が異なりうる（draft の分割群を戻すとき本登録側に居る）ため、全メンバから探す。
+        anchor_dict = _find_anchor_dict(full_group)
+        return members, _source_dict(merged_source_id), merged_source_id, anchor_dict
+
+    # 後方互換（SOT-1577）: source_info_id 単位。押下レコードが source_info_id を持てばそれを、
+    # 無ければ渡された target_id を source_info_id として扱う（＝従来の「書類IDを渡す」呼び出し）。
+    key = getattr(rec, "source_info_id", None) if rec is not None else None
+    key = str(key) if key else str(target_id)
+    members = (
+        repo.list_registered_by_source(key) if registered else repo.list_drafts_by_source(key)
+    )
+    return members, _source_dict(key), key, None
+
+
+@router.post("/drafts/{target_id}/revert-split")
+def revert_split_drafts(
+    target_id: str,
+    repo: InfoRepository = Depends(get_info_repository),
+    current_user: str = Depends(get_current_user),
+):
+    # SOT-1594: 押下タスクの締切グループ単位で対象を解決する（グループ無しは source_info_id 単位に後方互換）。
+    group, _source_dict, _merged_source_id, _anchor_dict = _resolve_revert_group(
+        repo, target_id, registered=False
+    )
+    if not group:
+        raise HTTPException(status_code=404, detail="No split drafts for this task")
+
+    # SOT-1597: 「分割を戻す」= (n/N) 分割ステップタスクを全て削除する。旧実装は分割群を1タスクへ統合し
+    # 直していたが、その本文が写真の文字起こし相当になってしまうため、統合タスクは作らず削除のみに変える。
+    # 削除対象は (n/N) マーカーを持つ分割ステップ draft のみ。分割前のタスク（アンカー, マーカー無し）や
+    # 締切調査の単発準備タスクは残す（＝分割前の状態へ戻る）。マーカーが1件も無い後方互換経路
+    # (source_info_id 単位) では従来どおり解決群全体を削除する。
+    to_delete = [d for d in group if _has_split_marker(getattr(d, "title", None))] or list(group)
+    deleted_ids = [d.id for d in to_delete if repo.delete(d.id)]
+
+    return {"message": "Successfully reverted", "deleted_count": len(deleted_ids), "deleted_ids": deleted_ids}
+
+
+# SOT-1577 / SOT-1597: 「分割タスクを戻す」（本登録後版）。押下した (n/N) 分割群（同一 deadline_group_id）
+# の分割ステップを削除する。仮登録画面だけでなく、本登録後のタスク詳細画面にも「分割前に戻す」導線を
+# 出すためのエンドポイント。対象解決は draft 版と同じ _resolve_revert_group を再利用する（重複ロジックを
+# 作らない）。SOT-1597 で統合タスクの再作成をやめ、分割ステップの削除のみに変更した。
+@router.post("/{target_id}/revert-split-registered")
+def revert_split_registered(
+    target_id: str,
+    repo: InfoRepository = Depends(get_info_repository),
+    current_user: str = Depends(get_current_user),
+):
+    # SOT-1594: 押下タスクの締切グループ単位で対象を解決する（グループ無しは source_info_id 単位に後方互換）。
+    group, _source_dict, _merged_source_id, _anchor_dict = _resolve_revert_group(
+        repo, target_id, registered=True
+    )
+    if not group:
+        raise HTTPException(status_code=404, detail="No split tasks for this task")
+
+    # SOT-1597: 「分割を戻す」= (n/N) 分割ステップタスクを全て削除する。旧実装は分割群を1タスクへ統合し
+    # 直していたが、その本文が写真の文字起こし相当になってしまうため、統合タスクは作らず削除のみに変える。
+    # 削除対象は (n/N) マーカーを持つ本登録の分割ステップのみ。分割前のタスク（アンカー, offset0・
+    # マーカー無し）や締切調査の単発準備タスクは残す（＝分割前の状態へ戻る）。マーカーが1件も無い後方互換
+    # 経路 (source_info_id 単位) では従来どおり解決群全体を削除する。
+    to_delete = [d for d in group if _has_split_marker(getattr(d, "title", None))] or list(group)
+    deleted_ids = [d.id for d in to_delete if repo.delete(d.id)]
+
+    return {"message": "Successfully reverted", "deleted_count": len(deleted_ids), "deleted_ids": deleted_ids}
+
+
 # アーカイブ一覧 (SOT-1500)。"/{id}" より前に宣言してリテラルパスを優先させる。
 # アーカイブ済み(is_archived=True)の本登録項目のみを返す。やることリストと同様に一覧表示する。
 @router.get("/archived", response_model=List[schemas.NurseryInfoResponse])
@@ -650,18 +831,47 @@ def delete_all_info(repo: InfoRepository = Depends(get_info_repository), current
     return {"message": "Successfully deleted all data", "deleted": deleted_count}
 
 
+@router.get("/{id}/linked-task-count")
+def linked_task_count(id: Union[int, str], repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
+    """SOT-1595: この写真(id)を基に生成された関連タスク（draft/registered/archived）の件数。
+    写真削除ダイアログで「関連タスクも削除」の選択肢を出すか／件数表示するために使う。"""
+    tasks = repo.list_all_by_source_info_id(id)
+    return {"count": len(tasks)}
+
+
 @router.delete("/{id}")
-def delete_info(id: Union[int, str], repo: InfoRepository = Depends(get_info_repository), current_user: str = Depends(get_current_user)):
-    # List attachments to delete physical files
-    attachments = repo.list_attachments_for_info(id)
-    
-    # Delete physical files
+def delete_info(
+    id: Union[int, str],
+    delete_linked_tasks: bool = False,
+    repo: InfoRepository = Depends(get_info_repository),
+    current_user: str = Depends(get_current_user),
+):
     backend = storage.get_storage()
+
+    # SOT-1595: 写真を基に生成された関連タスク(draft/registered/archived)を、任意で連鎖削除する。
+    # 既定 False のため、オプション未指定なら従来どおり写真のみ削除する（後方互換）。
+    deleted_linked_tasks = 0
+    if delete_linked_tasks:
+        for task in repo.list_all_by_source_info_id(id):
+            tid = getattr(task, "id", None)
+            if tid is None or str(tid) == str(id):
+                continue
+            # 関連タスクに添付があれば blob も削除（通常タスクは無いが安全側で best-effort）。
+            for att in repo.list_attachments_for_info(tid):
+                try:
+                    backend.delete(att.object_key or att.stored_filename)
+                except Exception:
+                    logger.warning("Failed to delete storage object for linked task %s", tid)
+            if repo.delete(tid):
+                deleted_linked_tasks += 1
+
+    # 写真本体の添付(blob)を削除
+    attachments = repo.list_attachments_for_info(id)
     for attachment in attachments:
         backend.delete(attachment.object_key or attachment.stored_filename)
 
     if not repo.delete(id):
         raise HTTPException(status_code=404, detail="Info not found")
-        
-    return {"message": "Successfully deleted"}
+
+    return {"message": "Successfully deleted", "deleted_linked_tasks": deleted_linked_tasks}
 

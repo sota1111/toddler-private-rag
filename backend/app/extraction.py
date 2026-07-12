@@ -599,7 +599,20 @@ def needs_deadline_investigation(info_type: str, text: str) -> bool:
         return True
     blob = text or ""
     lowered = blob.lower()
-    return any((kw in blob) or (kw in lowered) for kw in _DEADLINE_INVESTIGATION_KEYWORDS)
+    if any((kw in blob) or (kw in lowered) for kw in _DEADLINE_INVESTIGATION_KEYWORDS):
+        return True
+    # SOT-1564: 書類名が本文に明記されず手続き名だけのおたより（例: 現況確認の手続き）でも締切調査を
+    # 発火させる。PR #384 は抽出関数(extract_submission_documents)側に「手続き名→就労証明書」の辞書
+    # 到達を入れたが、そもそもこのゲートが手続きキーワードを知らず False を返すため、自動OCR経路
+    # (routers/attachments.py の needs_deadline_investigation ゲート)で締切調査が一度も起動していな
+    # かった。手続きキーワードは submission_agent の辞書を唯一の真実源として参照する（循環 import を
+    # 避けるため関数内 import）。never-throw: 判定不能時は安全側で False。
+    try:
+        from . import submission_agent
+
+        return submission_agent.text_has_procedure_keyword(blob)
+    except Exception:  # noqa: BLE001 - best-effort ゲート判定
+        return False
 
 
 def draft_title(text: str) -> str:
@@ -866,6 +879,65 @@ def _single_task_fallback(
     return fields
 
 
+def _procedure_keyword_in_drafts(drafts: List[dict]) -> bool:
+    """生成済み draft のいずれかの content に手続きキーワードが含まれるか (SOT-1588)。
+
+    含まれていればそのタスクは needs_deadline_investigation ゲートを通り（＝締切調査へ到達する）、
+    補完タスクは不要（重複させない）。never-throw: 判定不能時は False。
+    """
+    try:
+        from . import submission_agent  # 遅延 import: 循環参照回避
+    except Exception:  # noqa: BLE001 - best-effort
+        return False
+    for d in drafts:
+        try:
+            if submission_agent.text_has_procedure_keyword(d.get("content") or ""):
+                return True
+        except Exception:  # noqa: BLE001 - best-effort
+            continue
+    return False
+
+
+def _procedure_supplement_draft(safe_text: str) -> Optional[dict]:
+    """全文に手続きキーワードがあるのに LLM 分割で失われた場合の決定的な補完 draft (SOT-1588)。
+
+    多トピックの長いおたよりでは LLM のタスク分割が「保育施設在籍にかかる現況確認の手続き…」の
+    ような小さな依頼を落とす／語を変えることがあり、その結果どのタスクも締切調査ゲート
+    (needs_deadline_investigation)を通らず、就労証明書の締切逆算タスクが一度も生成されない
+    （＝SOT-1564 の辞書到達が実運用に届かない）。全文には手続きキーワードが決定的に存在するので、
+    それを含む文を保持した「提出物」タスクを1件補完し、締切調査(submission_agent)へ確実に到達させる。
+
+    締切表記（例「… 1/31 まで」）は手続き文と同じ行に載ることが多いので、キーワードを含む行を
+    そのまま content に残し、submission_agent 側で締切を拾って（発行月コンテキストで OCR 補正して）
+    逆算アンカーにできるようにする。event_date は敢えて空にする（明示アンカーにすると OCR 補正前の
+    誤った日付で固定されてしまうため、本文検出＋補正に委ねる）。手続きキーワードが無ければ None。
+    """
+    try:
+        from . import submission_agent  # 遅延 import: 循環参照回避
+    except Exception:  # noqa: BLE001 - best-effort
+        return None
+    if not submission_agent.text_has_procedure_keyword(safe_text or ""):
+        return None
+    # 手続きキーワードを含む行/文を抽出（締切表記を同じ行に保つため行/句単位で保持）。
+    segments = [seg.strip() for seg in re.split(r"[\n。]", safe_text or "") if seg.strip()]
+    proc_segments = [
+        seg for seg in segments if submission_agent.text_has_procedure_keyword(seg)
+    ]
+    content = "\n".join(proc_segments) if proc_segments else (safe_text or "")
+    title = draft_title(content)
+    category_dict = {k: [] for k in ALL_CONTENT_KEYS}
+    return {
+        "title": title,
+        "info_type": "提出物",  # 締切調査対象。needs_deadline_investigation も True になる。
+        "content": content,
+        "items": "",
+        "date": "",
+        "event_date": "",
+        "needs_deadline_investigation": True,
+        "categories": {"title": title, **category_dict},
+    }
+
+
 # SOT-1350: 同一日・同一イベントのタスクを1件に統合する後処理。
 # 共通接頭辞がこの文字数以上のとき「同じイベント」とみなす（過剰マージを防ぐ保守的な閾値）。
 _EVENT_MERGE_MIN_PREFIX = 3
@@ -1001,4 +1073,150 @@ def build_task_drafts(
 
     # SOT-1350: 同一日・同一イベントのタスクを draft 化前に1件へ統合する。
     tasks = _consolidate_tasks(tasks)
-    return [_task_to_draft(task, safe_text) for task in tasks]
+    drafts = [_task_to_draft(task, safe_text) for task in tasks]
+
+    # SOT-1588: 多トピックの長いおたよりでは LLM 分割が「現況確認の手続き…」のような手続き依頼を
+    # 落とし、どの分割タスクも締切調査ゲートを通らないことがある。全文に手続きキーワードが決定的に
+    # 存在するのに生成タスクのどれもそれを含まない場合は、決定的な補完タスクを1件追加して就労証明書の
+    # 締切逆算へ確実に到達させる（既に含むタスクがあれば重複させない）。best-effort。
+    if not _procedure_keyword_in_drafts(drafts):
+        supplement = _procedure_supplement_draft(safe_text)
+        if supplement is not None:
+            drafts.append(supplement)
+    return drafts
+
+
+def is_deadline_companion(record: dict) -> bool:
+    """SOT-1577 REOPEN#2 / SOT-1584: レコードが「締切調査の付随タスク」かを判定する純関数。
+
+    写真1枚(source_info_id)からは build_task_drafts が生成する“実際の分割タスク”に加え、
+    締切調査(submission_agent)が生成する付随タスクにも同じ source_info_id が付く。付随タスクは
+    締切グループ(deadline_group_id)に属し、submission_agent が番兵タグ ``SUBMISSION_TAG``
+    (提出書類) を必ず付ける。分割の元タスク(アンカー)は同グループに束ねられても offset 0 で、
+    タグは持たない。締切調査を要さない通常の分割タスクは group もタグも無い。
+
+    判定規則(SOT-1584):
+    - ``SUBMISSION_TAG`` を持つレコードは付随タスク。これで offset に依存せず確実に除外できる。
+    - 後方互換のため、従来の「deadline_group_id があり offset≠0」も付随タスクとして扱う。
+
+    SOT-1584 修正前は offset のみで判定していたため、基準日当日に締切が来る付随タスク
+    (例: 提出手順 (2/2)、offset 0) がアンカーと同じ「実タスク」と誤カウントされ、分割していない
+    (=実タスク1件)のに「分割前のタスクに戻す」ボタンが出ていた。番兵タグを主判定に加えて是正する。
+    表示件数や統合対象からは付随タスクを除外する。
+    """
+    # 番兵タグによる判定(主)。submission_agent と同じ SUBMISSION_TAG を単一の真実源として使う。
+    from .submission_agent import SUBMISSION_TAG  # 遅延 import で循環参照を避ける
+
+    tags = record.get("tags")
+    if tags and SUBMISSION_TAG in str(tags):
+        return True
+
+    # 後方互換: 締切グループに属し offset≠0 のレコードも付随タスクとして扱う。
+    group = record.get("deadline_group_id")
+    if group in (None, ""):
+        return False
+    return record.get("deadline_offset_days") != 0
+
+
+def merge_split_drafts_to_single(
+    drafts: List[dict],
+    source: Optional[dict] = None,
+    anchor: Optional[dict] = None,
+) -> dict:
+    """SOT-1577: 同一書類から分割された複数タスク draft を「未分割の1タスク」へ統合する。
+
+    書類→タスク分割が不要だったケースのため、仮登録画面の「分割前のタスクに戻す」から呼ばれる。
+    LLM 呼び出しや I/O を行わない純関数。返り値のキー集合は build_task_drafts の各要素と同形
+    （title / info_type / content / items / date / event_date）。
+
+    - anchor (SOT-1594): 締切逆算タスクの分割群を戻すときの「分割前のタスク」（＝締切調査の元タスク、
+      締切グループに offset 0・番兵タグ無しで束ねられるアンカー）。渡された場合は title / content /
+      info_type / items / date / event_date をアンカー（＝文字起こし後のタスク内容, 手順1の状態）から
+      復元する。締切調査の付随タスク（手順）の本文（調査結果の羅列）や写真書類のタイトルは使わない。
+      anchor が無い（SOT-1577 の非締切分割）ときは従来どおりの下記挙動。
+    - content: SOT-1577 REOPEN#2 で是正。書類全体(source.content=全写真の文字起こし)は流し込まず、
+      分割タスク群自身の本文を出現順に重複なく連結する（「戻す」で全写真分が出るのを防ぐ）。
+    - title / info_type: source を優先し、無ければ先頭 draft、いずれも無ければフォールバック。
+    - date / event_date: 分割 draft 群のうち最も早い非空の日付を採用する（未分割でも1つの予定日を
+      保ち、やること一覧に出るようにする）。
+    - items: 分割 draft 群の非空 items を出現順に重複なく改行連結する。
+    """
+    drafts = [d for d in drafts if d]
+    first = drafts[0] if drafts else {}
+    source = source or {}
+    anchor = anchor or {}
+
+    def _clean(v) -> str:
+        return str(v).strip() if v is not None else ""
+
+    # content: SOT-1577 REOPEN#2。書類全体(source.content=全写真の文字起こし)は使わず、分割タスク
+    # 群自身の本文を出現順に重複なく連結する。source を優先すると「戻す」で全写真分の文字起こしが
+    # 出力されてしまうため（該当タスクの内容のみへ戻す）。
+    seen: List[str] = []
+    for d in drafts:
+        c = _clean(d.get("content"))
+        if c and c not in seen:
+            seen.append(c)
+    joined_content = "\n\n".join(seen)
+
+    # SOT-1594: アンカー（分割前タスク）があれば、その content（文字起こし後のタスク内容＝手順1の状態）
+    # へ戻す。締切調査の付随タスク本文（調査結果）は使わない。アンカー content が空なら退行を避けるため
+    # 分割群の連結本文へフォールバックする。
+    anchor_content = _clean(anchor.get("content"))
+    # SOT-1594 REOPEN#3: 戻す先は「文字起こし後にタスク分解して、（締切逆算）エージェントを起動する前」の
+    # タスク本文であること。元書類(写真)の生の文字起こし全文（＝ユーザーの言う「文字起こし後の状態」,
+    # source.content）にはしない。アンカー解決が万一その生文字起こしと同一になった場合（例: アンカーが
+    # 元書類そのものに落ちた／単一トピックで手順1本文が全文と一致）でも、生文字起こしをそのまま出さず、
+    # 分割タスク(手順1)群自身の本文へフォールバックさせる。これにより「分割を戻す」で全文文字起こしが
+    # 出るのを防ぐ。分割タスク群も生文字起こししか無ければ、それ以上戻せる状態が無いので従来どおり。
+    source_content = _clean(source.get("content"))
+    if anchor_content and source_content and anchor_content == source_content:
+        anchor_content = ""
+    content = anchor_content or joined_content if anchor else joined_content
+
+    # title: SOT-1594。アンカー（締切分割前タスク）の title を最優先。写真書類(source)のタイトルには
+    # しない。アンカーが無ければ従来どおり source → 先頭 draft → 生成。
+    title = (
+        _clean(anchor.get("title"))
+        or _clean(source.get("title"))
+        or _clean(first.get("title"))
+        or draft_title(content)
+    )
+    title = title[:40]
+
+    info_type = _clean(anchor.get("info_type")) or _clean(source.get("info_type"))
+    if info_type not in INFO_TYPES:
+        info_type = _clean(first.get("info_type"))
+    if info_type not in INFO_TYPES:
+        info_type = "資料"
+
+    def _earliest(key: str) -> str:
+        vals = sorted(v for v in (_clean(d.get(key)) for d in drafts) if v)
+        return vals[0] if vals else ""
+
+    items_seen: List[str] = []
+    for d in drafts:
+        it = _clean(d.get("items"))
+        if it and it not in items_seen:
+            items_seen.append(it)
+    joined_items = "\n".join(items_seen)
+
+    # items / date / event_date: アンカーがあれば分割前タスク(手順1)の値へ復元し、空なら分割群の集約へ
+    # フォールバックする。
+    if anchor:
+        items = _clean(anchor.get("items")) or joined_items
+        date = _clean(anchor.get("date")) or _earliest("date")
+        event_date = _clean(anchor.get("event_date")) or _earliest("event_date")
+    else:
+        items = joined_items
+        date = _earliest("date")
+        event_date = _earliest("event_date")
+
+    return {
+        "title": title,
+        "info_type": info_type,
+        "content": content,
+        "items": items,
+        "date": date,
+        "event_date": event_date,
+    }

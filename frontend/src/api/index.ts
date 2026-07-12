@@ -69,8 +69,23 @@ export const updateInfo = async (id: number | string, data: Partial<NurseryInfoC
   return response.data;
 };
 
-export const deleteInfo = async (id: number | string): Promise<void> => {
-  await api.delete(`/info/${id}`);
+// SOT-1595: 写真削除時に、その写真を基に生成された関連タスクも併せて削除するか選べる。
+// deleteLinkedTasks=true のとき delete_linked_tasks クエリを付け、バックエンドが連鎖削除する。
+export const deleteInfo = async (
+  id: number | string,
+  deleteLinkedTasks = false,
+): Promise<void> => {
+  await api.delete(
+    `/info/${id}`,
+    deleteLinkedTasks ? { params: { delete_linked_tasks: true } } : undefined,
+  );
+};
+
+// SOT-1595: 指定した写真(id)を基に生成された関連タスクの件数。写真削除ダイアログで
+// 「関連タスクも削除」の選択肢を出すか／件数を表示するために使う。
+export const getLinkedTaskCount = async (id: number | string): Promise<number> => {
+  const response = await api.get(`/info/${id}/linked-task-count`);
+  return response.data?.count ?? 0;
 };
 
 // 全データ削除 (SOT-1356)。全タスク + 全写真 + ストレージ実体を削除する。破壊的・不可逆。
@@ -94,6 +109,34 @@ export const getProcessingCount = async (): Promise<number> => {
 // 文字起こし(読み取り)中の項目一覧 (SOT-1499)。仮登録画面に「読み取り中」カードとして表示する。
 export const getProcessingDrafts = async (): Promise<NurseryInfo[]> => {
   const response = await api.get('/info/drafts/processing');
+  return response.data;
+};
+
+// SOT-1597 で返り値を「削除結果サマリ」に変更（旧: 生成した未分割タスク）。
+export interface RevertSplitResult {
+  message: string;
+  deleted_count: number;
+  deleted_ids: (number | string)[];
+}
+
+// SOT-1597: 「分割タスクを戻す」。押下した (n/N) 分割タスク自身の id を渡すと、その締切グループ
+// (deadline_group_id) の (n/N) 分割ステップ draft を**全て削除**する。旧実装は分割群を未分割の1 draft へ
+// まとめ直していたが、その本文が写真の文字起こし相当になってしまうため、統合タスクは作らず削除に変えた。
+// 分割前のタスク（アンカー, マーカー無し）や別グループの draft は残る。
+export const revertSplitDrafts = async (
+  taskId: number | string,
+): Promise<RevertSplitResult> => {
+  const response = await api.post(`/info/drafts/${taskId}/revert-split`);
+  return response.data;
+};
+
+// SOT-1597: 「分割タスクを戻す」（本登録後版）。押下した (n/N) 分割タスク自身の id を渡すと、その締切
+// グループの (n/N) 分割ステップ（本登録）を**全て削除**する。統合タスクは作らない。分割前のタスク
+// （アンカー）や別グループのタスクは残る。本登録後のタスク詳細画面の戻し導線。
+export const revertSplitRegistered = async (
+  taskId: number | string,
+): Promise<RevertSplitResult> => {
+  const response = await api.post(`/info/${taskId}/revert-split-registered`);
   return response.data;
 };
 

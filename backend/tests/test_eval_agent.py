@@ -127,12 +127,20 @@ def test_agent_e2e_case(case, monkeypatch):
             f"{case['id']}: inferred task missing the 要確認 notice line"
         )
 
-    # ⑤(a) 締切不明 → 日付を捏造せず前向きフォールバック。
+    # ⑤(a) 締切不明 → 具体的な締切日を捏造せず前向きフォールバック。
+    # SOT-1598: 期限が不明であること自体は「不明」と本文に明記する（明記は捏造ではない）。
     if case.get("expect_no_fabricated_deadline"):
         for d in drafts:
-            # 最終提出期限を本文に捏造していない。
-            assert FINAL_DEADLINE_MARKER not in d["content"], (
-                f"{case['id']}: fabricated a final deadline for a letter with no due date"
+            content = d["content"]
+            # 最終提出期限の具体日付を捏造していない。「最終提出期限: 不明（…）」は許容する。
+            for line in content.splitlines():
+                if FINAL_DEADLINE_MARKER in line:
+                    assert "不明" in line, (
+                        f"{case['id']}: fabricated a final deadline for a letter with no due date"
+                    )
+            # SOT-1598: 締切が不明なことが本文に明記されている。
+            assert "不明" in content, (
+                f"{case['id']}: missing the '締切不明' note for a letter with no due date"
             )
             # それでも本日起点の前向き締切は付く（やることが日付付きで登録される）。
             assert d["event_date"], f"{case['id']}: forward-fallback produced no date"
