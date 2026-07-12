@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getDrafts, finalizeInfo, deleteInfo, updateInfo, getAttachmentFileUrl, getProcessingDrafts } from '../api';
+import { getDrafts, finalizeInfo, deleteInfo, updateInfo, getAttachmentFileUrl, getProcessingDrafts, revertSplitDrafts } from '../api';
 import type { NurseryInfo, NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import { useConfirm } from '../components/confirmDialogContext';
 import RegisterMenu from '../components/RegisterMenu';
 import ScrollableDatePicker from '../components/ScrollableDatePicker';
 import { INFO_TYPES, STATUS_TYPES, PRIORITY_TYPES } from './infoFormOptions';
+import { isAgentSplitTask, shouldShowRevertSplit } from '../utils/splitTasks';
 
 // 登録ページ (SOT-1113): 自動登録した写真の仮登録(draft)一覧。
 // 内容を確認のうえ本登録(finalize)、または破棄(delete)できる。
@@ -14,6 +16,7 @@ import { INFO_TYPES, STATUS_TYPES, PRIORITY_TYPES } from './infoFormOptions';
 const DraftsPage: React.FC = () => {
   const { t } = useI18n();
   const confirm = useConfirm();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: drafts, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['drafts'],
@@ -180,6 +183,36 @@ const DraftsPage: React.FC = () => {
     }
   };
 
+  // SOT-1597: 「分割前のタスクに戻す」。押下した (n/N) 分割タスク自身の id を渡し、その締切グループの
+  // (n/N) 分割ステップ draft をすべて削除する（統合 draft は作らない）。分割前のタスク（アンカー）や
+  // 別グループの draft は残す。
+  const handleRevertSplit = async (id: number | string) => {
+    if (!(await confirm(t('drafts.confirmRevertSplit')))) return;
+    setBusyId(id);
+    try {
+      await revertSplitDrafts(id);
+      await refreshAll();
+      // SOT-1596: 分割を戻したあとはやることリスト一覧ページへ遷移する。
+      navigate('/tasks');
+    } catch (e) {
+      console.error('Failed to revert split drafts', e);
+      window.alert(t('drafts.actionFail'));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // SOT-1584: 「分割前に戻す」は、エージェントが (1/4) のように分割したタスク群にのみ出す。
+  // source_info_id ごとに「(n/N) 分割マーカーを持つ分割タスク」の件数を数える（手動 draft や、
+  // 1枚から複数の独立タスクが出ただけのケースはマーカーが無いので対象外）。
+  const splitGroupCounts = new Map<string, number>();
+  for (const d of drafts ?? []) {
+    const key = d.source_info_id != null ? String(d.source_info_id) : '';
+    if (key && isAgentSplitTask(d)) {
+      splitGroupCounts.set(key, (splitGroupCounts.get(key) ?? 0) + 1);
+    }
+  }
+
   const inputCls = 'mt-1 block w-full border border-border rounded-md shadow-sm p-2 text-sm';
 
   return (
@@ -287,6 +320,11 @@ const DraftsPage: React.FC = () => {
           // 多重リクエスト/状態競合を防ぐ（処理中の項目だけ「処理中…」表示を維持）。
           const anyBusy = busyId !== null || bulkBusy;
           const isEditing = editingId === d.id && editForm !== null;
+          // SOT-1584 / SOT-1588: 「分割前に戻す」は、同一書類から (1/4) のように2件以上へ分割された
+          // グループの、かつ **このカード自身が (n/N) 分割タスク** の場合にのみ表示する。グループ件数だけを
+          // 見ていた旧判定は、同じ写真から登録された非分割の他タスクにもボタンを出してしまっていた。
+          const sourceInfoId = d.source_info_id != null ? String(d.source_info_id) : '';
+          const isSplitGroup = shouldShowRevertSplit(d, splitGroupCounts.get(sourceInfoId) ?? 0);
           return (
             <div key={d.id} className="bg-surface shadow-sm border border-border rounded-lg p-5">
               <div className="flex flex-col sm:flex-row gap-4">
@@ -417,6 +455,16 @@ const DraftsPage: React.FC = () => {
                   </>
                 ) : (
                   <>
+                    {isSplitGroup && (
+                      <button
+                        type="button"
+                        onClick={() => handleRevertSplit(d.id)}
+                        disabled={anyBusy}
+                        className="px-4 py-2 text-sm font-medium text-brand-strong bg-surface border border-brand rounded-md hover:bg-accent-bg disabled:opacity-50"
+                      >
+                        {busy ? t('drafts.working') : t('drafts.revertSplit')}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleDiscard(d.id)}

@@ -441,4 +441,56 @@ test.describe('toddler-private-rag シナリオ', () => {
     await expect(page).toHaveURL(/\/$/)
     await expect(page.locator('a[href="/create/auto"]')).toBeVisible()
   })
+
+  test('S19: 自動登録で PDF を選択でき、確認画面で PDF プレースホルダを表示して登録できる（文字起こしは表示しない） (SOT-1593)', async ({ page }) => {
+    await installApiMocks(page, { authed: true })
+    await login(page)
+
+    await page.locator('nav a[href="/create/auto"]').first().click()
+    await expect(page).toHaveURL(/\/create\/auto/)
+
+    // file input の accept が PDF を許可していることを確認（SOT-1593: 以前は image/* のみで選べなかった）
+    await expect(page.locator('input[type="file"]')).toHaveAttribute('accept', /application\/pdf|\.pdf/)
+
+    // 最小の PDF を file input へ投入する
+    await page.locator('input[type="file"]').setInputFiles({
+      name: 'sample.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n'),
+    })
+
+    // 確認画面が表示され、PDF は壊れた画像ではなくファイル名のプレースホルダで表示される
+    await expect(page.getByText('この写真でよろしいですか？')).toBeVisible()
+    await expect(page.getByText('sample.pdf')).toBeVisible()
+
+    // SOT-1593 REOPEN: 確認画面に文字起こしの表示自体を出さない（完了時も同様）。
+    await expect(page.getByText('文字起こし', { exact: true })).toHaveCount(0)
+
+    // そのまま登録でき、完了カードが表示される（画像と同じ自動登録フロー）
+    await page.getByRole('button', { name: 'この写真で登録' }).click()
+    await expect(page.getByText('アップ完了（登録しました）')).toBeVisible()
+  })
+
+  test('S: 写真削除ダイアログの「関連タスクも削除」チェックボックスをタップでON/OFFできる (SOT-1595)', async ({ page }) => {
+    // 関連タスクが1件以上あるときだけチェックボックスが出る。3件で固定する。
+    await installApiMocks(page, { authed: true, linkedTaskCount: 3 })
+    await login(page)
+
+    await page.goto('/data/1')
+    await page.getByRole('button', { name: '削除' }).click()
+
+    // 確認ダイアログとチェックボックスが表示され、初期は未チェック。
+    await expect(page.getByRole('dialog')).toBeVisible()
+    const checkbox = page.getByRole('checkbox')
+    await expect(checkbox).toBeVisible()
+    await expect(checkbox).not.toBeChecked()
+
+    // ラベル文言をタップしてチェックON（行全体がタップ領域）。
+    await page.getByText(/関連タスクも削除/).click()
+    await expect(checkbox).toBeChecked()
+
+    // もう一度タップでOFFに戻る（iOS の二重発火で元に戻る不具合の回帰防止）。
+    await page.getByText(/関連タスクも削除/).click()
+    await expect(checkbox).not.toBeChecked()
+  })
 })

@@ -123,6 +123,100 @@ def test_build_task_drafts_empty_text_is_safe():
     assert "event_date" in drafts[0]
 
 
+# --- 手続き名だけのおたよりでの締切調査補完 (SOT-1588) ---
+# 多トピックの長いおたよりを LLM が分割すると「現況確認の手続き…」の依頼が落ち、どの分割タスクも
+# 締切調査ゲートを通らず就労証明書の締切逆算タスクが生成されない不具合を固定する。
+
+# 実報告の文字起こし（複数トピックのお便り）。末尾の「お願いします」節に手続き依頼が埋もれている。
+_FULL_LETTER = """7月のおたより
+おたんじょうびおめでとう！ 9月生まれのおともだち
+7/7 (火) 七夕祭り 全児
+7/13(月) セイハ英語 幼児
+七夕祭りについて 7月7日 (火) に七夕祭りをします。短冊を7/1日に持って帰ります。
+ほっこりタイム絵本 絵本は魔法の力があります。
+お願いします
+●子どもたちが遊びに使う新聞紙がお家にありましたら頂けないでしょうか？
+●登園、帰園の時のカードを忘れないようにしてください。
+●保育施設在籍にかかる現況確認の手 続きはお済でしょうか･･･ 1/31 まで
+"""
+
+
+def test_build_task_drafts_supplements_procedure_when_llm_drops_it(monkeypatch):
+    """LLM 分割が手続き依頼を落としても、決定的な補完タスクで締切調査へ到達する。"""
+    monkeypatch.setattr(extraction.ai_client, "gemini_available", lambda: True)
+
+    def _fake_llm_tasks(text, language="ja"):
+        # LLM は七夕など目立つ行事だけ抽出し、「現況確認の手続き」を落とす状況を模擬。
+        return [
+            {"title": "七夕祭り", "date": "7月7日", "detail": "7月7日に七夕祭りをします", "category": "events"},
+            {"title": "セイハ英語", "date": "7月13日", "detail": "セイハ英語があります", "category": "events"},
+        ]
+
+    monkeypatch.setattr(extraction, "_llm_tasks", _fake_llm_tasks)
+    drafts = extraction.build_task_drafts(_FULL_LETTER, language="ja")
+
+    # 手続き文を保持した補完タスクが追加され、締切調査ゲートを通る。
+    proc = [d for d in drafts if "現況確認" in (d.get("content") or "")]
+    assert proc, "procedure supplement draft was not added"
+    assert proc[0]["needs_deadline_investigation"] is True
+    assert proc[0]["info_type"] == "提出物"
+    # 締切表記が content に保持され、submission_agent 側で拾える。
+    assert "1/31" in proc[0]["content"]
+
+
+def test_build_task_drafts_no_duplicate_when_llm_keeps_procedure(monkeypatch):
+    """LLM が手続きタスクを残した場合は補完しない（重複させない）。"""
+    monkeypatch.setattr(extraction.ai_client, "gemini_available", lambda: True)
+
+    def _fake_llm_tasks(text, language="ja"):
+        return [
+            {
+                "title": "現況確認の手続き",
+                "date": "",
+                "detail": "保育施設在籍にかかる現況確認の手続きはお済でしょうか 1/31まで",
+                "category": "submissions",
+            },
+        ]
+
+    monkeypatch.setattr(extraction, "_llm_tasks", _fake_llm_tasks)
+    drafts = extraction.build_task_drafts(_FULL_LETTER, language="ja")
+
+    proc = [d for d in drafts if "現況確認" in (d.get("content") or "")]
+    assert len(proc) == 1  # 補完で重複させない
+    assert proc[0]["needs_deadline_investigation"] is True
+
+
+def test_build_task_drafts_no_supplement_without_procedure_keyword(monkeypatch):
+    """手続きキーワードが無い一般的なおたよりでは補完せず、締切調査を過剰発火しない。"""
+    monkeypatch.setattr(extraction.ai_client, "gemini_available", lambda: True)
+
+    def _fake_llm_tasks(text, language="ja"):
+        return [
+            {"title": "運動会", "date": "5月10日", "detail": "運動会を開催します", "category": "events"},
+        ]
+
+    monkeypatch.setattr(extraction, "_llm_tasks", _fake_llm_tasks)
+    drafts = extraction.build_task_drafts("運動会と遠足のお知らせ", language="ja")
+
+    assert len(drafts) == 1  # 補完タスクは追加されない
+    assert all(not d.get("needs_deadline_investigation") for d in drafts)
+
+
+def test_procedure_supplement_draft_extracts_procedure_line():
+    """補完 draft は手続き文（＋同一行の締切表記）を保持する純関数。"""
+    draft = extraction._procedure_supplement_draft(_FULL_LETTER)
+    assert draft is not None
+    assert "現況確認" in draft["content"]
+    assert "1/31" in draft["content"]
+    assert draft["needs_deadline_investigation"] is True
+    # 明示アンカーは張らず（OCR 補正前の誤日付固定を避ける）本文検出＋補正に委ねる。
+    assert draft["event_date"] == ""
+
+
+def test_procedure_supplement_draft_none_without_keyword():
+    assert extraction._procedure_supplement_draft("運動会と遠足のお知らせ") is None
+
+
 # --- 設定言語でのタスク登録 (SOT-1315) ---
 
 
@@ -345,6 +439,18 @@ def test_needs_deadline_investigation_generic_notice_false():
     assert extraction.needs_deadline_investigation("行事", "明日は運動会です") is False
 
 
+def test_needs_deadline_investigation_procedure_name_only():
+    # SOT-1564: 書類名(就労証明書)が本文に明記されず、手続き名(現況確認)だけのおたよりでも、
+    # 締切調査ゲートは True を返す（→ 就労証明書への辞書到達フローが起動する）。
+    # OCR 分かち書き「手 続き」でも手続きキーワード「現況確認」は連続なので判定できる。
+    text = "保育施設在籍にかかる現況確認の手 続きはお済でしょうか･･･ 1/31 まで"
+    assert extraction.needs_deadline_investigation("資料", text) is True
+    # 手続きキーワードを含まない一般文は依然 False（過検出しない）。
+    assert (
+        extraction.needs_deadline_investigation("資料", "来週の遠足のお知らせです") is False
+    )
+
+
 def test_task_to_draft_sets_needs_deadline_investigation():
     task = {"title": "就労証明書の提出", "detail": "勤務先で記入してもらう", "category": "submissions"}
     draft = extraction._task_to_draft(task, "")
@@ -359,3 +465,152 @@ def test_build_draft_fields_includes_needs_deadline_investigation():
     fields = extraction.build_draft_fields("健康調査票を提出してください", None, None)
     assert "needs_deadline_investigation" in fields
     assert fields["needs_deadline_investigation"] is True
+
+
+# --- SOT-1577: 分割前のタスクに戻す（merge_split_drafts_to_single）--------------
+def test_merge_split_drafts_ignores_source_content():
+    # SOT-1577 REOPEN#2: source（元書類=全写真の文字起こし）本文があっても content には採用せず、
+    # 分割タスク群自身の本文から復元する（「戻す」で全写真分が出るのを防ぐ）。title / info_type は source を優先。
+    drafts = [
+        {"title": "水筒を用意", "info_type": "持ち物", "content": "水筒", "items": "水筒", "date": "2026-05-10", "event_date": "2026-05-10"},
+        {"title": "タオルを用意", "info_type": "持ち物", "content": "タオル", "items": "タオル", "date": "2026-05-09", "event_date": "2026-05-09"},
+    ]
+    source = {"title": "運動会のお知らせ", "info_type": "行事", "content": "運動会の書類全文", "items": "", "date": "", "event_date": ""}
+    merged = extraction.merge_split_drafts_to_single(drafts, source)
+    # content は書類全文ではなく分割タスク群の本文連結。
+    assert merged["content"] == "水筒\n\nタオル"
+    assert "運動会の書類全文" not in merged["content"]
+    # title / info_type は source を優先。
+    assert merged["title"] == "運動会のお知らせ"
+    assert merged["info_type"] == "行事"
+    # 最も早い非空の日付を採用する。
+    assert merged["date"] == "2026-05-09"
+    assert merged["event_date"] == "2026-05-09"
+    # items は重複なく出現順に連結。
+    assert merged["items"] == "水筒\nタオル"
+
+
+def test_is_deadline_companion_distinguishes_companion_from_split():
+    # SOT-1577 REOPEN#2: 締切グループがあり offset≠0 の付随タスクのみ True。
+    # 通常の分割タスク（group なし）・締切グループのアンカー（offset 0）は False（＝実タスク）。
+    assert extraction.is_deadline_companion(
+        {"deadline_group_id": "g1", "deadline_offset_days": -7}
+    ) is True
+    # offset 未設定でも締切グループに属していれば付随タスク扱い。
+    assert extraction.is_deadline_companion(
+        {"deadline_group_id": "g1", "deadline_offset_days": None}
+    ) is True
+    # 締切グループのアンカー（元タスク, offset 0, タグ無し）は実タスク。
+    assert extraction.is_deadline_companion(
+        {"deadline_group_id": "g1", "deadline_offset_days": 0}
+    ) is False
+    # 締切グループなし（通常の分割タスク）は実タスク。
+    assert extraction.is_deadline_companion(
+        {"deadline_group_id": None, "deadline_offset_days": None}
+    ) is False
+    assert extraction.is_deadline_companion({}) is False
+
+
+def test_is_deadline_companion_detects_offset0_submission_task_by_tag():
+    # SOT-1584: 基準日当日締切の付随タスク（例: 提出手順(2/2)）は offset 0 だが、番兵タグ
+    # SUBMISSION_TAG を持つため付随タスクとして除外する。旧来の offset のみ判定では実タスクと
+    # 誤カウントされ、分割していないのに「分割前のタスクに戻す」ボタンが誤表示されていた。
+    from app.submission_agent import SUBMISSION_TAG
+
+    assert extraction.is_deadline_companion(
+        {
+            "deadline_group_id": "g1",
+            "deadline_offset_days": 0,
+            "tags": SUBMISSION_TAG,
+        }
+    ) is True
+    # offset≠0 のタグ付き付随タスクも当然 True（従来経路と一致）。
+    assert extraction.is_deadline_companion(
+        {"deadline_group_id": "g1", "deadline_offset_days": 11, "tags": SUBMISSION_TAG}
+    ) is True
+    # タグは持つが締切グループが無いケースでも付随タスクとして除外する。
+    assert extraction.is_deadline_companion(
+        {"deadline_group_id": None, "tags": SUBMISSION_TAG}
+    ) is True
+    # アンカー（元タスク）はタグを持たないので実タスクのまま（誤除外しない）。
+    assert extraction.is_deadline_companion(
+        {"deadline_group_id": "g1", "deadline_offset_days": 0, "tags": None}
+    ) is False
+
+
+def test_merge_split_drafts_concatenates_content_without_source():
+    # source が無い場合は各タスク本文を出現順に重複なく連結する。
+    drafts = [
+        {"title": "A", "info_type": "持ち物", "content": "水筒", "items": "水筒", "date": "", "event_date": ""},
+        {"title": "B", "info_type": "持ち物", "content": "タオル", "items": "水筒", "date": "", "event_date": ""},
+        {"title": "C", "info_type": "持ち物", "content": "水筒", "items": "", "date": "", "event_date": ""},
+    ]
+    merged = extraction.merge_split_drafts_to_single(drafts)
+    assert merged["content"] == "水筒\n\nタオル"
+    # items も重複除去（水筒は1回だけ）。
+    assert merged["items"] == "水筒"
+    # title は先頭 draft を継承（source 無し）。
+    assert merged["title"] == "A"
+
+
+def test_merge_split_drafts_keys_match_draft_shape():
+    merged = extraction.merge_split_drafts_to_single([
+        {"title": "t", "info_type": "資料", "content": "c", "items": "", "date": "", "event_date": ""},
+    ])
+    assert set(merged.keys()) == {"title", "info_type", "content", "items", "date", "event_date"}
+
+
+def test_merge_split_drafts_falls_back_info_type():
+    # 不正な info_type は "資料" にフォールバックする。
+    merged = extraction.merge_split_drafts_to_single([
+        {"title": "t", "info_type": "存在しない種別", "content": "本文", "items": "", "date": "", "event_date": ""},
+    ])
+    assert merged["info_type"] == "資料"
+
+
+def test_merge_split_drafts_restores_from_anchor():
+    # SOT-1594: anchor（締切分割前タスク）が渡されたら title / content / info_type は写真書類(source)や
+    # 締切調査の付随タスク本文でなくアンカー（手順1の状態）から復元する。
+    drafts = [
+        {"title": "就労証明書(1/2) 様式入手", "info_type": "提出物", "content": "市役所で様式入手（調査結果1）", "items": "", "date": "2026-05-01", "event_date": "2026-05-01"},
+        {"title": "就労証明書(2/2) 提出", "info_type": "提出物", "content": "園に提出（調査結果2）", "items": "", "date": "2026-05-08", "event_date": "2026-05-08"},
+    ]
+    source = {"title": "7月のおたより", "info_type": "お知らせ", "content": "写真全文", "items": "", "date": "", "event_date": ""}
+    anchor = {"title": "就労証明書の提出", "info_type": "提出物", "content": "就労証明書を園に提出する", "items": "提出書類", "date": "2026-05-10", "event_date": "2026-05-10"}
+    merged = extraction.merge_split_drafts_to_single(drafts, source, anchor=anchor)
+    # title は写真書類でなくアンカー（分割前タスク）。
+    assert merged["title"] == "就労証明書の提出"
+    # content は調査結果の羅列でなくアンカー（文字起こし後のタスク内容）。
+    assert merged["content"] == "就労証明書を園に提出する"
+    assert "調査結果" not in merged["content"]
+    assert merged["items"] == "提出書類"
+
+
+def test_merge_split_drafts_anchor_empty_content_falls_back_to_group():
+    # SOT-1594: アンカーの content が空なら退行を避けるため分割群の連結本文へフォールバックする
+    # （title はアンカーを維持）。
+    drafts = [
+        {"title": "s1", "info_type": "提出物", "content": "手順1本文", "items": "", "date": "", "event_date": ""},
+        {"title": "s2", "info_type": "提出物", "content": "手順2本文", "items": "", "date": "", "event_date": ""},
+    ]
+    anchor = {"title": "分割前タスク", "info_type": "提出物", "content": "", "items": "", "date": "", "event_date": ""}
+    merged = extraction.merge_split_drafts_to_single(drafts, None, anchor=anchor)
+    assert merged["title"] == "分割前タスク"
+    assert merged["content"] == "手順1本文\n\n手順2本文"
+
+
+def test_merge_split_drafts_anchor_equal_raw_transcription_falls_back_to_task():
+    # SOT-1594 REOPEN#3: 戻す先は「文字起こし後にタスク分解して、エージェント起動前」のタスク本文。
+    # アンカー content が元書類(写真)の生の文字起こし全文（＝source.content, 「文字起こし後の状態」）と
+    # 一致してしまった場合でも、その生文字起こしをそのまま返さず、分割タスク(手順1)群の本文へ戻す。
+    raw = "写真全文の文字起こし（見出しから連絡事項まで全部）"
+    drafts = [
+        {"title": "就労証明書の提出", "info_type": "提出物", "content": "就労証明書を園に提出する", "items": "", "date": "", "event_date": ""},
+    ]
+    source = {"title": "7月のおたより", "info_type": "お知らせ", "content": raw, "items": "", "date": "", "event_date": ""}
+    anchor = {"title": "就労証明書の提出", "info_type": "提出物", "content": raw, "items": "", "date": "", "event_date": ""}
+    merged = extraction.merge_split_drafts_to_single(drafts, source, anchor=anchor)
+    # 生の文字起こし全文（文字起こし後の状態）は「分割を戻す」に出さない。
+    assert merged["content"] != raw
+    # タスク分解後（手順1）の本文へ戻る。
+    assert merged["content"] == "就労証明書を園に提出する"

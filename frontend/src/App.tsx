@@ -7,7 +7,6 @@ import { I18nProvider } from './i18n/I18nContext';
 import { useI18n } from './i18n/useI18n';
 import { SettingsProvider } from './settings/SettingsContext';
 import LanguageToggle from './components/LanguageToggle';
-import ReminderBanner from './components/ReminderBanner';
 import ScrollToTop from './components/ScrollToTop';
 import { ConfirmDialogProvider } from './components/ConfirmDialog';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -160,7 +159,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         )}
       </nav>
       )}
-      {isAuthenticated && <ReminderBanner />}
+      {/* SOT-1580: 緊急のリマインド機能（能動バナー/通知）を全ページで非表示にする方針変更。 */}
       <main className="max-w-7xl mx-auto py-6 px-4 lg:px-8">{children}</main>
     </div>
   );

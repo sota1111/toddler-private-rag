@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getInfoById, deleteInfo, updateInfo, getAttachmentFileUrl, getAttachmentTranscription, rescheduleDeadline } from '../api';
-import type { Attachment } from '../types';
+import { getInfoById, deleteInfo, updateInfo, getAttachmentFileUrl, getAttachmentTranscription, rescheduleDeadline, getInfoList, revertSplitRegistered, getLinkedTaskCount } from '../api';
+import type { Attachment, NurseryInfo } from '../types';
 import { STATUS_TYPES } from './infoFormOptions';
+import { countAgentSplitTasks, shouldShowRevertSplit } from '../utils/splitTasks';
 import { useI18n } from '../i18n/useI18n';
 import { useConfirm } from '../components/confirmDialogContext';
 
@@ -174,6 +175,57 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
     enabled: Boolean(sourceInfoId),
   });
 
+  // SOT-1595: 写真（添付ありレコード）を基に生成された関連タスクの件数。1件以上あるときだけ
+  // 削除ダイアログに「関連タスクも削除する」チェックボックスを出すために取得する。
+  const itemHasPhoto = Boolean(item?.attachments && item.attachments.length > 0);
+  const { data: linkedTaskCount = 0 } = useQuery({
+    queryKey: ['linked-task-count', id],
+    queryFn: () => getLinkedTaskCount(id),
+    enabled: Boolean(id) && itemHasPhoto,
+  });
+
+  // SOT-1577 / SOT-1584: 本登録後のタスク詳細でも「分割前のタスクに戻す」導線を出す。仮登録画面と
+  // 同じく、エージェントが (1/4) のように2件以上へ分割した本登録タスクがある場合のみ表示する。
+  // 兄弟件数は本登録一覧(RegisteredListPage と同じ queryKey)から数え、キャッシュを共有する。
+  const { data: registeredList } = useQuery({
+    queryKey: ['info', 'registered'],
+    queryFn: () => getInfoList(),
+    enabled: Boolean(sourceInfoId),
+  });
+  // SOT-1584: (n/N) 分割マーカーを持つエージェント分割タスクだけを数える（1枚→複数の独立タスクや
+  // 実タスク1件ではマーカーが無く 0 件となり、ボタンは表示されない）。
+  const splitSiblingCount = countAgentSplitTasks(
+    (registeredList ?? []) as NurseryInfo[],
+    sourceInfoId,
+  );
+  // SOT-1588: グループ件数だけでなく、表示中のタスク自身が (n/N) の分割タスクである場合のみ表示する。
+  // これで同じ写真から登録された非分割の他タスクにはボタンが出ない。
+  const showRevertSplit =
+    sourceInfoId !== '' && item != null && shouldShowRevertSplit(item, splitSiblingCount);
+
+  // SOT-1597: 押下でこのタスク(=表示中の (n/N) 分割タスク)が属する締切グループの (n/N) 分割ステップを
+  // すべて削除する（統合タスクは作らない＝写真の文字起こしを再生成しない）。分割前のタスク（アンカー）は
+  // 残る。グループ特定のためこのタスク自身の id を渡す。
+  // SOT-1596: 現在のタスク(押下した分割ステップ)は削除されるため、やることリスト一覧ページへ遷移する。
+  const revertSplitMutation = useMutation({
+    mutationFn: () => revertSplitRegistered(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['info'] });
+      queryClient.invalidateQueries({ queryKey: ['tomorrow'] });
+      queryClient.invalidateQueries({ queryKey: ['weekly'] });
+      queryClient.invalidateQueries({ queryKey: ['pending'] });
+      navigate('/tasks');
+    },
+    onError: () => setDeleteError(t('drafts.actionFail')),
+  });
+
+  const handleRevertSplit = async () => {
+    if (revertSplitMutation.isPending || !id) return;
+    if (!(await confirm(t('drafts.confirmRevertSplit')))) return;
+    setDeleteError(null);
+    revertSplitMutation.mutate();
+  };
+
   // SOT-1337: 一覧から開いた項目のステータスだけを、編集モードに入らず即時変更する。
   const statusMutation = useMutation({
     mutationFn: (status: string) => updateInfo(id, { status }),
@@ -232,7 +284,8 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
   };
 
   const deleteMutation = useMutation({
-    mutationFn: () => deleteInfo(id),
+    // SOT-1595: deleteLinkedTasks=true のとき、写真に紐づく関連タスクも併せて削除する。
+    mutationFn: (deleteLinkedTasks: boolean) => deleteInfo(id, deleteLinkedTasks),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['info'] });
       queryClient.invalidateQueries({ queryKey: ['tomorrow'] });
@@ -329,9 +382,24 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
 
   const handleDelete = async () => {
     if (deleteMutation.isPending || !item) return;
-    if (await confirm(t('records.confirmDelete', { title: item.title }))) {
+    const message = t('records.confirmDelete', { title: item.title });
+    // SOT-1595: 写真に紐づく関連タスクが1件以上あるときは、確認ダイアログに
+    // 「関連タスクも削除する」チェックボックスを出し、選択状態に応じて連鎖削除する。
+    if (linkedTaskCount > 0) {
+      const result = await confirm(message, {
+        checkbox: {
+          label: t('records.deleteLinkedTasks', { count: String(linkedTaskCount) }),
+          defaultChecked: false,
+        },
+      });
+      if (!result.confirmed) return;
       setDeleteError(null);
-      deleteMutation.mutate();
+      deleteMutation.mutate(result.checked);
+      return;
+    }
+    if (await confirm(message)) {
+      setDeleteError(null);
+      deleteMutation.mutate(false);
     }
   };
 
@@ -426,13 +494,14 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
 
           {/* SOT-1468: 写真ありレコードでは登録月(created_at)を変更できる。
               写真一覧はこの登録月でグルーピングされるため、ここでの変更が一覧の月グループに反映される。
-              SOT-1563(再オープン): 見た目をやることリストのステータス変更(status セレクト, SOT-1337)と同じ
-              オレンジ(brand-accent)基調に揃える（brand ラベル＋accent 枠/amber 背景/brand フォーカスの入力欄、
-              変更ボタンはリスケジュール保存ボタンと同じ brand-accent）。機能は変更しない。 */}
+              SOT-1563(再オープン#2): 年月表示を、やることリストの年月日チップ
+              (DatedInfoList の日付チップ = text-xs px-2 py-1 rounded-full + 緑 getStatusDateChipClass)と
+              同じ大きさ・緑色・長丸(pill)枠に揃える。前回のオレンジ(brand-accent)基調を緑基調へ戻す。
+              機能は変更しない。 */}
           {hasPhoto && (
             <div className="mb-4">
               <div className="flex flex-wrap items-center gap-2">
-                <label htmlFor="registered-month" className="inline-flex items-center gap-1 text-sm font-medium text-brand-strong">
+                <label htmlFor="registered-month" className="inline-flex items-center gap-1 text-sm font-medium text-green-800">
                   📅 {t('records.registeredMonth')}
                 </label>
                 <input
@@ -444,19 +513,19 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
                     setMonthMessage(null);
                   }}
                   disabled={monthMutation.isPending}
-                  className="border border-accent-border bg-accent-bg text-brand-strong rounded-md shadow-sm focus:ring-brand focus:border-brand text-sm p-2 disabled:opacity-60"
+                  className="border border-green-200 bg-green-100 text-green-800 rounded-full shadow-sm focus:ring-green-500 focus:border-green-500 text-xs px-2 py-1 disabled:opacity-60"
                 />
                 <button
                   type="button"
                   onClick={handleSaveMonth}
                   disabled={monthMutation.isPending || !(monthInput ?? toMonthInput(item.created_at))}
-                  className="text-sm font-medium text-brand-strong border border-accent-border bg-accent-bg hover:opacity-90 px-3 py-1.5 rounded-md disabled:opacity-60 transition-colors"
+                  className="text-xs font-medium text-green-800 border border-green-200 bg-green-100 hover:bg-green-200 px-3 py-1 rounded-full disabled:opacity-60 transition-colors"
                 >
                   {monthMutation.isPending ? t('records.rescheduling') : t('records.registeredMonthSave')}
                 </button>
               </div>
               {monthMessage && (
-                <div className="mt-2 p-3 rounded-lg bg-accent-bg border border-accent-border text-brand-strong text-sm">
+                <div className="mt-2 p-3 rounded-lg bg-green-100 border border-green-200 text-green-800 text-sm">
                   {monthMessage}
                 </div>
               )}
@@ -505,10 +574,14 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
               締切の基準日(最終提出期限)を変更できる。基準日を変えると同じグループの子タスクが保存済み
               オフセットで一緒にずれる。子タスク(offset > 0)には基準日変更UIを出さない（再オープン対応）。
               基準日変更UIは編集画面(編集モード)のときだけ表示する（再オープン対応: isEditing ゲート）。 */}
+          {/* SOT-1606: 提出目標日のボタンデザインを整える。同じ画面の日付欄（イベント日 event_date,
+              emerald 基調・text-sm p-2）とサイズを揃えつつ、色は青(blue)基調に変更して緑のイベント日と
+              視覚的に区別する。入力欄は sm:text-sm → text-sm に統一（イベント日と同一サイズ）、変更ボタンも
+              日付欄と同じ高さになるよう p-2 に揃える。 */}
           {!hasPhoto && isEditing && item.deadline_group_id && item.deadline_offset_days === 0 && (
             <div className="mb-4">
               <div className="flex flex-wrap items-center gap-2">
-                <label htmlFor="reschedule-base-date" className="text-sm font-medium text-foreground">
+                <label htmlFor="reschedule-base-date" className="text-sm font-medium text-blue-800">
                   {t('records.rescheduleBaseDate')}
                 </label>
                 <input
@@ -517,7 +590,7 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
                   value={baseDateInput ?? item.deadline_base_date ?? item.due_date ?? ''}
                   onChange={(e) => setBaseDateInput(e.target.value)}
                   disabled={rescheduleMutation.isPending}
-                  className="border border-border rounded-md shadow-sm focus:ring-brand focus:border-brand sm:text-sm p-2 disabled:opacity-60"
+                  className="border border-blue-300 bg-blue-50 text-blue-900 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm p-2 disabled:opacity-60"
                 />
                 <button
                   type="button"
@@ -525,13 +598,15 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
                     handleReschedule(baseDateInput ?? item.deadline_base_date ?? item.due_date ?? '')
                   }
                   disabled={rescheduleMutation.isPending}
-                  className="text-sm font-medium text-brand-strong border border-accent-border bg-accent-bg hover:opacity-90 px-3 py-1.5 rounded-md disabled:opacity-60 transition-colors"
+                  className="text-sm font-medium text-white bg-blue-600 border border-blue-600 hover:bg-blue-700 p-2 rounded-md disabled:opacity-60 transition-colors"
                 >
                   {rescheduleMutation.isPending ? t('records.rescheduling') : t('records.rescheduleSave')}
                 </button>
               </div>
+              {/* SOT-1606 REOPEN#1: 成功メッセージ（付随タスクの日付をまとめてずらした旨）の
+                  文字・枠・背景を、上の入力欄/ボタンと同じ青(blue)基調に揃える。 */}
               {rescheduleMessage && (
-                <div className="mt-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">
+                <div className="mt-2 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm">
                   {rescheduleMessage}
                 </div>
               )}
@@ -573,6 +648,22 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
             <div className="mb-4">
               <h2 className="text-sm font-semibold text-muted-foreground mb-1">{t('records.content')}</h2>
               <LinkifiedText text={item.content} className="whitespace-pre-wrap break-words text-foreground" />
+            </div>
+          )}
+
+          {/* SOT-1577: 「分割前のタスクに戻す」ボタン。本文と、写真リンク／アーカイブ行の間に配置する。
+              仮登録画面(DraftsPage)と同じく、同一書類から2件以上に分割された本登録タスクの場合のみ表示し、
+              押下でその分割グループを未分割の1タスクへまとめ直す。非写真タスク・編集モード以外で表示。 */}
+          {!hasPhoto && !isEditing && showRevertSplit && (
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={handleRevertSplit}
+                disabled={revertSplitMutation.isPending}
+                className="px-4 py-2 text-sm font-medium text-brand-strong bg-surface border border-brand rounded-md hover:bg-accent-bg disabled:opacity-50"
+              >
+                {revertSplitMutation.isPending ? t('drafts.working') : t('drafts.revertSplit')}
+              </button>
             </div>
           )}
 
