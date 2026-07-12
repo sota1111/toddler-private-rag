@@ -522,6 +522,39 @@ def test_build_drafts_forward_schedule_when_no_due(monkeypatch):
         assert d["event_date"] == d["due_date"]
         assert d["due_date"]  # 空文字でない
         assert "この手順の締切" in d["content"]
+        # SOT-1598: 最終提出期限が不明なときは、本文にその旨と目安である旨を明記する。
+        assert "最終提出期限: 不明" in d["content"]
+        assert "本日起点の目安" in d["content"]
+
+
+def test_build_step_content_marks_deadline_unknown_when_due_empty():
+    """SOT-1598: 手順タスク本文は、最終提出期限が空のとき「不明」を明記する。"""
+    doc = {"name": "在籍証明書", "due_date": ""}
+    step = {"name": "証明書発行", "lead_time_days": 14, "due_iso": "2026-07-17"}
+    ja = submission_agent._build_step_content(doc, step, 1, 3, "ja")
+    assert "最終提出期限: 不明" in ja
+    assert "本日起点の目安" in ja
+    en = submission_agent._build_step_content(doc, step, 1, 3, "en")
+    assert "Final submission deadline: unknown" in en
+    # 期限が判明していれば従来どおり具体日付を出し、「不明」は出さない。
+    known = submission_agent._build_step_content(
+        {"name": "在籍証明書", "due_date": "2026-07-31"}, step, 1, 3, "ja"
+    )
+    assert "最終提出期限: 2026-07-31" in known
+    assert "不明" not in known
+
+
+def test_build_content_marks_deadline_unknown_when_due_empty():
+    """SOT-1598: 手順なし書類の本文も、提出期限が空のとき「不明」を明記する。"""
+    unknown = submission_agent._build_content({"name": "在籍証明書", "due_date": ""}, "ja")
+    assert "提出期限: 不明" in unknown
+    en = submission_agent._build_content({"name": "在籍証明書", "due_date": ""}, "en")
+    assert "Submission deadline: unknown" in en
+    known = submission_agent._build_content(
+        {"name": "在籍証明書", "due_date": "2026-07-31"}, "ja"
+    )
+    assert "提出期限: 2026-07-31" in known
+    assert "不明" not in known
 
 
 def test_build_drafts_backward_from_text_date_when_doc_due_empty(monkeypatch):

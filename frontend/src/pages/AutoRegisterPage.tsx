@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { createInfo, uploadAttachmentSmart, getInfoById, getChildren, deleteInfo } from '../api';
-import type { Child, NurseryInfo, NurseryInfoCreate } from '../types';
+import type { NurseryInfo, NurseryInfoCreate } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import { useSettings } from '../settings/useSettings';
 import { compressImageFile } from '../utils/imageCompression';
@@ -15,6 +16,10 @@ import RegisterMenu from '../components/RegisterMenu';
 // SOT-1498: 複数枚の写真を同時に選択し、まとめてアップロードできる。各写真はそれぞれ
 // createInfo(processing)+写真アップされ、サーバ側で個別に OCR/enrich が進む。
 type Phase = 'idle' | 'confirm' | 'saving' | 'done';
+
+// SOT-1593: 選択したファイルが PDF かどうか（MIME か拡張子で判定）。
+const isPdfFile = (file?: File | null): boolean =>
+  file?.type === 'application/pdf' || /\.pdf$/i.test(file?.name ?? '');
 
 const AutoRegisterPage: React.FC = () => {
   const { t, lang } = useI18n();
@@ -47,16 +52,15 @@ const AutoRegisterPage: React.FC = () => {
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   // SOT-1368: 紐づけるお子さま。確認フェーズで選択し、初期 createInfo に付与する。
-  const [children, setChildren] = useState<Child[]>([]);
+  // SOT-1604: 他画面(タスク/予定/ダッシュボード)と同じ react-query の ['children'] キャッシュを共有する。
+  // 以前は useEffect で毎マウント空配列からフェッチしていたため、別画面から自動登録へ戻った直後
+  // (取得完了前)に写真を選ぶと確認画面に子ども選択が出ないことがあった。キャッシュ共有により
+  // 再入場でも即座に一覧が使え、確認画面に必ず子ども選択が出る。
+  const { data: children = [] } = useQuery({
+    queryKey: ['children'],
+    queryFn: getChildren,
+  });
   const [childId, setChildId] = useState('');
-
-  useEffect(() => {
-    getChildren()
-      .then(setChildren)
-      .catch(() => {
-        /* お子さま一覧の取得失敗は致命的でない。紐付けなしで続行する。 */
-      });
-  }, []);
 
   // プレビュー用の objectURL をすべて破棄する（不要になった時点で必ず呼ぶ）
   const clearPreview = () => {
@@ -292,8 +296,7 @@ const AutoRegisterPage: React.FC = () => {
               {previewUrls.map((url, i) => {
                 // PDF は <img> で表示できないため、アイコン + ファイル名のプレースホルダを出す (SOT-1593)。
                 const file = pendingFiles[i];
-                const isPdf =
-                  file?.type === 'application/pdf' || /\.pdf$/i.test(file?.name ?? '');
+                const isPdf = isPdfFile(file);
                 if (isPdf) {
                   return (
                     <div

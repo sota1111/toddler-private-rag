@@ -722,6 +722,13 @@ def _build_content(
     due = doc.get("due_date")
     if due:
         lines.append(f"提出期限: {due}" if ja else f"Submission deadline: {due}")
+    else:
+        # SOT-1598: 提出期限が本文から判明しないときは「不明」であることを明記する。
+        lines.append(
+            "提出期限: 不明（本文に提出期限の記載がありません）"
+            if ja
+            else "Submission deadline: unknown (no deadline stated in the notice)"
+        )
 
     # 根拠となる出典リンク（SOT-1404）: grounding 由来の実URLがあればリンク一覧を出し、
     # 無ければ従来どおり LLM 自己申告の単一「出典」行を出す。
@@ -856,6 +863,15 @@ def _build_step_content(
     due = doc.get("due_date")
     if due:
         lines.append(f"最終提出期限: {due}" if ja else f"Final submission deadline: {due}")
+    else:
+        # SOT-1598: 最終提出期限が本文から判明しないときは「不明」であることを明記する。
+        # この場合の各手順の締切は本日起点で前向きに割り当てた目安なので、その旨も伝える。
+        lines.append(
+            "最終提出期限: 不明（本文に提出期限の記載がないため、上記の日付は本日起点の目安です）"
+            if ja
+            else "Final submission deadline: unknown (not stated in the notice; the dates above "
+            "are estimates from today)"
+        )
 
     # 根拠となる出典リンク（SOT-1404）: 各手順タスクにも grounding 由来の根拠リンクを表示する。
     source_lines = _format_source_links(doc.get("sources") or [], ja)

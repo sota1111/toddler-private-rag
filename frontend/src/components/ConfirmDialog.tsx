@@ -65,17 +65,39 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
           >
             <p className="text-sm text-foreground whitespace-pre-line">{state.message}</p>
             {state.options && (
-              <label className="mt-4 flex items-start gap-2 text-sm text-foreground cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={state.checked}
-                  onChange={(e) =>
-                    setState((prev) => (prev ? { ...prev, checked: e.target.checked } : prev))
-                  }
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-brand focus:ring-brand"
-                />
+              // SOT-1595: iOS Safari では <label> が <input type="checkbox"> を包む形だと
+              // タップ時に toggle が2回発火して状態が元に戻り「チェックできない」ことがある
+              // （実機で報告された不具合）。それを避けるため、確実に1回だけ発火する
+              // <button role="checkbox"> の行全体をタップ領域にし、チェック表示は自前で描画する。
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={state.checked}
+                onClick={() =>
+                  setState((prev) => (prev ? { ...prev, checked: !prev.checked } : prev))
+                }
+                className="mt-4 flex w-full items-start gap-2 text-left text-sm text-foreground"
+              >
+                <span
+                  aria-hidden="true"
+                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+                    state.checked
+                      ? 'border-brand bg-brand text-white'
+                      : 'border-border bg-surface'
+                  }`}
+                >
+                  {state.checked && (
+                    <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                      <path
+                        fillRule="evenodd"
+                        d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.9a1 1 0 0 1 1.4-1.4l3.3 3.3 6.8-6.8a1 1 0 0 1 1.4 0z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  )}
+                </span>
                 <span>{state.options.checkbox.label}</span>
-              </label>
+              </button>
             )}
             <div className="mt-5 flex justify-end gap-2">
               <button
