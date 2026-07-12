@@ -62,6 +62,7 @@ class AttachmentTranscriptionResponse(BaseModel):
     ocr_status: str = "pending"
     language: str = "ja"
 
+
 # --- 子供 (SOT-1368: option A, 1家族で複数の子供) ---
 
 class ChildBase(BaseModel):

@@ -36,7 +36,9 @@ const InfoListPage: React.FC = () => {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: deleteInfo,
+    // SOT-1595: deleteInfo に関連タスク連鎖削除の任意引数が増えたため、id のみを渡す薄いラッパーにする
+    // （一覧からの削除は従来どおり写真のみ削除）。
+    mutationFn: (id: number | string) => deleteInfo(id),
     onMutate: (id: number | string) => {
       setDeletingId(id);
       setDeleteError(null);
