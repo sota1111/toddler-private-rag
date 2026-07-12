@@ -47,6 +47,27 @@ def _session_max_age_seconds() -> int:
     return _DEFAULT_SESSION_MAX_AGE
 
 
+# SOT-1600(再オープン#2): 未ログイン(匿名)ユーザーがサンプルデータを閲覧できる
+# ゲスト(デモ)ログイン。パスワード不要でデモアカウントのセッションを発行するため、
+# 認証を伴わない露出になる。既定は無効(本番安全)で、`DEMO_LOGIN_ENABLED` を明示的に
+# 有効化したときだけボタン/エンドポイントが機能する。
+_DEFAULT_DEMO_EMAIL = "demo.user@example.com"
+
+
+def _demo_login_enabled() -> bool:
+    """ゲスト(デモ)ログインが有効かを返す。既定は無効(本番安全)。"""
+    return os.getenv("DEMO_LOGIN_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _demo_email() -> str:
+    """ゲスト(デモ)ログインで発行するデモアカウントのメール。
+
+    既定 ``demo.user@example.com``。``SEED_REFRESH_EMAILS`` と一致させる想定で、この
+    アカウントは既定オーナーの最新サンプルデータへ毎ログイン再配布(refresh)される。
+    """
+    return (os.getenv("DEMO_LOGIN_EMAIL", _DEFAULT_DEMO_EMAIL).strip() or _DEFAULT_DEMO_EMAIL)
+
+
 class SessionRequest(BaseModel):
     email: str
     password: str
@@ -292,6 +313,40 @@ def create_google_session(request: GoogleSessionRequest):
     email = _verify_google_id_token(request.id_token, api_key)
     return _issue_session_response(
         email, auth_secret, allowed_emails, enforce_allowlist=False
+    )
+
+
+@router.get("/demo/available")
+def demo_available():
+    """SOT-1600: ゲスト(デモ)ログインが有効かをフロントに伝える（ボタン表示判定）。"""
+    return {"enabled": _demo_login_enabled()}
+
+
+@router.post("/demo")
+def create_demo_session():
+    """SOT-1600(再オープン#2): 未ログインユーザー向けのゲスト(デモ)セッションを発行する。
+
+    パスワード検証なしで既定のデモアカウント（``DEMO_LOGIN_EMAIL``、既定
+    ``demo.user@example.com``）のセッション cookie を発行する。このデモアカウントは
+    ``SEED_REFRESH_EMAILS`` の鏡で、``_issue_session_response`` 内の seeding フックにより
+    既定オーナーの最新サンプルデータへ再配布(refresh)される。allowlist は適用しない
+    （誰でも利用可）。``DEMO_LOGIN_ENABLED`` が有効なときだけ許可し、無効時は 404 を返す
+    （既定は無効＝本番安全）。
+    """
+    if not _demo_login_enabled():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="demo login is not enabled",
+        )
+    auth_secret = os.getenv("AUTH_SECRET")
+    if not auth_secret:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="AUTH_SECRET not configured",
+        )
+    # デモは Firebase 認証を経由しないため API key は不要。allowlist も適用しない。
+    return _issue_session_response(
+        _demo_email(), auth_secret, allowed_emails=[], enforce_allowlist=False
     )
 
 

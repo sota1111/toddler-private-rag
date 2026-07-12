@@ -148,6 +148,9 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
     // --- 認証 ---
     if (path === '/auth/me') return json(route, authed ? 200 : 401, {})
     if (path === '/auth/session' || path === '/auth/logout') return json(route, 200, {})
+    // SOT-1600: ゲスト(デモ)ログインは既定で無効（ボタン非表示）。
+    if (path === '/auth/demo/available') return json(route, 200, { enabled: false })
+    if (path === '/auth/demo') return json(route, 200, { success: true, email: 'demo.user@example.com' })
 
     // --- 子ども（お子さまの登録, SOT-1368 / SOT-1435） ---
     if (path === '/children' || path === '/children/') {

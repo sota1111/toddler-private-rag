@@ -146,6 +146,48 @@ def test_google_session_unverified_email_returns_401(client, monkeypatch):
 
 # --- SOT-1528(M4): セッショントークンの有効期限・失効 ---
 
+# --- SOT-1600: ゲスト(デモ)ログイン ---
+
+
+def test_demo_available_disabled_by_default(client):
+    res = client.get("/api/auth/demo/available")
+    assert res.status_code == 200
+    assert res.json() == {"enabled": False}
+
+
+def test_demo_session_disabled_returns_404(client):
+    # 既定(DEMO_LOGIN_ENABLED 未設定)ではゲストログインは無効＝404。
+    res = client.post("/api/auth/demo")
+    assert res.status_code == 404
+    assert "auth_token" not in res.cookies
+
+
+def test_demo_available_reports_enabled(client, monkeypatch):
+    monkeypatch.setenv("DEMO_LOGIN_ENABLED", "1")
+    res = client.get("/api/auth/demo/available")
+    assert res.status_code == 200
+    assert res.json() == {"enabled": True}
+
+
+def test_demo_session_enabled_issues_cookie(client, monkeypatch):
+    # 有効化するとパスワード不要でデモアカウントのセッション cookie を発行する。
+    monkeypatch.setenv("DEMO_LOGIN_ENABLED", "on")
+    res = client.post("/api/auth/demo")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["success"] is True
+    assert body["email"] == "demo.user@example.com"
+    assert "auth_token" in res.cookies
+
+
+def test_demo_session_respects_custom_email(client, monkeypatch):
+    monkeypatch.setenv("DEMO_LOGIN_ENABLED", "true")
+    monkeypatch.setenv("DEMO_LOGIN_EMAIL", "guest@example.com")
+    res = client.post("/api/auth/demo")
+    assert res.status_code == 200
+    assert res.json()["email"] == "guest@example.com"
+
+
 _SECRET = "test-secret-value-1234567890"
 _OWNER = "0" * 32
 

@@ -142,6 +142,8 @@ export const messages: Record<Lang, Messages> = {
     'login.back': '戻る',
     'login.embeddedBrowser':
       'アプリ内ブラウザでは Google ログインを利用できません。Chrome や Safari などの標準ブラウザでこのページを開き直すか、メールアドレスでログインしてください。',
+    'login.demo': 'ログインせずにサンプルを見る',
+    'login.demoFailed': 'サンプルの表示に失敗しました',
 
     // dashboard
     'dashboard.today': '今日やること',
@@ -578,6 +580,8 @@ export const messages: Record<Lang, Messages> = {
     'login.back': 'Back',
     'login.embeddedBrowser':
       "Google sign-in isn't available in in-app browsers. Please reopen this page in a standard browser such as Chrome or Safari, or log in with your email.",
+    'login.demo': 'View the sample without logging in',
+    'login.demoFailed': 'Failed to open the sample',
 
     // dashboard
     'dashboard.today': 'Today’s to-dos',

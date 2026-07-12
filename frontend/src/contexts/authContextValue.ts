@@ -6,6 +6,7 @@ export interface AuthContextType {
   email: string | null
   login: (email: string, password: string) => Promise<void>
   loginWithGoogle: () => Promise<void>
+  loginAsGuest: () => Promise<void>
   logout: () => void
 }
 
@@ -15,5 +16,6 @@ export const AuthContext = createContext<AuthContextType>({
   email: null,
   login: async () => {},
   loginWithGoogle: async () => {},
+  loginAsGuest: async () => {},
   logout: () => {},
 })

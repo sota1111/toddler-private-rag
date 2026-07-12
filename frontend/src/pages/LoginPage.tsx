@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/useAuth'
 import { useI18n } from '../i18n/useI18n'
@@ -7,7 +7,7 @@ import { isEmbeddedBrowser } from '../firebase'
 type LoginMethod = 'select' | 'email'
 
 export default function LoginPage() {
-  const { login, loginWithGoogle, isAuthenticated, loading: authLoading } = useAuth()
+  const { login, loginWithGoogle, loginAsGuest, isAuthenticated, loading: authLoading } = useAuth()
   const { t } = useI18n()
   const navigate = useNavigate()
   const [method, setMethod] = useState<LoginMethod>('select')
@@ -15,6 +15,38 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  // SOT-1600: ゲスト(デモ)ログインは DEMO_LOGIN_ENABLED が有効なときだけ表示する。
+  const [demoEnabled, setDemoEnabled] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/auth/demo/available', { credentials: 'include' })
+        const data = await res.json().catch(() => ({}))
+        if (!cancelled) setDemoEnabled(res.ok && data.enabled === true)
+      } catch {
+        if (!cancelled) setDemoEnabled(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const handleGuest = async () => {
+    setError('')
+    setLoading(true)
+    try {
+      await loginAsGuest()
+      navigate('/')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : ''
+      setError(msg || t('login.demoFailed'))
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -128,6 +160,18 @@ export default function LoginPage() {
               </svg>
               <span>{t('login.google')}</span>
             </button>
+            {/* SOT-1600: 未ログインユーザーがサンプルデータを閲覧できるゲスト(デモ)入口。
+                DEMO_LOGIN_ENABLED が有効なときだけ表示する。 */}
+            {demoEnabled && (
+              <button
+                type="button"
+                onClick={handleGuest}
+                disabled={loading}
+                className="w-full text-sm text-muted-foreground underline hover:text-foreground disabled:opacity-50"
+              >
+                {t('login.demo')}
+              </button>
+            )}
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
