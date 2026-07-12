@@ -1,6 +1,6 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
-sqlalchemy==2.0.35
+sqlalchemy==2.0.51
 pydantic==2.9.2
 python-dotenv==1.2.2
 python-multipart==0.0.18
