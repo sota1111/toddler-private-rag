@@ -50,6 +50,22 @@ _PROCEDURE_DOCUMENT_RULES = (
     ),
 )
 
+
+def text_has_procedure_keyword(text: str) -> bool:
+    """本文に『手続き名→標準書類』辞書(_PROCEDURE_DOCUMENT_RULES)の手続きキーワードが含まれるか。
+
+    SOT-1564: 書類名が本文に明記されず手続き名だけのおたより（例:「保育施設在籍にかかる現況確認の
+    手続き」）でも、締切調査（提出書類エージェント＝就労証明書への到達）を発火させるためのゲート判定に
+    使う純粋関数。締切調査の要否ゲート(extraction.needs_deadline_investigation)から、辞書の手続き
+    キーワードを唯一の真実源として参照する。手続きキーワードが無ければ False（＝一般文で誤発火させ
+    ない）。常に never-throw。
+    """
+    if not text:
+        return False
+    return any(
+        kw in text for keywords, _doc in _PROCEDURE_DOCUMENT_RULES for kw in keywords
+    )
+
 # おたより本文から締切候補を拾うための日付パターン（ocr.py の検出と同等）。
 _DATE_PATTERNS = (
     r"\d{4}[-/]\d{1,2}[-/]\d{1,2}",          # 2026-07-31, 2026/7/31
@@ -573,17 +589,24 @@ def extract_submission_documents(
     採用する（LLM 抽出の書類別締切や本文検出より優先）。
     """
     safe_text = safe_text or ""
-    if not safe_text.strip() or not ai_client.gemini_available():
+    if not safe_text.strip():
         return []
 
-    try:
-        docs = _llm_extract_documents(safe_text, language)
-    except Exception as e:  # noqa: BLE001 - graceful degradation
-        logger.warning("submission document extraction failed: %s", e)
-        docs = []
+    # SOT-1564: LLM 抽出は Gemini 利用可能なときだけ試みる。以前はこの関数先頭で
+    # ``not ai_client.gemini_available()`` のとき即 [] を返しており、下の決定的辞書
+    # (_dictionary_inferred_documents) が一切効かず、SOT-1566 の「LLM 不在でも辞書だけで書類へ到達
+    # できる（オフライン土台）」が実運用で機能していなかった。gemini ゲートは LLM 抽出のみに限定し、
+    # 辞書由来の書類は Gemini 不在でも到達できるようにする（grounding は下で never-throw フォールバック）。
+    docs: List[dict] = []
+    if ai_client.gemini_available():
+        try:
+            docs = _llm_extract_documents(safe_text, language)
+        except Exception as e:  # noqa: BLE001 - graceful degradation
+            logger.warning("submission document extraction failed: %s", e)
+            docs = []
 
     # SOT-1566: 手続きキーワードから標準書類を推定する決定的な辞書候補を注入し、LLM抽出結果と
-    # 書類名でマージ（重複排除・明記優先）。LLM が失敗しても辞書だけで書類へ到達できる（オフライン土台）。
+    # 書類名でマージ（重複排除・明記優先）。LLM が失敗/不在でも辞書だけで書類へ到達できる（オフライン土台）。
     dict_docs = _dictionary_inferred_documents(safe_text)
     docs = _merge_document_candidates(list(docs) + dict_docs)[:_MAX_DOCUMENTS]
     if not docs:
@@ -699,6 +722,13 @@ def _build_content(
     due = doc.get("due_date")
     if due:
         lines.append(f"提出期限: {due}" if ja else f"Submission deadline: {due}")
+    else:
+        # SOT-1598: 提出期限が本文から判明しないときは「不明」であることを明記する。
+        lines.append(
+            "提出期限: 不明（本文に提出期限の記載がありません）"
+            if ja
+            else "Submission deadline: unknown (no deadline stated in the notice)"
+        )
 
     # 根拠となる出典リンク（SOT-1404）: grounding 由来の実URLがあればリンク一覧を出し、
     # 無ければ従来どおり LLM 自己申告の単一「出典」行を出す。
@@ -833,6 +863,15 @@ def _build_step_content(
     due = doc.get("due_date")
     if due:
         lines.append(f"最終提出期限: {due}" if ja else f"Final submission deadline: {due}")
+    else:
+        # SOT-1598: 最終提出期限が本文から判明しないときは「不明」であることを明記する。
+        # この場合の各手順の締切は本日起点で前向きに割り当てた目安なので、その旨も伝える。
+        lines.append(
+            "最終提出期限: 不明（本文に提出期限の記載がないため、上記の日付は本日起点の目安です）"
+            if ja
+            else "Final submission deadline: unknown (not stated in the notice; the dates above "
+            "are estimates from today)"
+        )
 
     # 根拠となる出典リンク（SOT-1404）: 各手順タスクにも grounding 由来の根拠リンクを表示する。
     source_lines = _format_source_links(doc.get("sources") or [], ja)

@@ -11,8 +11,12 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app import database, models
-from app.identity import DEFAULT_OWNER_ID
+from app import storage as storage_mod
+from app.identity import DEFAULT_OWNER_ID, owner_id_for_email
 from app.user_seed import ensure_user_seeded
+
+# SOT-1600: 既定の「デモアカウント」= 常に既定オーナーの最新初期データを映す鏡。
+DEMO_OWNER_ID = owner_id_for_email("demo.user@example.com")
 
 SQLALCHEMY_DATABASE_URL = "sqlite://"
 engine = create_engine(
@@ -204,6 +208,113 @@ def test_existing_user_without_data_is_resynced():
     assert [c.name for c in _children_for("existingEmpty")] == ["あお"]
 
 
+def _add_default_owner_photo(info_title, upload_dir, content=b"PHOTOBYTES", write_blob=True):
+    """SOT-1600: 既定オーナーの指定タスクに写真(添付)1件（と実体ファイル）を用意する。"""
+    stored = storage_mod.generate_stored_filename("photo.png")
+    object_key = storage_mod.build_object_key(stored)
+    if write_blob:
+        (upload_dir / object_key).write_bytes(content)
+    db = TestingSessionLocal()
+    try:
+        info = (
+            db.query(models.NurseryInfo)
+            .filter(
+                models.NurseryInfo.owner_id == DEFAULT_OWNER_ID,
+                models.NurseryInfo.title == info_title,
+            )
+            .first()
+        )
+        db.add(
+            models.Attachment(
+                info_id=info.id,
+                stored_filename=stored,
+                original_filename="photo.png",
+                mime_type="image/png",
+                file_size=len(content),
+                storage_backend="local",
+                object_key=object_key,
+                ocr_text="運動会は10月",
+                ocr_status="done",
+            )
+        )
+        db.commit()
+        return stored, object_key
+    finally:
+        db.close()
+
+
+def _attachments_for_owner(owner_id):
+    db = TestingSessionLocal()
+    try:
+        ids = [i.id for i in _infos_for(owner_id)]
+        if not ids:
+            return []
+        return (
+            db.query(models.Attachment)
+            .filter(models.Attachment.info_id.in_(ids))
+            .all()
+        )
+    finally:
+        db.close()
+
+
+def test_photos_are_copied_from_default_owner(monkeypatch, tmp_path):
+    """SOT-1600: 既定オーナーの写真(添付)も新オーナーへ独立した実体コピーとして配布される。"""
+    monkeypatch.setenv("STORAGE_BACKEND", "local")
+    monkeypatch.setattr(storage_mod, "UPLOAD_DIR", tmp_path)
+    _seed_default_owner_data()
+    src_stored, src_key = _add_default_owner_photo("遠足のお知らせ", tmp_path, b"PHOTOBYTES")
+
+    assert ensure_user_seeded("ownerX") is True
+
+    atts = _attachments_for_owner("ownerX")
+    assert len(atts) == 1
+    att = atts[0]
+    # スカラー項目（原文/OCR/種別等）はそのままコピーされる。
+    assert att.original_filename == "photo.png"
+    assert att.mime_type == "image/png"
+    assert att.ocr_text == "運動会は10月"
+    assert att.ocr_status == "done"
+    assert att.file_size == len(b"PHOTOBYTES")
+    # 実体は独立コピー（stored_filename / object_key は作り直され、元を指さない）。
+    assert att.stored_filename != src_stored
+    assert att.object_key != src_key
+    # 新しいキーで実体ファイルが存在し、内容が一致する。
+    assert (tmp_path / att.object_key).read_bytes() == b"PHOTOBYTES"
+    # 元オーナーの実体ファイルは残っている（破壊しない）。
+    assert (tmp_path / src_key).read_bytes() == b"PHOTOBYTES"
+
+
+def test_photo_is_attached_to_the_matching_copied_task(monkeypatch, tmp_path):
+    """写真は正しいコピー先タスク（同一タイトル）に紐づく。"""
+    monkeypatch.setenv("STORAGE_BACKEND", "local")
+    monkeypatch.setattr(storage_mod, "UPLOAD_DIR", tmp_path)
+    _seed_default_owner_data()
+    _add_default_owner_photo("遠足のお知らせ", tmp_path)
+
+    assert ensure_user_seeded("ownerX") is True
+
+    infos = {i.title: i for i in _infos_for("ownerX")}
+    atts = _attachments_for_owner("ownerX")
+    assert len(atts) == 1
+    assert atts[0].info_id == infos["遠足のお知らせ"].id
+
+
+def test_seeding_skips_photo_when_blob_missing(monkeypatch, tmp_path):
+    """SOT-1600: 実体ファイルが無い添付は best-effort でスキップし、配布は止めない。"""
+    monkeypatch.setenv("STORAGE_BACKEND", "local")
+    monkeypatch.setattr(storage_mod, "UPLOAD_DIR", tmp_path)
+    _seed_default_owner_data()
+    # 実体ファイルを作らずに添付レコードだけ用意する。
+    _add_default_owner_photo("遠足のお知らせ", tmp_path, write_blob=False)
+
+    assert ensure_user_seeded("ownerX") is True
+
+    # タスク自体は配布され、壊れた添付レコードは作られない。
+    assert sorted(i.title for i in _infos_for("ownerX")) == ["健康診断票の提出", "遠足のお知らせ"]
+    assert _attachments_for_owner("ownerX") == []
+
+
 def test_existing_user_with_own_data_is_not_overwritten():
     """SOT-1507 再同期: 既に自分のデータを持つユーザーは上書きしない（編集を保護）。"""
     _seed_default_owner_data()
@@ -229,3 +340,115 @@ def test_existing_user_with_own_data_is_not_overwritten():
     titles = [i.title for i in _infos_for("ownerWithData")]
     assert titles == ["自分で作ったタスク"]
     assert _children_for("ownerWithData") == []
+
+
+# --- SOT-1600 再オープン: デモアカウントの再配布(refresh) ---
+
+
+def _change_default_owner_data():
+    """既定オーナーのデータを変更する（タスク追加＋既存タスクのステータス変更）。"""
+    db = TestingSessionLocal()
+    try:
+        db.add(
+            models.NurseryInfo(
+                owner_id=DEFAULT_OWNER_ID,
+                title="新しいお知らせ",
+                info_type="連絡",
+                content="追加分",
+                status="未対応",
+            )
+        )
+        excursion = (
+            db.query(models.NurseryInfo)
+            .filter(
+                models.NurseryInfo.owner_id == DEFAULT_OWNER_ID,
+                models.NurseryInfo.title == "遠足のお知らせ",
+            )
+            .first()
+        )
+        excursion.status = "完了"
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_demo_account_is_refreshed_with_latest_owner_data(monkeypatch):
+    """SOT-1600: デモアカウントは既存データがあっても既定オーナーの最新データへ再配布される。"""
+    monkeypatch.delenv("SEED_REFRESH_EMAILS", raising=False)  # 既定 = demo.user@example.com
+    _seed_default_owner_data()
+
+    # デモ初回ログイン: 既定オーナーの現在データを受け取る。
+    assert ensure_user_seeded(DEMO_OWNER_ID) is True
+    assert sorted(i.title for i in _infos_for(DEMO_OWNER_ID)) == [
+        "健康診断票の提出",
+        "遠足のお知らせ",
+    ]
+
+    _change_default_owner_data()
+
+    # デモ再ログイン: 既存を破棄して最新を再配布（変更が反映され、重複しない）。
+    assert ensure_user_seeded(DEMO_OWNER_ID) is True
+    infos = {i.title: i for i in _infos_for(DEMO_OWNER_ID)}
+    assert sorted(infos) == ["健康診断票の提出", "新しいお知らせ", "遠足のお知らせ"]
+    assert infos["遠足のお知らせ"].status == "完了"  # 変更後のステータスが反映される
+    assert len(_infos_for(DEMO_OWNER_ID)) == 3  # 前回コピーの重複が残らない
+
+
+def test_demo_refresh_replaces_photos_and_deletes_old_blob(monkeypatch, tmp_path):
+    """SOT-1600: デモ再配布で古い写真の実体は削除され、最新の実体コピーに置き換わる。"""
+    monkeypatch.delenv("SEED_REFRESH_EMAILS", raising=False)
+    monkeypatch.setenv("STORAGE_BACKEND", "local")
+    monkeypatch.setattr(storage_mod, "UPLOAD_DIR", tmp_path)
+    _seed_default_owner_data()
+    _add_default_owner_photo("遠足のお知らせ", tmp_path, b"OLDPHOTO")
+
+    assert ensure_user_seeded(DEMO_OWNER_ID) is True
+    old_atts = _attachments_for_owner(DEMO_OWNER_ID)
+    assert len(old_atts) == 1
+    old_key = old_atts[0].object_key
+    assert (tmp_path / old_key).read_bytes() == b"OLDPHOTO"
+
+    # 既定オーナーの写真を差し替える（古い添付を消し、新しい内容の写真を用意）。
+    db = TestingSessionLocal()
+    try:
+        for att in (
+            db.query(models.Attachment)
+            .join(models.NurseryInfo, models.Attachment.info_id == models.NurseryInfo.id)
+            .filter(models.NurseryInfo.owner_id == DEFAULT_OWNER_ID)
+            .all()
+        ):
+            db.delete(att)
+        db.commit()
+    finally:
+        db.close()
+    _add_default_owner_photo("遠足のお知らせ", tmp_path, b"NEWPHOTO")
+
+    assert ensure_user_seeded(DEMO_OWNER_ID) is True
+    new_atts = _attachments_for_owner(DEMO_OWNER_ID)
+    assert len(new_atts) == 1  # 重複しない
+    new_key = new_atts[0].object_key
+    assert (tmp_path / new_key).read_bytes() == b"NEWPHOTO"  # 最新の内容
+    assert not (tmp_path / old_key).exists()  # 古い実体は削除されている
+
+
+def test_demo_refresh_disabled_when_env_empty(monkeypatch):
+    """SOT-1600: SEED_REFRESH_EMAILS を空にすればデモも従来どおり上書きされない。"""
+    monkeypatch.setenv("SEED_REFRESH_EMAILS", "")
+    _seed_default_owner_data()
+
+    assert ensure_user_seeded(DEMO_OWNER_ID) is True  # 初回配布
+    _change_default_owner_data()
+    # 空設定では再配布されない（既存データ保護）。
+    assert ensure_user_seeded(DEMO_OWNER_ID) is False
+    assert "新しいお知らせ" not in [i.title for i in _infos_for(DEMO_OWNER_ID)]
+
+
+def test_default_owner_never_refreshed_even_if_listed(monkeypatch):
+    """SOT-1600: 既定オーナー自身は SEED_REFRESH_EMAILS に含めても対象外（安全）。"""
+    monkeypatch.setenv("SEED_REFRESH_EMAILS", "sota.moro@gmail.com,demo.user@example.com")
+    _seed_default_owner_data()
+    # 既定オーナーはコピー/クリア対象にならない。
+    assert ensure_user_seeded(DEFAULT_OWNER_ID) is False
+    assert sorted(i.title for i in _infos_for(DEFAULT_OWNER_ID)) == sorted(
+        ["遠足のお知らせ", "健康診断票の提出", "仮登録タスク"]
+    )
