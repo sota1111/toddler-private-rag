@@ -3,6 +3,6 @@
 # google-genai) and FastAPI so the function stays small and cold-starts quickly. OCR/enrich runs
 # on the heavy backend (AI worker), triggered over HTTP.
 functions-framework==3.*
-google-cloud-storage>=2.10.0
+google-cloud-storage>=3.12.0
 google-cloud-firestore>=2.11.0
 requests>=2.31.0
