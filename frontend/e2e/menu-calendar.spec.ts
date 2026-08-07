@@ -8,22 +8,40 @@ test.describe('menu calendar', () => {
     const now = new Date()
     const y = now.getFullYear()
     const m = now.getMonth() + 1
-    const date = `${y}-${String(m).padStart(2, '0')}-15`
+    const dstr = (d: number) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    const date = dstr(15)
 
     await installApiMocks(page, {
       authed: true,
       menuDays: [
         {
+          // 魚の日: 赤列の主菜たんぱく源=さけ（牛乳はスキップ）。
           date,
           weekday: '水',
           morning_snack: ['牛乳'],
           lunch: ['ごはん', '鮭のマヨ焼き'],
           afternoon_snack: ['牛乳'],
-          main_ingredients: { red: ['さけ'], yellow: ['米'], green: ['にんじん'], other: ['塩'] },
+          main_ingredients: { red: ['牛乳', 'さけ'], yellow: ['米'], green: ['にんじん'], other: ['塩'] },
           nutrition: {
             under3: { energy_kcal: 470, protein_g: 20, fat_g: 14 },
             over3: { energy_kcal: 500, protein_g: 22, fat_g: 13 },
           },
+        },
+        {
+          // 肉の日: 赤列=豚もも。
+          date: dstr(10),
+          weekday: '月',
+          lunch: ['ごはん', '豚のしょうが焼き'],
+          main_ingredients: { red: ['豚もも', '油あげ'], yellow: ['米'], green: [], other: [] },
+          nutrition: {},
+        },
+        {
+          // 豆の日: 赤列=豆腐。
+          date: dstr(20),
+          weekday: '木',
+          lunch: ['ごはん', '麻婆豆腐'],
+          main_ingredients: { red: ['牛乳', '豆腐'], yellow: ['米'], green: [], other: [] },
+          nutrition: {},
         },
       ],
     })
@@ -33,8 +51,14 @@ test.describe('menu calendar', () => {
     // 既定は「予定」モード。献立タブへ切替える。
     await page.getByRole('tab', { name: '献立' }).click()
 
-    // 当月セルに主菜（給食1品目）が圧縮表示される。
-    await expect(page.getByText('ごはん').first()).toBeVisible()
+    // 主菜のたんぱく源が「体をつくる（赤）」列から表示される（料理名ではない）。
+    await expect(page.getByRole('button', { name: new RegExp(dstr(10)) })).toContainText('豚もも')
+    await expect(page.getByRole('button', { name: new RegExp(date) })).toContainText('さけ')
+    await expect(page.getByRole('button', { name: new RegExp(dstr(20)) })).toContainText('豆腐')
+    // 肉/魚/豆のアイコンがそれぞれ出る。
+    await expect(page.getByRole('button', { name: new RegExp(dstr(10)) })).toContainText('🍖')
+    await expect(page.getByRole('button', { name: new RegExp(date) })).toContainText('🐟')
+    await expect(page.getByRole('button', { name: new RegExp(dstr(20)) })).toContainText('🫘')
 
     // 献立のある日をタップ → 詳細モーダル。
     await page.getByRole('button', { name: new RegExp(date) }).click()
