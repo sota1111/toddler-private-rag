@@ -684,6 +684,8 @@ class FirestoreNurseryInfo:
     deadline_group_id: Optional[str] = None
     deadline_offset_days: Optional[int] = None
     deadline_base_date: Optional[datetime.date] = None
+    # 献立表を日付ごとに構造化した JSON（menu-calendar 機能）。未設定は献立でない。
+    menu_json: Optional[dict] = None
     attachments: List[FirestoreAttachment] = field(default_factory=list)
 
 # Firestore helper functions
@@ -735,6 +737,7 @@ def _info_doc_to_obj(doc_id: str, data: dict, attachments: List[FirestoreAttachm
         deadline_group_id=data.get("deadline_group_id"),
         deadline_offset_days=data.get("deadline_offset_days"),
         deadline_base_date=_to_date(data.get("deadline_base_date")),
+        menu_json=data.get("menu_json"),
         created_at=data.get("created_at") or datetime.datetime.now(),
         updated_at=data.get("updated_at") or datetime.datetime.now(),
         attachments=attachments or []

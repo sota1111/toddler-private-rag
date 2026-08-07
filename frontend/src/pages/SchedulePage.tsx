@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getInfoList, getChildren } from '../api';
-import type { NurseryInfo } from '../types';
+import { getInfoList, getChildren, getMenuCalendar } from '../api';
+import type { NurseryInfo, MenuDay } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import DatedInfoList from '../components/DatedInfoList';
+import MenuDetailModal from '../components/MenuDetailModal';
 import { getChildColorClasses } from './infoFormOptions';
 
 // SOT-1306: 日付つきの予定（event_date あり）を月カレンダーで可視化し、
@@ -36,6 +37,17 @@ const SchedulePage: React.FC = () => {
   const [viewYear, setViewYear] = useState<number>(today.getFullYear());
   const [viewMonth, setViewMonth] = useState<number>(today.getMonth()); // 0-11
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  // menu-calendar: カレンダーの「予定 / 献立」切替。献立モードのときだけ献立を取得する。
+  const [mode, setMode] = useState<'events' | 'menu'>('events');
+  const [menuDay, setMenuDay] = useState<MenuDay | null>(null);
+  const { data: menuData } = useQuery({
+    queryKey: ['menu', 'calendar', viewYear, viewMonth + 1],
+    queryFn: () => getMenuCalendar(viewYear, viewMonth + 1),
+    enabled: mode === 'menu',
+  });
+  const menuByDate = menuData?.days ?? {};
+  const hasAnyMenu = Object.keys(menuByDate).length > 0;
 
   // 日付つきの予定のみを対象にする。
   const events = useMemo<NurseryInfo[]>(
@@ -125,7 +137,29 @@ const SchedulePage: React.FC = () => {
   }).format(new Date(viewYear, viewMonth, 1));
 
   return (
-    <div className="w-full lg:max-w-6xl lg:mx-auto lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
+    <div className="w-full lg:max-w-6xl lg:mx-auto">
+      {/* menu-calendar: 「予定 / 献立」切替トグル */}
+      <div className="mb-4 flex justify-center">
+        <div className="inline-flex rounded-full border border-border bg-surface p-1 shadow-card" role="tablist" aria-label={t('schedule.listTitle')}>
+          {(['events', 'menu'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="tab"
+              aria-selected={mode === m}
+              onClick={() => { setMode(m); setSelectedDate(null); }}
+              className={`px-5 py-1.5 text-sm font-bold rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand/40 ${
+                mode === m
+                  ? 'bg-gradient-to-r from-brand to-brand-strong text-white shadow-card'
+                  : 'text-muted-foreground hover:text-brand-strong'
+              }`}
+            >
+              {m === 'events' ? t('schedule.modeEvents') : t('schedule.modeMenu')}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
       {/* カレンダー（PCではカレンダーと予定一覧を左右に並べる / モバイルは縦積み） */}
       <div className="bg-surface rounded-2xl shadow-card hover:shadow-card-hover transition-shadow border border-border overflow-hidden mb-6 lg:mb-0">
         <div className="flex items-center justify-between px-4 py-3.5 bg-gradient-to-r from-brand to-brand-strong text-white font-bold">
@@ -164,6 +198,50 @@ const SchedulePage: React.FC = () => {
             {weeks.flat().map((d) => {
               const dateStr = fmtDate(d);
               const inMonth = d.getMonth() === viewMonth;
+
+              // menu-calendar: 献立モードのセル描画（主菜1品だけを圧縮表示、タップで詳細）。
+              if (mode === 'menu') {
+                const menu = inMonth ? menuByDate[dateStr] : undefined;
+                const hasMenu = Boolean(menu);
+                const isTodayCell = dateStr === todayStr;
+                const base =
+                  'relative aspect-square rounded-xl flex flex-col items-center justify-center text-sm transition-all overflow-hidden px-0.5';
+                const tone = inMonth ? 'text-foreground' : 'text-muted-foreground/50';
+                let cls = `${base} ${tone}`;
+                if (hasMenu) {
+                  cls +=
+                    ' bg-brand-soft border-2 border-accent hover:bg-accent-bg hover:border-brand cursor-pointer';
+                } else {
+                  cls += ' hover:bg-surface-muted';
+                }
+                if (isTodayCell) {
+                  cls += ' ring-2 ring-brand ring-offset-1 ring-offset-surface';
+                }
+                if (hasMenu && menu) {
+                  const main = menu.lunch?.[0] ?? '';
+                  return (
+                    <button
+                      key={dateStr}
+                      type="button"
+                      onClick={() => setMenuDay(menu)}
+                      className={cls}
+                      aria-label={`${dateStr} ${main}`}
+                    >
+                      <span className="font-semibold leading-none">{d.getDate()}</span>
+                      <span aria-hidden className="text-[10px] leading-none mt-0.5">🍚</span>
+                      <span className="w-full truncate text-center text-[9px] leading-tight text-muted-foreground">
+                        {main}
+                      </span>
+                    </button>
+                  );
+                }
+                return (
+                  <div key={dateStr} className={cls}>
+                    <span>{d.getDate()}</span>
+                  </div>
+                );
+              }
+
               const count = countByDate[dateStr] ?? 0;
               const hasEvent = count > 0;
               const isToday = dateStr === todayStr;
@@ -222,7 +300,8 @@ const SchedulePage: React.FC = () => {
         </div>
       </div>
 
-      {/* 予定一覧（PCではカレンダーの右、モバイルはカレンダーの下） */}
+      {/* 予定一覧（PCではカレンダーの右、モバイルはカレンダーの下）。予定モードのみ表示。 */}
+      {mode === 'events' && (
       <div className="bg-surface rounded-2xl shadow-card border border-border overflow-hidden mb-6 lg:mb-0">
         <div className="flex items-center gap-2 px-4 py-3 bg-accent-bg text-brand-strong font-bold border-b border-accent-border">
           <span aria-hidden className="text-lg">📅</span>
@@ -251,6 +330,22 @@ const SchedulePage: React.FC = () => {
           }
         />
       </div>
+      )}
+
+      {/* 献立モードで、この月の献立がまだ無いときの案内。 */}
+      {mode === 'menu' && !hasAnyMenu && (
+        <div className="bg-surface rounded-2xl shadow-card border border-border overflow-hidden mb-6 lg:mb-0">
+          <div className="flex items-center gap-2 px-4 py-3 bg-accent-bg text-brand-strong font-bold border-b border-accent-border">
+            <span aria-hidden className="text-lg">🍚</span>
+            <span>{t('schedule.menuListTitle')}</span>
+          </div>
+          <p className="p-6 text-center text-sm text-muted-foreground">{t('schedule.menuEmpty')}</p>
+        </div>
+      )}
+      </div>
+
+      {/* menu-calendar: 献立の日付をタップしたときの詳細モーダル。 */}
+      {menuDay && <MenuDetailModal day={menuDay} onClose={() => setMenuDay(null)} />}
     </div>
   );
 };

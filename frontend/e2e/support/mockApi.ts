@@ -127,6 +127,9 @@ export interface MockApiOptions {
   // SOT-1595: 写真削除ダイアログの「関連タスクも削除」チェックボックスは
   // linked-task-count > 0 のときだけ出る。テストで件数を固定するためのフック。
   linkedTaskCount?: number
+  // menu-calendar: カレンダー「献立」モードが GET /menu/calendar で読む献立日リスト。
+  // 既定は空（献立なし）で既存スペックの挙動は不変。date は ISO(YYYY-MM-DD)。
+  menuDays?: Array<Record<string, unknown> & { date: string }>
 }
 
 // `/api/**` をすべてモックする。戻り値のストアを使ってテスト側でアサートできる。
@@ -134,6 +137,7 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
   const authed = opts.authed ?? true
   const store: MockRecord[] = opts.records ?? defaultRecords()
   const linkedTaskCount = opts.linkedTaskCount ?? 0
+  const menuDays = opts.menuDays ?? []
   // SOT-1435: 子どもストア。既定は空配列（従来どおり「お子さま未登録」）で、既存スペックの挙動は不変。
   const childStore: MockChild[] = opts.children ?? []
   let nextId = Math.max(0, ...store.map(r => r.id)) + 1
@@ -144,6 +148,19 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
     const req = route.request()
     const method = req.method()
     const path = new URL(req.url()).pathname.replace(/^\/api/, '')
+
+    // --- 献立カレンダー（menu-calendar） ---
+    if (path === '/menu/calendar') {
+      const url = new URL(req.url())
+      const year = Number(url.searchParams.get('year'))
+      const month = Number(url.searchParams.get('month'))
+      const prefix = `${year}-${String(month).padStart(2, '0')}-`
+      const days: Record<string, unknown> = {}
+      for (const d of menuDays) {
+        if (typeof d.date === 'string' && d.date.startsWith(prefix)) days[d.date] = d
+      }
+      return json(route, 200, { year, month, days })
+    }
 
     // --- 認証 ---
     if (path === '/auth/me') return json(route, authed ? 200 : 401, {})

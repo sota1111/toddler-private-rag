@@ -106,6 +106,11 @@ resource "google_cloud_run_v2_service" "backend" {
         name  = "GCS_SIGNER_SA_EMAIL"
         value = var.cloud_run_service_account_email
       }
+      # menu-calendar: 献立表の日付分解を有効化（OCR を走らせる backend/worker サービス）。
+      env {
+        name  = "MENU_TABLE_EXTRACTION_ENABLED"
+        value = "1"
+      }
 
       env {
         name = "AUTH_SECRET"

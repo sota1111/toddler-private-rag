@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse, Response
 import os
 import logging
 from typing import Optional, Union
-from .. import schemas, storage, ocr, extraction, clock, submission_agent
+from .. import schemas, storage, ocr, extraction, clock, submission_agent, menu_extraction
 from ..upload_security import validate_and_sanitize_upload
 from ..concurrency import run_parallel
 from ..timing import time_block
@@ -39,6 +39,7 @@ async def process_ocr(
     repo = get_attachment_repo_standalone()
     safe_text = ""
     structured = None
+    menu_json = None
     ocr_ok = False
     # SOT-1374: 写真1枚あたりのOCR処理全体(OCR本体+構造化抽出+保存+事前翻訳)の所要時間を計測する。
     # 細粒度の `stage=ocr`(OCR本体)はそのまま残し、ここでは end-to-end の `process_ocr_total` を出す。
@@ -50,6 +51,16 @@ async def process_ocr(
                 t["chars"] = len(ocr_text or "")
             # 構造化抽出を生成（detected_dates / detected_items を enrich に活用する）
             structured = ocr.build_extraction(ocr_text)
+
+            # 献立表と判定できたら日付ごとに分解する（menu-calendar 機能）。既定 OFF。
+            # best-effort: 失敗しても OCR/登録フローは止めない。元ファイル(ocr_path)を使う。
+            try:
+                if menu_extraction.menu_extraction_enabled() and menu_extraction.detect_menu_table(ocr_text):
+                    menu_json = menu_extraction.extract_menu_by_date(
+                        ocr_path, content_type, ocr_text
+                    )
+            except Exception as me:  # noqa: BLE001
+                logger.warning("menu extraction failed for attachment %s: %s", att_id, me)
 
             # PIIをマスクしてから保存
             safe_text = redact_pii(structured.raw_text)
@@ -87,10 +98,11 @@ async def process_ocr(
             structured if ocr_ok else None,
             language=language,
             municipality=municipality,
+            menu_json=menu_json if ocr_ok else None,
         )
 
 
-def _promote_processing_draft(info_id, safe_text, structured, language="ja", municipality=""):
+def _promote_processing_draft(info_id, safe_text, structured, language="ja", municipality="", menu_json=None):
     """processing のレコードを enrich してサーバ側で本登録(registered)へ昇格する (SOT-1293 / SOT-1324)。
 
     対象が `registration_state == 'processing'`（自動登録の番兵）のときだけ作用する。
@@ -153,6 +165,8 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja", mun
                     date=(overall["date"] or None),
                     event_date=None,  # 登録レコードはタスクではないので予定日を持たせない
                     registration_state="registered",  # SOT-1324: 本登録を介さず直接登録
+                    # 献立表なら日付分解 JSON を登録レコードに保持（カレンダー献立モード用）。
+                    menu_json=menu_json,
                 ),
             )
 
