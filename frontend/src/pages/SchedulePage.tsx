@@ -5,6 +5,7 @@ import type { NurseryInfo, MenuDay } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import DatedInfoList from '../components/DatedInfoList';
 import MenuDetailModal from '../components/MenuDetailModal';
+import { pickMenuProtein } from '../utils/menuProtein';
 import { getChildColorClasses } from './infoFormOptions';
 
 // SOT-1306: 日付つきの予定（event_date あり）を月カレンダーで可視化し、
@@ -218,19 +219,20 @@ const SchedulePage: React.FC = () => {
                   cls += ' ring-2 ring-brand ring-offset-1 ring-offset-surface';
                 }
                 if (hasMenu && menu) {
-                  const main = menu.lunch?.[0] ?? '';
+                  // 主菜のたんぱく源を「体をつくる（赤）」列から選び、肉/魚/豆でアイコン化する。
+                  const { icon, label } = pickMenuProtein(menu);
                   return (
                     <button
                       key={dateStr}
                       type="button"
                       onClick={() => setMenuDay(menu)}
                       className={cls}
-                      aria-label={`${dateStr} ${main}`}
+                      aria-label={`${dateStr} ${label}`}
                     >
                       <span className="font-semibold leading-none">{d.getDate()}</span>
-                      <span aria-hidden className="text-[10px] leading-none mt-0.5">🍚</span>
+                      <span aria-hidden className="text-[10px] leading-none mt-0.5">{icon}</span>
                       <span className="w-full truncate text-center text-[9px] leading-tight text-muted-foreground">
-                        {main}
+                        {label}
                       </span>
                     </button>
                   );

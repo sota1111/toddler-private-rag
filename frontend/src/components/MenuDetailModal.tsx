@@ -1,6 +1,7 @@
 import React from 'react';
 import type { MenuDay } from '../types';
 import { useI18n } from '../i18n/useI18n';
+import { pickMenuProtein } from '../utils/menuProtein';
 
 // menu-calendar: カレンダーの「献立」モードで日付をタップしたときに、その日の献立を
 // すべて表示するモーダル。カレンダーのセルは省スペースのため主菜1品のみを出し、詳細は
@@ -46,7 +47,7 @@ const MenuDetailModal: React.FC<Props> = ({ day, onClose }) => {
       >
         <div className="sticky top-0 flex items-center justify-between px-4 py-3 bg-gradient-to-r from-brand to-brand-strong text-white font-bold">
           <span className="flex items-center gap-2">
-            <span aria-hidden>🍚</span>
+            <span aria-hidden>{pickMenuProtein(day).icon}</span>
             <span>
               {day.date}
               {day.weekday ? `（${day.weekday}）` : ''}
