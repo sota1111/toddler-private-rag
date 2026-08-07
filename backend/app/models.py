@@ -45,6 +45,10 @@ class NurseryInfo(Base):
     memo = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+    # 献立表（給食メニュー）を日付ごとに構造化した JSON（menu-calendar 機能）。
+    # {"month":"YYYY-MM","days":[{date, weekday, lunch[], main_ingredients{...}, nutrition{...}}...]}。
+    # 予定/タスクではないためカレンダーの「献立」モードからのみ参照され、一覧には出ない。
+    menu_json = Column(JSON, nullable=True, default=None)
 
     attachments = relationship("Attachment", back_populates="info", cascade="all, delete-orphan")
 

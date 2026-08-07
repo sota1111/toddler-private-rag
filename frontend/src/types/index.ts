@@ -173,3 +173,34 @@ export interface ReminderFeed {
   items: ReminderItem[]
   digest: string
 }
+
+// --- 献立カレンダー（menu-calendar 機能）------------------------------------------
+export interface MenuNutritionGroup {
+  energy_kcal?: number | null
+  protein_g?: number | null
+  fat_g?: number | null
+}
+
+export interface MenuDay {
+  date: string // ISO YYYY-MM-DD
+  weekday?: string
+  morning_snack: string[]
+  lunch: string[]
+  afternoon_snack: string[]
+  main_ingredients: {
+    red: string[]
+    yellow: string[]
+    green: string[]
+    other: string[]
+  }
+  nutrition: {
+    under3?: MenuNutritionGroup | null
+    over3?: MenuNutritionGroup | null
+  }
+}
+
+export interface MenuCalendarResponse {
+  year: number
+  month: number
+  days: Record<string, MenuDay>
+}

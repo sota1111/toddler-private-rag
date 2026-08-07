@@ -1,6 +1,6 @@
 import datetime
 from pydantic import BaseModel, ConfigDict, model_validator, field_validator
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Dict
 
 # SOT-1470 D2: version of the LLM/OCR extraction output contract. Bump this on any
 # backward-incompatible change to the extraction output schemas below
@@ -153,6 +153,8 @@ class NurseryInfoUpdate(BaseModel):
     # 更新を許可する。写真一覧はこの created_at の年月でグルーピングするため、これを変更すると
     # 一覧の月グループが変わる。
     created_at: Optional[datetime.datetime] = None
+    # 献立表を日付ごとに構造化した JSON（menu-calendar 機能）。背景 OCR から設定される。
+    menu_json: Optional[dict] = None
 
     _normalize_dates = field_validator(
         "date", "event_date", "due_date", "deadline_base_date", mode="before"
@@ -360,3 +362,40 @@ class AnswerFeedbackSummary(BaseModel):
     up: int
     down: int
     total: int
+
+
+# --- 献立カレンダー（menu-calendar 機能）------------------------------------------
+class MenuNutritionGroup(BaseModel):
+    energy_kcal: Optional[float] = None
+    protein_g: Optional[float] = None
+    fat_g: Optional[float] = None
+
+
+class MenuNutrition(BaseModel):
+    under3: Optional[MenuNutritionGroup] = None
+    over3: Optional[MenuNutritionGroup] = None
+
+
+class MenuIngredients(BaseModel):
+    red: List[str] = []
+    yellow: List[str] = []
+    green: List[str] = []
+    other: List[str] = []
+
+
+class MenuDay(BaseModel):
+    """献立表の1日分。``date`` は ISO 日付（YYYY-MM-DD）。"""
+    date: str
+    weekday: Optional[str] = ""
+    morning_snack: List[str] = []
+    lunch: List[str] = []
+    afternoon_snack: List[str] = []
+    main_ingredients: MenuIngredients = MenuIngredients()
+    nutrition: MenuNutrition = MenuNutrition()
+
+
+class MenuCalendarResponse(BaseModel):
+    """指定年月の献立を ISO 日付キーで返す（カレンダーの「献立」モード用）。"""
+    year: int
+    month: int
+    days: Dict[str, MenuDay] = {}

@@ -11,6 +11,7 @@ import type {
   InfoTagSuggestion,
   HybridSearchResponse,
   ReminderFeed,
+  MenuCalendarResponse,
 } from '../types';
 
 const api = axios.create({
@@ -20,6 +21,15 @@ const api = axios.create({
 
 export const getInfoList = async (params?: { q?: string; info_type?: string; status?: string; tag?: string; include_attachments?: boolean }): Promise<NurseryInfo[]> => {
   const response = await api.get('/info/', { params });
+  return response.data;
+};
+
+// 献立カレンダー取得（menu-calendar 機能）。指定年月の献立を ISO 日付キーで返す。
+export const getMenuCalendar = async (
+  year: number,
+  month: number,
+): Promise<MenuCalendarResponse> => {
+  const response = await api.get('/menu/calendar', { params: { year, month } });
   return response.data;
 };
 
