@@ -126,7 +126,7 @@ const composeReminderMessage = (
   }
 };
 
-const ReminderRow: React.FC<{ item: ReminderItem }> = ({ item }) => {
+const ReminderRow: React.FC<{ item: ReminderItem; children: Child[] }> = ({ item, children }) => {
   const { t } = useI18n();
   // 種別ラベル（保存値は日本語のまま、表示は設定言語に合わせて翻訳）
   const optLabel = (group: string, value: string) => {
@@ -158,9 +158,13 @@ const ReminderRow: React.FC<{ item: ReminderItem }> = ({ item }) => {
             {optLabel('infoType', item.info_type)} ・ {item.target_date}
           </p>
         </div>
-        <span className={`flex-shrink-0 text-xs px-2 py-1 rounded-full ${style.chip}`}>
-          {t(`reminder.urgency.${item.urgency}`)}
-        </span>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* 掲示板の各セクションと同様に紐づく子どもの名前チップを表示。 */}
+          <ChildNameChip childId={item.child_id} children={children} />
+          <span className={`text-xs px-2 py-1 rounded-full ${style.chip}`}>
+            {t(`reminder.urgency.${item.urgency}`)}
+          </span>
+        </div>
       </Link>
     </li>
   );
@@ -169,6 +173,9 @@ const ReminderRow: React.FC<{ item: ReminderItem }> = ({ item }) => {
 const ProactiveReminders: React.FC = () => {
   const { t } = useI18n();
   const remindersQuery = useQuery({ queryKey: ['reminders'], queryFn: () => getReminders(7) });
+  // 掲示板の各セクションと同じく、リマインドの子ども名チップ用に children を取得。
+  const childrenQuery = useQuery({ queryKey: ['children'], queryFn: getChildren });
+  const childList = childrenQuery.data ?? [];
   // SOT-1398: 「持ち物(items)」は写真OCRの原文（未翻訳の日本語）をそのまま保持するため、
   // 掲示板には表示しない（英語設定での日本語混在を解消し、写真の文字起こしを掲示板に出さない）。
   // 通知(digest/push)用にサーバの belongings リマインド自体は温存し、掲示板表示のみ除外する。
@@ -198,7 +205,7 @@ const ProactiveReminders: React.FC = () => {
       <div className="p-4">
         <ul className="space-y-2">
           {items.map((item) => (
-            <ReminderRow key={`${item.kind}-${item.info_id}-${item.target_date}`} item={item} />
+            <ReminderRow key={`${item.kind}-${item.info_id}-${item.target_date}`} item={item} children={childList} />
           ))}
         </ul>
       </div>
