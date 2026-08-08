@@ -155,10 +155,28 @@ const DataDetail: React.FC<{ id: string }> = ({ id }) => {
   const [monthMessage, setMonthMessage] = useState<string | null>(null);
   const [monthError, setMonthError] = useState<string | null>(null);
 
+  // 写真一覧(等)の一覧キャッシュに、この項目が写真(添付)付きで既にあるときは、詳細取得の
+  // 完了を待たずプレースホルダとして即描画する。自動登録中はサーバが混み getInfoById が遅く、
+  // 一覧が写真を持っているのに詳細画面が「読み込み中…」のまま写真を隠していた。一覧の添付から
+  // 写真をすぐ表示し、実データが届いたら差し替える。
+  const findCachedInfo = (): NurseryInfo | undefined => {
+    const pools: (NurseryInfo[] | undefined)[] = [
+      queryClient.getQueryData(['info', 'registered']),
+      queryClient.getQueryData(['drafts']),
+      queryClient.getQueryData(['drafts', 'processing']),
+    ];
+    for (const pool of pools) {
+      const found = pool?.find((r) => String(r.id) === String(id));
+      if (found) return found;
+    }
+    return undefined;
+  };
+
   const { data: item, isLoading, isError } = useQuery({
     queryKey: ['info-detail', id],
     queryFn: () => getInfoById(id),
     enabled: Boolean(id),
+    placeholderData: () => findCachedInfo(),
   });
 
   // SOT-1562: このタスクの基になった登録写真レコードのタイトルを取得する。写真の文字起こしから
