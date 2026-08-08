@@ -99,6 +99,9 @@ def _reminder(info: Any, *, kind: str, target: datetime.date, days_until: int,
         "message": message[:120],
         # SOT-1397: 持ち物リマインドの文言をフロントで言語設定に合わせて再構成するため items を公開。
         "items": getattr(info, "items", None),
+        # 掲示板の各セクション（今日/明日/今週/来週）と同様に、紐づく子どもの名前チップを
+        # リマインドにも表示するため child_id を公開する。未設定は None（=非表示）。
+        "child_id": getattr(info, "child_id", None),
     }
 
 

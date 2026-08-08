@@ -158,6 +158,7 @@ export interface ReminderItem {
   priority: string
   message: string
   items?: string | null
+  child_id?: string | null
 }
 
 export interface ReminderFeed {

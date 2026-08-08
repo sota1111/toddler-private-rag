@@ -317,6 +317,7 @@ class ReminderItem(BaseModel):
     priority: str
     message: str
     items: Optional[str] = None  # SOT-1397: 持ち物リマインドの持ち物テキスト（フロントで言語化に使用）
+    child_id: Optional[str] = None  # 紐づく子ども（掲示板の子ども名チップ表示用）。未設定は非表示。
 
 
 class ReminderFeed(BaseModel):
