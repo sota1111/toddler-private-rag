@@ -127,7 +127,10 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({
   // 可能にする。初回データ表示時に一度だけスクロール位置を現在月のグループへ合わせ、上下スクロールで
   // 前後の月を確認できるようにする。以降の再描画（お気に入りトグル等）ではユーザーのスクロール位置を尊重する。
   const scrollRef = useRef<HTMLDivElement>(null);
-  const didInitialScroll = useRef(false);
+  // 現在月へ位置づけ済みのステータス絞り込み値。初回表示に加え、絞り込み（すべて/未確認/未対応/
+  // 対応済）を切り替えたときも現在月へ再位置づけするための記録。お気に入りトグル等の同一絞り込み内
+  // 再描画では値が一致するので再スクロールせず、ユーザーのスクロール位置を尊重する。
+  const scrolledFilterRef = useRef<DatedInfoStatusFilter | null>(null);
 
   // ステータス絞り込み（'all' 以外は該当ステータスのみ）→ event_date 昇順ソート。
   // SOT-1365: event_date が空（日付不明 = 期限なし）の項目は末尾に回す。
@@ -178,10 +181,14 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listItems, lang, t]);
 
-  // SOT-1506: 初回データ表示時に一度だけ、現在月（無ければ現在月以降で最も近い月、それも無ければ
-  // 末尾の月）のグループ見出しをスクロール先頭に合わせる。
+  // SOT-1506: 初回データ表示時に、現在月（無ければ現在月以降で最も近い月、それも無ければ末尾の月）の
+  // グループ見出しをスクロール先頭に合わせる。
+  // 追加: ステータス絞り込み（すべて/未確認/未対応/対応済）を切り替えたときも同様に現在月へ位置づける。
+  // 従来は初回のみだったため、絞り込み後は先頭（最も古い月）から表示されていた。お気に入りトグル等の
+  // 同一絞り込み内の再描画では再スクロールせず、ユーザーのスクロール位置を尊重する。
   useLayoutEffect(() => {
-    if (!groupByMonth || didInitialScroll.current || isLoading || groups.length === 0) return;
+    if (!groupByMonth || isLoading || groups.length === 0) return;
+    if (scrolledFilterRef.current === statusFilter) return;
     const container = scrollRef.current;
     if (!container) return;
     const now = new Date();
@@ -196,8 +203,8 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({
       ? container.querySelector<HTMLElement>(`[data-month-key="${target.key}"]`)
       : null;
     if (el) container.scrollTop = el.offsetTop;
-    didInitialScroll.current = true;
-  }, [groupByMonth, isLoading, groups]);
+    scrolledFilterRef.current = statusFilter;
+  }, [groupByMonth, isLoading, groups, statusFilter]);
 
   const renderItem = (item: NurseryInfo) => (
     <li key={item.id}>
