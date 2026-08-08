@@ -249,9 +249,13 @@ const DashboardPage: React.FC = () => {
                 </p>
                 {item.due_date && <p className="text-xs text-red-600 font-semibold">{t('dashboard.dueLabel')}{item.due_date}</p>}
               </div>
-              <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">
-                {optLabel('infoType', item.info_type)}
-              </span>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* SOT-1561: やることリストと同様に紐づく子どもの名前チップを表示。 */}
+                <ChildNameChip childId={item.child_id} children={childList} />
+                <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">
+                  {optLabel('infoType', item.info_type)}
+                </span>
+              </div>
             </div>
           )}
         />
@@ -263,13 +267,17 @@ const DashboardPage: React.FC = () => {
           emoji="🎒"
           accentClass="bg-sky-50 text-sky-700"
           renderItem={(item) => (
-            <div>
+            <div className="flex justify-between items-center">
               {/* SOT-1398: 持ち物(items)は写真OCRの原文（未翻訳）なので掲示板には出さず、タイトルのみ表示する。 */}
               {/* SOT-1428: お気に入りの場合のみ星を表示。 */}
               <p className="font-medium text-foreground flex items-center gap-1">
                 {item.is_favorite && <FavoriteStar filled />}
                 {item.title}
               </p>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* SOT-1561: やることリストと同様に紐づく子どもの名前チップを表示。 */}
+                <ChildNameChip childId={item.child_id} children={childList} />
+              </div>
             </div>
           )}
         />
