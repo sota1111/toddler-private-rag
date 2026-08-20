@@ -121,6 +121,51 @@ class CareProfile(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
 
+class AttentionItem(Base):
+    """SOT-2734: おたより登録時に生成する「要確認（この子向け）」項目。
+
+    照合エンジン（SOT-2733 ``care_matching.match_notice``）が出す根拠付きの要確認候補を、
+    おたより登録（OCR→抽出→本登録昇格）完了時に永続化し、予定/ダッシュボード/やること UI に
+    根拠付きで併記するための第一級レコード。既存の「注意事項」カテゴリとは別レーンとして扱う
+    （混同回避）。新規テーブルなので ``Base.metadata.create_all`` で自動作成される（既存行非破壊）。
+
+    設計原則（親 SOT-2728 / Deliverable 12 S5）:
+    - **断定しない**：``message`` は照合エンジンの契約どおり「要確認/情報不足のため要確認」のみ。
+      「安全」「食べられる」等の断定は生成側で出さない。
+    - **根拠必須**：``evidence`` に「該当文書箇所(span)/対応プロファイル項目/信頼度」を必ず持つ。
+    - **人間が最終判断**：保護者が ``review_status`` を「確認済/非該当(誤検出)」に分類できる。
+    """
+    __tablename__ = "attention_item"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # データ所有者(マルチテナント分離, SOT-1431 と同方式)。nullable/index。
+    owner_id = Column(String(64), nullable=True, index=True)
+    # 対象の子ども(children.id)。String 保持(NurseryInfo.child_id と同方式)。未設定は紐付けなし。
+    child_id = Column(String(50), nullable=True, index=True)
+    # 生成元となったおたより登録レコード(nursery_info.id)。String 保持(バックエンド非依存)。
+    source_info_id = Column(String(64), nullable=True, index=True)
+    # 種別: allergen | care_category（care_matching の KIND_*）。
+    kind = Column(String(32), nullable=False, server_default="allergen")
+    # 状態: attention（根拠あり要確認）/ abstain（情報不足のため要確認＝棄権）。
+    status = Column(String(16), nullable=False, server_default="attention")
+    # 正規形（アレルゲン/配慮カテゴリの canonical キー）。棄権時は None のことがある。
+    canonical = Column(String(80), nullable=True)
+    # 信頼度: high | medium | low（care_matching の CONF_*）。
+    confidence = Column(String(16), nullable=False, server_default="medium")
+    # 表示メッセージ（断定しない文面）。
+    message = Column(Text, nullable=False)
+    # 根拠3要素＋位置情報を格納する JSON（source/span/profile_item/confidence/locator）。
+    evidence = Column(JSON, nullable=True, default=dict)
+    # 対応プロファイル項目 {raw, canonical}。
+    profile_item = Column(JSON, nullable=True, default=dict)
+    # LLM 文脈確認の補足ノート（あれば）。
+    llm_notes = Column(JSON, nullable=True, default=None)
+    # 保護者のレビュー分類: unreviewed（未確認）/ confirmed（確認済）/ not_applicable（非該当・誤検出）。
+    review_status = Column(String(20), nullable=False, server_default="unreviewed")
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class SeededOwner(Base):
     """SOT-1507: 初回ログイン時に初期データをコピー配布したオーナーを記録する冪等マーカー。
 

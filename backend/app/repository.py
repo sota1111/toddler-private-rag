@@ -279,6 +279,38 @@ class CareProfileRepository(abc.ABC):
         pass
 
 
+class AttentionItemRepository(abc.ABC):
+    """SOT-2734: 要確認（Attention Item）の生成永続化・一覧・レビュー分類（owner スコープ）。"""
+
+    @abc.abstractmethod
+    def list(
+        self,
+        child_id: Optional[str] = None,
+        source_info_id: Optional[str] = None,
+        review_status: Optional[str] = None,
+    ) -> List[Any]:
+        pass
+
+    @abc.abstractmethod
+    def get(self, item_id: Union[int, str]) -> Optional[Any]:
+        pass
+
+    @abc.abstractmethod
+    def create(self, data: schemas.AttentionItemCreate) -> Any:
+        pass
+
+    @abc.abstractmethod
+    def set_review_status(
+        self, item_id: Union[int, str], review_status: str
+    ) -> Optional[Any]:
+        pass
+
+    @abc.abstractmethod
+    def delete_by_source(self, source_info_id: Union[int, str]) -> int:
+        """生成元おたより(source_info_id)の既存項目を削除する（再生成を冪等にする）。件数を返す。"""
+        pass
+
+
 # --- SQLite Implementation ---
 
 def _sqlite_registered_only():
@@ -722,6 +754,84 @@ class SqliteCareProfileRepository(CareProfileRepository):
         self.db.delete(db_profile)
         self.db.commit()
         return True
+
+
+class SqliteAttentionItemRepository(AttentionItemRepository):
+    """SOT-2734: attention_item の生成永続化・一覧・レビュー。owner が設定されていれば絞り込む。"""
+
+    def __init__(self, db: Session, owner_id: Optional[str] = None):
+        self.db = db
+        self.owner_id = _normalize_owner(owner_id)
+
+    def _scoped(self, query):
+        if self.owner_id is not None:
+            query = query.filter(_sqlite_owner_filter(models.AttentionItem, self.owner_id))
+        return query
+
+    def list(
+        self,
+        child_id: Optional[str] = None,
+        source_info_id: Optional[str] = None,
+        review_status: Optional[str] = None,
+    ) -> List[models.AttentionItem]:
+        query = self._scoped(self.db.query(models.AttentionItem))
+        if child_id is not None:
+            query = query.filter(models.AttentionItem.child_id == str(child_id))
+        if source_info_id is not None:
+            query = query.filter(models.AttentionItem.source_info_id == str(source_info_id))
+        if review_status is not None:
+            query = query.filter(models.AttentionItem.review_status == review_status)
+        # 未確認を先に、次に新しい順（保護者が確認すべきものを上に出す）。
+        return query.order_by(
+            models.AttentionItem.created_at.desc(), models.AttentionItem.id.desc()
+        ).all()
+
+    def get(self, item_id: Union[int, str]) -> Optional[models.AttentionItem]:
+        query = self._scoped(
+            self.db.query(models.AttentionItem).filter(
+                models.AttentionItem.id == int(item_id)
+            )
+        )
+        return query.first()
+
+    def create(self, data: schemas.AttentionItemCreate) -> models.AttentionItem:
+        payload = data.model_dump()
+        # リクエスト経路(owner 設定あり)では current owner を強制。背景経路(None)はスキーマ由来を尊重。
+        if self.owner_id is not None:
+            payload["owner_id"] = self.owner_id
+        db_item = models.AttentionItem(**payload)
+        self.db.add(db_item)
+        self.db.commit()
+        self.db.refresh(db_item)
+        return db_item
+
+    def set_review_status(
+        self, item_id: Union[int, str], review_status: str
+    ) -> Optional[models.AttentionItem]:
+        db_item = self.get(item_id)
+        if not db_item:
+            return None
+        db_item.review_status = review_status
+        # 未確認へ戻す場合は reviewed_at をクリアする。
+        db_item.reviewed_at = (
+            clock.now_jst() if review_status != "unreviewed" else None
+        )
+        self.db.commit()
+        self.db.refresh(db_item)
+        return db_item
+
+    def delete_by_source(self, source_info_id: Union[int, str]) -> int:
+        query = self._scoped(
+            self.db.query(models.AttentionItem).filter(
+                models.AttentionItem.source_info_id == str(source_info_id)
+            )
+        )
+        rows = query.all()
+        for row in rows:
+            self.db.delete(row)
+        if rows:
+            self.db.commit()
+        return len(rows)
 
 
 # --- Firestore Implementation ---
@@ -1578,6 +1688,145 @@ class FirestoreCareProfileRepository(CareProfileRepository):
         return True
 
 
+@dataclass
+class FirestoreAttentionItem:
+    id: str
+    child_id: Optional[str]
+    source_info_id: Optional[str]
+    kind: str
+    status: str
+    canonical: Optional[str]
+    confidence: str
+    message: str
+    evidence: Optional[dict]
+    profile_item: Optional[dict]
+    llm_notes: Optional[List[str]]
+    review_status: str
+    reviewed_at: Optional[datetime.datetime]
+    created_at: datetime.datetime
+
+
+class FirestoreAttentionItemRepository(AttentionItemRepository):
+    """SOT-2734: attention_item の Firestore 実装。owner スコープは _owner_of で判定する。"""
+
+    def __init__(self, owner_id: Optional[str] = None):
+        self.project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+        self.database_id = os.getenv("FIRESTORE_DATABASE", "(default)")
+        self._db = None
+        self.owner_id = _normalize_owner(owner_id)
+
+    @property
+    def db(self):
+        if self._db is None:
+            from google.cloud import firestore
+            self._db = firestore.Client(project=self.project_id, database=self.database_id)
+        return self._db
+
+    def _to_entity(self, doc_id: str, data: dict) -> FirestoreAttentionItem:
+        return FirestoreAttentionItem(
+            id=doc_id,
+            child_id=data.get("child_id"),
+            source_info_id=data.get("source_info_id"),
+            kind=data.get("kind", "allergen"),
+            status=data.get("status", "attention"),
+            canonical=data.get("canonical"),
+            confidence=data.get("confidence", "medium"),
+            message=data.get("message", ""),
+            evidence=data.get("evidence") or {},
+            profile_item=data.get("profile_item") or {},
+            llm_notes=data.get("llm_notes"),
+            review_status=data.get("review_status") or "unreviewed",
+            reviewed_at=data.get("reviewed_at"),
+            created_at=data.get("created_at") or datetime.datetime.now(datetime.timezone.utc),
+        )
+
+    def _owned(self, snap) -> bool:
+        return self.owner_id is None or _owner_of(snap.to_dict()) == self.owner_id
+
+    def list(
+        self,
+        child_id: Optional[str] = None,
+        source_info_id: Optional[str] = None,
+        review_status: Optional[str] = None,
+    ) -> List[FirestoreAttentionItem]:
+        items = []
+        for doc in self.db.collection("attention_item").stream():
+            data = doc.to_dict()
+            if not (self.owner_id is None or _owner_of(data) == self.owner_id):
+                continue
+            if child_id is not None and str(data.get("child_id", "")) != str(child_id):
+                continue
+            if source_info_id is not None and str(data.get("source_info_id", "")) != str(source_info_id):
+                continue
+            if review_status is not None and (data.get("review_status") or "unreviewed") != review_status:
+                continue
+            items.append(self._to_entity(doc.id, data))
+        # 新しい順（SQLite 実装と同じ並び）。
+        items.sort(key=lambda i: i.created_at, reverse=True)
+        return items
+
+    def get(self, item_id: Union[int, str]) -> Optional[FirestoreAttentionItem]:
+        snap = self.db.collection("attention_item").document(str(item_id)).get()
+        if not snap.exists or not self._owned(snap):
+            return None
+        return self._to_entity(snap.id, snap.to_dict())
+
+    def create(self, data: schemas.AttentionItemCreate) -> FirestoreAttentionItem:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        payload = data.model_dump()
+        # 背景経路(owner None)はスキーマ由来の owner_id を尊重、リクエスト経路は current owner を強制。
+        if self.owner_id is not None:
+            payload["owner_id"] = self.owner_id
+        doc_data = {
+            "owner_id": payload.get("owner_id"),
+            "child_id": payload.get("child_id"),
+            "source_info_id": payload.get("source_info_id"),
+            "kind": payload["kind"],
+            "status": payload["status"],
+            "canonical": payload.get("canonical"),
+            "confidence": payload["confidence"],
+            "message": payload["message"],
+            "evidence": payload.get("evidence") or {},
+            "profile_item": payload.get("profile_item") or {},
+            "llm_notes": payload.get("llm_notes"),
+            "review_status": payload.get("review_status") or "unreviewed",
+            "reviewed_at": None,
+            "created_at": now,
+        }
+        _, doc_ref = self.db.collection("attention_item").add(doc_data)
+        return self._to_entity(doc_ref.id, doc_data)
+
+    def set_review_status(
+        self, item_id: Union[int, str], review_status: str
+    ) -> Optional[FirestoreAttentionItem]:
+        doc_ref = self.db.collection("attention_item").document(str(item_id))
+        snap = doc_ref.get()
+        if not snap.exists or not self._owned(snap):
+            return None
+        patch = {
+            "review_status": review_status,
+            "reviewed_at": (
+                datetime.datetime.now(datetime.timezone.utc)
+                if review_status != "unreviewed"
+                else None
+            ),
+        }
+        doc_ref.update(patch)
+        return self._to_entity(str(item_id), {**snap.to_dict(), **patch})
+
+    def delete_by_source(self, source_info_id: Union[int, str]) -> int:
+        count = 0
+        for doc in self.db.collection("attention_item").stream():
+            data = doc.to_dict()
+            if str(data.get("source_info_id", "")) != str(source_info_id):
+                continue
+            if self.owner_id is not None and _owner_of(data) != self.owner_id:
+                continue
+            doc.reference.delete()
+            count += 1
+        return count
+
+
 # --- Factory functions ---
 
 def get_database_type() -> str:
@@ -1622,6 +1871,14 @@ def get_care_profile_repository(
         return FirestoreCareProfileRepository(owner_id=owner_id)
     return SqliteCareProfileRepository(db, owner_id=owner_id)
 
+def get_attention_item_repository(
+    db: Session = Depends(database.get_db),
+    owner_id: str = Depends(get_current_user),
+) -> AttentionItemRepository:
+    if get_database_type() == "firestore":
+        return FirestoreAttentionItemRepository(owner_id=owner_id)
+    return SqliteAttentionItemRepository(db, owner_id=owner_id)
+
 def get_attachment_repo_standalone() -> Any:
     """Helper for background tasks where Depends() cannot be used."""
     if get_database_type() == "firestore":
@@ -1630,6 +1887,30 @@ def get_attachment_repo_standalone() -> Any:
     # For SQLite, we need a session
     db = database.SessionLocal()
     return SqliteAttachmentRepository(db)
+
+
+def get_care_profile_repo_standalone(owner_id: Optional[str] = None) -> Any:
+    """Helper for background tasks where Depends() cannot be used (SOT-2734)。
+
+    背景 OCR→登録昇格の照合(要確認生成)で子どもの care_profile を読むために使う。
+    ``owner_id`` を渡すと owner 絞り込みが効く（親写真の owner を継承する）。
+    """
+    if get_database_type() == "firestore":
+        return FirestoreCareProfileRepository(owner_id=owner_id)
+    db = database.SessionLocal()
+    return SqliteCareProfileRepository(db, owner_id=owner_id)
+
+
+def get_attention_item_repo_standalone(owner_id: Optional[str] = None) -> Any:
+    """Helper for background tasks where Depends() cannot be used (SOT-2734)。
+
+    背景 OCR→登録昇格時に照合結果の要確認項目を永続化するために使う。
+    ``owner_id`` を渡すと生成レコードにその owner を付与し、リクエスト経路と分離が揃う。
+    """
+    if get_database_type() == "firestore":
+        return FirestoreAttentionItemRepository(owner_id=owner_id)
+    db = database.SessionLocal()
+    return SqliteAttentionItemRepository(db, owner_id=owner_id)
 
 
 def get_info_repo_standalone() -> Any:

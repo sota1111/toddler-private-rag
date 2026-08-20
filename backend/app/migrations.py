@@ -86,6 +86,23 @@ def ensure_sqlite_schema(engine: Engine) -> None:
                     f"ALTER TABLE care_profile ADD COLUMN {column.name} {column.type.compile()}"
                 )
 
+        # SOT-2734: attention_item は新規テーブルなので通常は create_all で作成されるが、
+        # 既存デプロイに後からカラムを足す場合に備えて additive/nullable カラムを追記する
+        # (care_profile と同方式)。
+        attention_item_exists = conn.exec_driver_sql(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'attention_item'"
+        ).scalar()
+        if attention_item_exists:
+            ai_columns = {
+                row[1] for row in conn.exec_driver_sql("PRAGMA table_info(attention_item)")
+            }
+            for column in models.AttentionItem.__table__.columns:
+                if column.primary_key or column.name in ai_columns:
+                    continue
+                conn.exec_driver_sql(
+                    f"ALTER TABLE attention_item ADD COLUMN {column.name} {column.type.compile()}"
+                )
+
         # SOT-1431: 既存(owner 未設定)データを現行の主ユーザー(既定 owner)に一括割当する。
         # 非破壊(NULL 行のみ更新)。マルチテナント分離導入前のデータが主ユーザーのものとして残る。
         conn.exec_driver_sql(

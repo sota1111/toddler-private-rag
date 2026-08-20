@@ -129,6 +129,61 @@ class CareProfileResponse(CareProfileBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# --- 要確認（Attention Item）(SOT-2734: 登録時生成・根拠付き・確認済/非該当分類) ---
+
+# レビュー状態の安定キー（保護者が最終判断する）。
+ATTENTION_REVIEW_STATES = ("unreviewed", "confirmed", "not_applicable")
+
+
+class AttentionItemCreate(BaseModel):
+    """照合エンジンの候補を永続化するための内部生成スキーマ（API 直叩き用ではない）。"""
+    owner_id: Optional[str] = None
+    child_id: Optional[str] = None
+    source_info_id: Optional[str] = None
+    kind: str
+    status: str
+    canonical: Optional[str] = None
+    confidence: str
+    message: str
+    evidence: Optional[Dict] = None
+    profile_item: Optional[Dict] = None
+    llm_notes: Optional[List[str]] = None
+    review_status: str = "unreviewed"
+
+
+class AttentionItemReviewUpdate(BaseModel):
+    """保護者による分類更新（確認済/非該当/未確認へ戻す）。"""
+    review_status: str
+
+    @field_validator("review_status")
+    @classmethod
+    def _valid_review_status(cls, value):
+        if value not in ATTENTION_REVIEW_STATES:
+            raise ValueError(
+                f"review_status must be one of {ATTENTION_REVIEW_STATES}"
+            )
+        return value
+
+
+class AttentionItemResponse(BaseModel):
+    id: Union[int, str]
+    child_id: Optional[str] = None
+    source_info_id: Optional[str] = None
+    kind: str
+    status: str
+    canonical: Optional[str] = None
+    confidence: str
+    message: str
+    evidence: Optional[Dict] = None
+    profile_item: Optional[Dict] = None
+    llm_notes: Optional[List[str]] = None
+    review_status: str = "unreviewed"
+    reviewed_at: Optional[datetime.datetime] = None
+    created_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class NurseryInfoBase(BaseModel):
     # SOT-1431: データ所有者。背景OCR経路で親写真レコードの owner を子タスクへ継承させるための
     # 任意フィールド。リクエスト経路ではリポジトリが current user の owner を強制するため、
