@@ -138,12 +138,27 @@ export interface MockAttentionItem {
   created_at: string
 }
 
+// SOT-2732: 個別配慮プロファイル(care_profile) のモック。
+export interface MockCareProfile {
+  id: number | string
+  child_id: string
+  allergens: string[]
+  care_categories: string[]
+  free_text?: string | null
+  severity_note?: string | null
+  created_at: string
+  updated_at?: string | null
+  stale_warning?: string | null
+}
+
 export interface MockApiOptions {
   authed?: boolean
   records?: MockRecord[]
   children?: MockChild[]
   // SOT-2734: 要確認（Attention Item）のシード。既定は空（レーン非表示）で既存スペックは不変。
   attentionItems?: MockAttentionItem[]
+  // SOT-2732: 個別配慮プロファイルのシード。既定は空（未登録）で既存スペックは不変。
+  careProfiles?: MockCareProfile[]
   // SOT-1595: 写真削除ダイアログの「関連タスクも削除」チェックボックスは
   // linked-task-count > 0 のときだけ出る。テストで件数を固定するためのフック。
   linkedTaskCount?: number
@@ -161,9 +176,11 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
   // SOT-1435: 子どもストア。既定は空配列（従来どおり「お子さま未登録」）で、既存スペックの挙動は不変。
   const childStore: MockChild[] = opts.children ?? []
   const attentionStore: MockAttentionItem[] = opts.attentionItems ?? []
+  const careProfileStore: MockCareProfile[] = opts.careProfiles ?? []
   let nextId = Math.max(0, ...store.map(r => r.id)) + 1
   let nextAttId = 1000
   let nextChildId = Math.max(0, ...childStore.map(c => Number(c.id) || 0)) + 1
+  let nextCareProfileId = Math.max(1000, ...careProfileStore.map(p => Number(p.id) || 0)) + 1
 
   await page.route('**/api/**', async route => {
     const req = route.request()
@@ -239,6 +256,59 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
     if (attentionIdMatch && method === 'GET') {
       const item = attentionStore.find(a => String(a.id) === attentionIdMatch[1])
       return item ? json(route, 200, item) : json(route, 404, {})
+    }
+
+    // --- 個別配慮プロファイル（care_profile, SOT-2732 / SOT-2729） ---
+    if (path === '/care-profiles' || path === '/care-profiles/') {
+      if (method === 'GET') {
+        const childId = new URL(req.url()).searchParams.get('child_id')
+        const items = careProfileStore.filter(
+          p => !childId || String(p.child_id) === childId,
+        )
+        return json(route, 200, items)
+      }
+      if (method === 'POST') {
+        const data = JSON.parse(req.postData() || '{}')
+        const profile: MockCareProfile = {
+          id: nextCareProfileId++,
+          child_id: String(data.child_id ?? ''),
+          allergens: data.allergens ?? [],
+          care_categories: data.care_categories ?? [],
+          free_text: data.free_text ?? null,
+          severity_note: data.severity_note ?? null,
+          created_at: NOW,
+          updated_at: NOW,
+        }
+        careProfileStore.push(profile)
+        return json(route, 200, profile)
+      }
+    }
+    const careProfileIdMatch = path.match(/^\/care-profiles\/(\w+)$/)
+    if (careProfileIdMatch) {
+      const idx = careProfileStore.findIndex(p => String(p.id) === careProfileIdMatch[1])
+      if (method === 'GET') {
+        return idx === -1 ? json(route, 404, {}) : json(route, 200, careProfileStore[idx])
+      }
+      if (method === 'PUT') {
+        if (idx === -1) return json(route, 404, {})
+        const data = JSON.parse(req.postData() || '{}')
+        // 部分更新: 指定フィールドのみ差し替え（未指定は現状維持）。updated_at を進める。
+        const cur = careProfileStore[idx]
+        careProfileStore[idx] = {
+          ...cur,
+          ...(data.allergens !== undefined ? { allergens: data.allergens } : {}),
+          ...(data.care_categories !== undefined ? { care_categories: data.care_categories } : {}),
+          ...(data.free_text !== undefined ? { free_text: data.free_text } : {}),
+          ...(data.severity_note !== undefined ? { severity_note: data.severity_note } : {}),
+          updated_at: '2026-06-02T00:00:00Z',
+        }
+        return json(route, 200, careProfileStore[idx])
+      }
+      if (method === 'DELETE') {
+        if (idx === -1) return json(route, 404, {})
+        careProfileStore.splice(idx, 1)
+        return json(route, 200, { deleted: true })
+      }
     }
 
     // --- 添付 ---

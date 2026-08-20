@@ -6,6 +6,7 @@ import { TIMEZONE_OPTIONS } from '../settings/settingsContextValue';
 import type { Lang } from '../i18n/i18nContextValue';
 import type { Child } from '../types';
 import { deleteAllData, getChildren, createChild, deleteChild } from '../api';
+import CareProfilePanel from '../components/CareProfilePanel';
 
 // SOT-1315: 設定メニュー。言語・標準時間(タイムゾーン)を設定できる。
 // 言語は既存 i18n、タイムゾーンは SettingsContext に永続化される。
@@ -237,6 +238,9 @@ const SettingsPage: React.FC = () => {
         </form>
         {childError && <p className="mt-2 text-sm text-red-600">{childError}</p>}
       </div>
+
+      {/* 個別配慮プロファイル（SOT-2732）。お子さま管理の直下に配置する。 */}
+      <CareProfilePanel children={children} />
 
       {/* アーカイブ一覧への導線 SOT-1500。「全データ削除」の上に配置する。 */}
       <div className="mt-6 bg-surface rounded-2xl shadow-card p-4 sm:p-6">
