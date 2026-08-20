@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import type { NurseryInfo } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import { getChildren, updateInfo } from '../api';
+import { guessTaskMonth } from '../utils/guessTaskMonth';
 import FavoriteStar from './FavoriteStar';
 import {
   getStatusDateChipClass,
@@ -160,26 +161,53 @@ const DatedInfoList: React.FC<DatedInfoListProps> = ({
     });
   };
   const NO_DEADLINE_KEY = '__no_deadline__';
+  // 期限なしグループを末尾に回すためのソートキー（実在の 'YYYY-MM' より必ず後ろ）。
+  const NO_DEADLINE_SORT = '9999-99';
+  // SOT-2790: 期限なし（event_date 無し）のタスクは「該当月」を推測してその月のグループへ入れる。
+  // 推測できない場合のみ従来どおり末尾の「期限なし」グループへまとめる。event_date のある通常タスクは
+  // 従来どおり event_date の月でグループ化する。行のチップは event_date が無ければ「期限なし」表示のまま
+  // なので、月に置かれても締切未設定であることは区別できる。
   const groups = useMemo(() => {
-    const result: { key: string; heading: string; items: NurseryInfo[] }[] = [];
+    const result: { key: string; heading: string; sortKey: string; items: NurseryInfo[] }[] = [];
     const index = new Map<string, number>();
     for (const item of listItems) {
       const date = item.event_date ?? '';
       const dated = /^\d{4}-\d{2}/.test(date);
-      const key = dated ? date.slice(0, 7) : NO_DEADLINE_KEY;
-      const heading = dated ? monthHeading(key) : t('common.noDeadline');
+      let key: string;
+      // 期限なしタスクは groupByMonth 有効時のみ月を推測する（SchedulePage 等では従来挙動）。
+      const guessed = !dated && groupByMonth ? guessTaskMonth(item) : null;
+      if (dated) key = date.slice(0, 7);
+      else if (guessed) key = guessed;
+      else key = NO_DEADLINE_KEY;
+      const isMonth = key !== NO_DEADLINE_KEY;
+      const heading = isMonth ? monthHeading(key) : t('common.noDeadline');
+      const sortKey = isMonth ? key : NO_DEADLINE_SORT;
       let i = index.get(key);
       if (i === undefined) {
         i = result.length;
         index.set(key, i);
-        result.push({ key, heading, items: [] });
+        result.push({ key, heading, sortKey, items: [] });
       }
       result[i].items.push(item);
+    }
+    // 月グループを昇順、期限なしグループを末尾に整列する（推測月が既存月に割り込むため明示ソート）。
+    result.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+    // 各月グループ内は event_date 昇順、event_date 無し（推測で配置された期限なし）を末尾へ。
+    for (const group of result) {
+      if (group.key === NO_DEADLINE_KEY) continue;
+      group.items.sort((a, b) => {
+        const da = a.event_date ?? '';
+        const db = b.event_date ?? '';
+        if (!da && !db) return 0;
+        if (!da) return 1;
+        if (!db) return -1;
+        return da.localeCompare(db);
+      });
     }
     return result;
     // monthHeading は lang に依存するため lang を依存に含める。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listItems, lang, t]);
+  }, [listItems, lang, t, groupByMonth]);
 
   // SOT-1506: 初回データ表示時に、現在月（無ければ現在月以降で最も近い月、それも無ければ末尾の月）の
   // グループ見出しをスクロール先頭に合わせる。

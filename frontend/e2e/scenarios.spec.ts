@@ -493,4 +493,53 @@ test.describe('toddler-private-rag シナリオ', () => {
     await page.getByText(/関連タスクも削除/).click()
     await expect(checkbox).not.toBeChecked()
   })
+
+  test('S20: 期限なし（event_date 無し）のタスクはタイトルの月言及から該当月を推測してその月に表示する (SOT-2790)', async ({ page }) => {
+    await installApiMocks(page, {
+      authed: true,
+      records: [
+        {
+          // event_date 無し・添付無し → やることリストに載る「期限なし」タスク。
+          // タイトルに「9月」があり created_at=2026-06 起点なので 2026年9月グループへ入る想定。
+          id: 10,
+          title: '9月の作品展の準備',
+          info_type: '行事',
+          content: '作品展に向けて準備を進める。',
+          status: '未対応',
+          priority: '普通',
+          registration_state: 'registered',
+          created_at: '2026-06-01T00:00:00Z',
+          updated_at: '2026-06-01T00:00:00Z',
+        },
+        {
+          // event_date ありの通常タスク（2026年10月グループ）。
+          id: 11,
+          title: '運動会のお知らせ',
+          info_type: '行事',
+          content: '運動会を開催します。',
+          event_date: '2026-10-15',
+          status: '未対応',
+          priority: '普通',
+          registration_state: 'registered',
+          created_at: '2026-06-01T00:00:00Z',
+          updated_at: '2026-06-01T00:00:00Z',
+        },
+      ],
+    })
+    await login(page)
+
+    await page.locator('nav a[href="/tasks"]').first().click()
+    await expect(page).toHaveURL(/\/tasks/)
+
+    // 期限なしタスクが「2026年9月」グループの見出し下に表示される。
+    await expect(page.getByRole('heading', { name: '2026年9月' })).toBeVisible()
+    await expect(page.getByRole('link', { name: /9月の作品展の準備/ })).toBeVisible()
+    // 通常タスクは従来どおり event_date の月（2026年10月）。
+    await expect(page.getByRole('heading', { name: '2026年10月' })).toBeVisible()
+
+    // 締切未設定であることは行チップの「期限なし」で区別できる（月に置いても分かる）。
+    await expect(page.getByText('期限なし', { exact: true })).toBeVisible()
+    // 末尾の「期限なし」グループ見出しは作られない（推測で月へ振り分けられるため）。
+    await expect(page.getByRole('heading', { name: '期限なし' })).toHaveCount(0)
+  })
 })
