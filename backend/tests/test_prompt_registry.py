@@ -31,15 +31,14 @@ def test_render_prompt_substitutes_values():
     assert out.endswith("# 回答")
 
 
-def test_registry_prompt_matches_original_inline_prompt():
-    """The migrated prompt must be byte-identical to the pre-refactor inline one."""
+def test_registry_prompt_matches_current_contract():
+    """The rendered prompt must match the registry template (SOT-2736: +安全制約ブロック)."""
     question = "遠足はいつ？"
     contexts = ["秋の遠足は11月10日です。", "持ち物はお弁当。"]
 
     provider = GeminiLLMProvider()
     actual = provider._build_prompt(question, contexts)
 
-    # Reconstruct exactly what the old inline implementation produced.
     context_block = "\n\n".join(f"- {c}" for c in contexts)
     _weekdays_ja = ("月", "火", "水", "木", "金", "土", "日")
     today = clock.today()
@@ -50,10 +49,20 @@ def test_registry_prompt_matches_original_inline_prompt():
     expected = (
         "あなたはおたよりナビです。以下のコンテキストのみに基づいて、"
         "日本語で簡潔に質問へ回答してください。コンテキストに無いことは推測しないでください。\n\n"
+        "# 安全に関する制約\n"
+        "- 健康・アレルギー・安全については『安全です』『食べられます』『問題ありません』"
+        "『大丈夫です』のような断定をしないでください。安全側の断定も同様に禁止です。"
+        "確認が必要な場合は『確認が必要な可能性があります（要確認）』と述べてください。\n"
+        "- 最終判断は保護者、専門判断は医療者・園にゆだねる前提で回答してください。\n"
+        "- コンテキストに矛盾・相反する記載がある場合は、どちらか一方に断定せず、"
+        "両論を併記して『どちらも確認が必要』と伝えてください。\n\n"
         f"{today_line}\n\n"
         f"# コンテキスト\n{context_block}\n\n# 質問\n{question}\n\n# 回答"
     )
     assert actual == expected
+    # 安全設計の核（断定禁止・両論提示）がプロンプトに含まれること。
+    assert "断定をしないでください" in actual
+    assert "両論を併記" in actual
 
 
 def test_registry_reexports_model_name():

@@ -171,6 +171,8 @@ export interface RagSource {
 export interface RagAnswer {
   answer: string
   sources: RagSource[]
+  // SOT-2736: 責任境界・免責（サービス=支援 / 最終判断=保護者 / 専門判断=医療者・園）。
+  disclaimer?: string | null
 }
 
 // 能動リマインド (SOT-1080 / 提案5-A)

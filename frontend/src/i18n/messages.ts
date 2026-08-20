@@ -248,6 +248,7 @@ export const messages: Record<Lang, Messages> = {
     'ask.feedbackUp': '役に立った',
     'ask.feedbackDown': '役に立たなかった',
     'ask.feedbackThanks': 'フィードバックありがとうございます。',
+    'ask.disclaimerLabel': 'ご確認のお願い:',
 
     // list
     'list.title': '情報一覧',
@@ -730,6 +731,7 @@ export const messages: Record<Lang, Messages> = {
     'ask.feedbackUp': 'Helpful',
     'ask.feedbackDown': 'Not helpful',
     'ask.feedbackThanks': 'Thanks for your feedback!',
+    'ask.disclaimerLabel': 'Please note:',
 
     // list
     'list.title': 'Information list',

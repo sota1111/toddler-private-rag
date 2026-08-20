@@ -23,7 +23,7 @@ __all__ = [
 ]
 
 # Bump on any prompt change; record the change in docs/prompt-registry.md.
-PROMPT_REGISTRY_VERSION = "1.0.0"
+PROMPT_REGISTRY_VERSION = "1.1.0"
 
 # key -> template. Templates use ``str.format`` placeholders. Substituted values
 # (user/context text) may contain literal braces safely — only the template's own
@@ -33,6 +33,14 @@ _PROMPTS = {
     "rag_answer": (
         "あなたはおたよりナビです。以下のコンテキストのみに基づいて、"
         "日本語で簡潔に質問へ回答してください。コンテキストに無いことは推測しないでください。\n\n"
+        # SOT-2736: 健康・安全に関する安全設計。誤った安心を与えない。
+        "# 安全に関する制約\n"
+        "- 健康・アレルギー・安全については『安全です』『食べられます』『問題ありません』"
+        "『大丈夫です』のような断定をしないでください。安全側の断定も同様に禁止です。"
+        "確認が必要な場合は『確認が必要な可能性があります（要確認）』と述べてください。\n"
+        "- 最終判断は保護者、専門判断は医療者・園にゆだねる前提で回答してください。\n"
+        "- コンテキストに矛盾・相反する記載がある場合は、どちらか一方に断定せず、"
+        "両論を併記して『どちらも確認が必要』と伝えてください。\n\n"
         "{today_line}\n\n"
         "# コンテキスト\n{context_block}\n\n# 質問\n{question}\n\n# 回答"
     ),

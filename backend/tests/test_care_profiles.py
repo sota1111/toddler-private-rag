@@ -195,3 +195,43 @@ def test_existing_child_rows_survive_care_profile_table(monkeypatch):
     _as("ownerA")
     children = client.get("/api/children").json()
     assert any(c["name"] == "既存の子" for c in children)
+
+
+# --- SOT-2736: 鮮度警告(古い情報の見直し提示) ---
+
+def test_fresh_profile_has_no_stale_warning():
+    child_id = _make_child()
+    resp = client.post("/api/care-profiles", json={"child_id": child_id})
+    assert resp.status_code == 200
+    # 作成直後は古くないので警告 None。
+    assert resp.json().get("stale_warning") is None
+
+
+def test_stale_profile_returns_warning():
+    import datetime
+    from app import safety_guard
+
+    child_id = _make_child()
+    pid = client.post("/api/care-profiles", json={"child_id": child_id}).json()["id"]
+
+    # updated_at を閾値超の過去へ直接書き換えて「古い」状態を作る。
+    db = TestingSessionLocal()
+    try:
+        row = db.query(models.CareProfile).filter(models.CareProfile.id == int(pid)).one()
+        row.updated_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+            days=safety_guard.STALE_THRESHOLD_DAYS + 30
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    fetched = client.get(f"/api/care-profiles/{pid}")
+    assert fetched.status_code == 200
+    warning = fetched.json().get("stale_warning")
+    assert warning is not None
+    assert "見直し" in warning or "古" in warning
+
+    # 一覧でも同様に警告が載る。
+    listed = client.get("/api/care-profiles", params={"child_id": child_id})
+    assert listed.status_code == 200
+    assert any(p.get("stale_warning") for p in listed.json())

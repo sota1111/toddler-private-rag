@@ -144,6 +144,11 @@ class RagService:
         # SOT-1374 / D: 回答生成(LLM 外部API)の所要時間を計測する。
         with time_block("ask_generate", contexts=len(contexts)):
             answer_text = self.llm_provider.generate(query, contexts)
+        # SOT-2736: 出力ガード。LLM が安全を保証する断定（安全/食べられる/問題ない等）を
+        # 生成しても、経路を問わず「要確認」へ中和して誤った安心を与えない。
+        from ..safety_guard import apply_output_guard
+
+        answer_text = apply_output_guard(answer_text)
         return Answer(answer=answer_text, sources=sources)
 
     def answer_stream(

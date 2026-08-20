@@ -174,6 +174,19 @@ const AskPage: React.FC = () => {
           <div className="bg-surface rounded-lg shadow-sm border border-border p-5">
             <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2">{t('ask.answer')}</h2>
             <MarkdownText text={result.answer} className="text-foreground" />
+            {/* SOT-2736: 責任境界・免責。健康/安全に誤った安心を与えないための注意書き。 */}
+            {result.disclaimer && hasAnswer && (
+              <div
+                role="note"
+                className="mt-4 flex gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800"
+              >
+                <span aria-hidden>⚠️</span>
+                <div>
+                  <span className="font-semibold">{t('ask.disclaimerLabel')}</span>
+                  <span className="ml-1">{result.disclaimer}</span>
+                </div>
+              </div>
+            )}
             {/* SOT-1473: 回答フィードバック（👍/👎） */}
             {hasAnswer && !isLoading && (
               <div className="mt-4 pt-3 border-t border-border">
