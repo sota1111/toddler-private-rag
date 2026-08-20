@@ -5,17 +5,22 @@ import { installApiMocks, login, type MockAttentionItem } from './support/mockAp
 // 確認済/非該当分類の一連を検証する。すべて `/api/**` をモックして決定的にする。
 
 const NOW = '2026-06-01T00:00:00Z'
-// SOT-2746: 掲示板の「要確認」は直近1週間の項目のみ表示するため、表示させたい項目は
-// 実クロック基準で最近（数日前）の created_at にする。
+
+// SOT-2746: 「直近1週間」は項目が指す献立/おたよりの日付基準。実クロックに対して相対で日付を作る。
+const ymd = (d: Date): string => d.toISOString().slice(0, 10)
+const daysAgoYmd = (days: number): string => ymd(new Date(Date.now() - days * 24 * 60 * 60 * 1000))
 const isoDaysAgo = (days: number): string =>
   new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
-
 // SOT-2746: バックエンド(SQLite 経路)が返すタイムゾーン指定の無い ISO 文字列を再現する
 // （`Z` / オフセットを持たない）。フロントは tz-naive を UTC とみなして境界を正確化する。
 const naiveUtcDaysAgo = (days: number): string =>
   new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().replace(/Z$/, '')
 
-function eggAttention(createdAt: string = isoDaysAgo(1)): MockAttentionItem {
+// 献立(menu_json)由来の要確認。参照日は locator.date（＝献立日）。生成時刻は別に指定できる。
+function eggMenuAttention(
+  menuDate: string = daysAgoYmd(1),
+  createdAt: string = isoDaysAgo(1),
+): MockAttentionItem {
   return {
     id: 501,
     child_id: '7',
@@ -24,13 +29,38 @@ function eggAttention(createdAt: string = isoDaysAgo(1)): MockAttentionItem {
     status: 'attention',
     canonical: 'egg',
     confidence: 'high',
-    message: '献立（2026-09-01）の「鶏卵」がアレルゲン『たまご』（egg）に該当する可能性があります。要確認。',
+    message: `献立（${menuDate}）の「鶏卵」がアレルゲン『たまご』（egg）に該当する可能性があります。要確認。`,
     evidence: {
       source: 'menu_json',
-      span: '（2026-09-01）鶏卵',
+      span: `（${menuDate}）鶏卵`,
       profile_item: 'たまご',
       confidence: 'high',
-      locator: { date: '2026-09-01', item: '鶏卵' },
+      locator: { date: menuDate, item: '鶏卵' },
+    },
+    profile_item: { raw: 'たまご', canonical: 'egg' },
+    llm_notes: null,
+    review_status: 'unreviewed',
+    reviewed_at: null,
+    created_at: createdAt,
+  }
+}
+
+// おたより本文(notice_text)由来の要確認。参照日が文面にも locator にも無いため created_at にフォールバックする。
+function eggNoticeAttention(createdAt: string): MockAttentionItem {
+  return {
+    id: 502,
+    child_id: '7',
+    source_info_id: '1',
+    kind: 'allergen',
+    status: 'attention',
+    canonical: 'egg',
+    confidence: 'medium',
+    message: 'おたより本文にアレルゲン『たまご』（egg）に関する記載があります。要確認。',
+    evidence: {
+      source: 'notice_text',
+      span: 'たまごを含みます',
+      profile_item: 'たまご',
+      confidence: 'medium',
     },
     profile_item: { raw: 'たまご', canonical: 'egg' },
     llm_notes: null,
@@ -41,11 +71,12 @@ function eggAttention(createdAt: string = isoDaysAgo(1)): MockAttentionItem {
 }
 
 test.describe('要確認（Attention Item） SOT-2734', () => {
-  test('ダッシュボードに要確認レーンが併記され、根拠(なぜ)を確認でき、確認済/非該当に分類できる', async ({ page }) => {
+  test('ダッシュボードに要確認レーンが併記され、根拠(なぜ)を確認でき、確認済を押すと消える', async ({ page }) => {
+    const menuDate = daysAgoYmd(1)
     await installApiMocks(page, {
       authed: true,
       children: [{ id: 7, name: 'たろう', created_at: NOW }],
-      attentionItems: [eggAttention()],
+      attentionItems: [eggMenuAttention(menuDate)],
     })
     await login(page)
 
@@ -65,16 +96,13 @@ test.describe('要確認（Attention Item） SOT-2734', () => {
     await expect(panel.getByText('該当箇所:')).toHaveCount(0)
     await panel.getByRole('button', { name: 'なぜ' }).click()
     await expect(panel.getByText('該当箇所:')).toBeVisible()
-    await expect(panel.getByText('（2026-09-01）鶏卵')).toBeVisible()
+    await expect(panel.getByText(`（${menuDate}）鶏卵`)).toBeVisible()
     await expect(panel.getByText('対応する配慮:')).toBeVisible()
     await expect(panel.getByText('出典:')).toBeVisible()
 
-    // 確認済に分類でき、状態バッジが更新される。
+    // SOT-2746: 確認済を押すと、その項目は掲示板から消える（未確認のみ表示）。
     await panel.getByRole('button', { name: '確認済' }).click()
-    await expect(panel.getByText('確認済')).toBeVisible()
-    // レビュー後は確認済/非該当ボタンが消え、未確認に戻す導線が出る。
-    await expect(panel.getByRole('button', { name: '未確認に戻す' })).toBeVisible()
-    await expect(panel.getByRole('button', { name: '非該当' })).toHaveCount(0)
+    await expect(page.getByTestId('attention-items-panel')).toHaveCount(0)
   })
 
   test('要確認が無いときはレーンを表示しない', async ({ page }) => {
@@ -83,23 +111,36 @@ test.describe('要確認（Attention Item） SOT-2734', () => {
     await expect(page.getByTestId('attention-items-panel')).toHaveCount(0)
   })
 
-  test('SOT-2746: 1週間より前の要確認は表示しない', async ({ page }) => {
+  test('SOT-2746: 非該当（誤検出）を押しても掲示板から消える', async ({ page }) => {
     await installApiMocks(page, {
       authed: true,
       children: [{ id: 7, name: 'たろう', created_at: NOW }],
-      // 8日前に生成された項目は直近1週間フィルタで除外され、レーンごと非表示になる。
-      attentionItems: [eggAttention(isoDaysAgo(8))],
+      attentionItems: [eggMenuAttention()],
+    })
+    await login(page)
+    const panel = page.getByTestId('attention-items-panel')
+    await expect(panel).toBeVisible()
+    await panel.getByRole('button', { name: '非該当' }).click()
+    await expect(page.getByTestId('attention-items-panel')).toHaveCount(0)
+  })
+
+  test('SOT-2746: 献立日が1週間より前の要確認は、生成が最近でも表示しない', async ({ page }) => {
+    await installApiMocks(page, {
+      authed: true,
+      children: [{ id: 7, name: 'たろう', created_at: NOW }],
+      // 生成(created_at)は1日前でも、参照する献立日が8日前なら直近1週間フィルタで除外される。
+      attentionItems: [eggMenuAttention(daysAgoYmd(8), isoDaysAgo(1))],
     })
     await login(page)
     await expect(page.getByTestId('attention-items-panel')).toHaveCount(0)
   })
 
-  test('SOT-2746: tz なし(SQLite 経路)の created_at も UTC 解釈で境界内なら表示する', async ({ page }) => {
+  test('SOT-2746: 参照日を持たないおたより由来は created_at(tz なし)を UTC 解釈で判定し境界内なら表示する', async ({ page }) => {
     await installApiMocks(page, {
       authed: true,
       children: [{ id: 7, name: 'たろう', created_at: NOW }],
-      // タイムゾーン指定の無い 6 日前の文字列。UTC とみなせば直近1週間内なので表示される。
-      attentionItems: [eggAttention(naiveUtcDaysAgo(6))],
+      // locator も文面日付も無いので created_at にフォールバック。tz なし6日前を UTC とみなせば境界内。
+      attentionItems: [eggNoticeAttention(naiveUtcDaysAgo(6))],
     })
     await login(page)
     await expect(page.getByTestId('attention-items-panel')).toBeVisible()

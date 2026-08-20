@@ -181,53 +181,6 @@ const SchedulePage: React.FC = () => {
         </div>
       </div>
 
-      {/* SOT-2746: 献立モードで、登録済みプロファイルのアレルゲンを献立から監視していることを明示する。
-          未設定時は設定への導線（CTA）を出し、設定→検出のつながりを分かるようにする。 */}
-      {mode === 'menu' && (
-        <div
-          data-testid="menu-allergen-monitor"
-          className="mb-4 rounded-2xl border border-border bg-surface p-3 sm:p-4 shadow-card"
-        >
-          {monitoredAllergens.length > 0 ? (
-            <>
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-1.5 text-sm font-bold text-brand-strong">
-                  <span aria-hidden>🛡️</span>
-                  {t('menu.monitorTitle')}
-                </span>
-                <Link
-                  to="/settings"
-                  className="shrink-0 text-xs font-semibold text-brand-strong underline hover:no-underline focus:outline-none focus:ring-2 focus:ring-brand/40 rounded"
-                >
-                  {t('menu.monitorEditLink')}
-                </Link>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">{t('menu.monitorDescription')}</p>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {monitoredAllergens.map((key) => (
-                  <span
-                    key={key}
-                    className="rounded-full border border-red-300 bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800"
-                  >
-                    {t(`careProfile.allergen.${key}`)}
-                  </span>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm text-muted-foreground">{t('menu.monitorEmpty')}</p>
-              <Link
-                to="/settings"
-                className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-strong focus:outline-none focus:ring-2 focus:ring-brand/40"
-              >
-                {t('menu.monitorSettingsLink')}
-              </Link>
-            </div>
-          )}
-        </div>
-      )}
-
       <div className="lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
       {/* カレンダー（PCではカレンダーと予定一覧を左右に並べる / モバイルは縦積み） */}
       <div className="bg-surface rounded-2xl shadow-card hover:shadow-card-hover transition-shadow border border-border overflow-hidden mb-6 lg:mb-0">
@@ -425,6 +378,54 @@ const SchedulePage: React.FC = () => {
         </div>
       )}
       </div>
+
+      {/* SOT-2746: 「監視中のアレルゲン」バナーはカレンダーの**下**に表示する（保護者の要望）。
+          登録済みプロファイルのアレルゲンを献立から監視していることを明示し、未設定時は
+          設定への導線（CTA）を出して「設定 → 検出」のつながりを分かるようにする。 */}
+      {mode === 'menu' && (
+        <div
+          data-testid="menu-allergen-monitor"
+          className="mt-2 mb-6 rounded-2xl border border-border bg-surface p-3 sm:p-4 shadow-card"
+        >
+          {monitoredAllergens.length > 0 ? (
+            <>
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-sm font-bold text-brand-strong">
+                  <span aria-hidden>🛡️</span>
+                  {t('menu.monitorTitle')}
+                </span>
+                <Link
+                  to="/settings"
+                  className="shrink-0 text-xs font-semibold text-brand-strong underline hover:no-underline focus:outline-none focus:ring-2 focus:ring-brand/40 rounded"
+                >
+                  {t('menu.monitorEditLink')}
+                </Link>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">{t('menu.monitorDescription')}</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {monitoredAllergens.map((key) => (
+                  <span
+                    key={key}
+                    className="rounded-full border border-red-300 bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800"
+                  >
+                    {t(`careProfile.allergen.${key}`)}
+                  </span>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-muted-foreground">{t('menu.monitorEmpty')}</p>
+              <Link
+                to="/settings"
+                className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-strong focus:outline-none focus:ring-2 focus:ring-brand/40"
+              >
+                {t('menu.monitorSettingsLink')}
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* menu-calendar: 献立の日付をタップしたときの詳細モーダル。 */}
       {menuDay && (
