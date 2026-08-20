@@ -48,7 +48,7 @@ jobs:
           # coverage improves. Coverage config: backend/.coveragerc.
           python -m pytest -q \
             --ignore=tests/test_eval_ocr.py --ignore=tests/test_eval_rag.py \
-            --ignore=tests/test_eval_agent.py \
+            --ignore=tests/test_eval_agent.py --ignore=tests/test_eval_care_matching.py \
             --cov=app --cov-config=.coveragerc \
             --cov-report=term-missing --cov-fail-under=70
 
@@ -62,6 +62,12 @@ jobs:
   # It gates the agent's own output quality — task generation coverage/precision,
   # deadline back-calc accuracy, and ambiguity handling — so an agent regression
   # fails this gate and blocks the production deploy, same as OCR/RAG.
+  #
+  # SOT-2735: the care-matching eval suite (test_eval_care_matching.py) also runs
+  # here. It gates the 個別配慮照合 engine's product value — attention recall,
+  # precision (over-alert), evidence validity, zero-assertion safe-abstain, and
+  # irrelevant suppression — so a matching-quality regression fails this gate and
+  # blocks the production deploy, same as OCR/RAG/Agent.
   evaluation-gate:
     runs-on: ubuntu-latest
     defaults:
@@ -91,11 +97,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Evaluation regression gate (OCR + RAG + Agent E2E accuracy thresholds)
+      - name: Evaluation regression gate (OCR + RAG + Agent E2E + care-matching accuracy thresholds)
         run: |
           mkdir -p data
           python -m pytest -q \
-            tests/test_eval_ocr.py tests/test_eval_rag.py tests/test_eval_agent.py
+            tests/test_eval_ocr.py tests/test_eval_rag.py tests/test_eval_agent.py \
+            tests/test_eval_care_matching.py
 
   frontend-checks:
     runs-on: ubuntu-latest
