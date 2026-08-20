@@ -10,7 +10,11 @@ test.describe('個別配慮プロファイル SOT-2732', () => {
   test('子ごとに登録→再表示→編集→削除できる（最終更新日も表示）', async ({ page }) => {
     await installApiMocks(page, {
       authed: true,
-      children: [{ id: 7, name: 'たろう', created_at: NOW }],
+      // SOT-2746: 2名以上のときは自動選択されない（1名だけ自動選択の別テストで検証）。
+      children: [
+        { id: 7, name: 'たろう', created_at: NOW },
+        { id: 8, name: 'はなこ', created_at: NOW },
+      ],
     })
     await login(page)
     await page.goto('/settings')
@@ -61,6 +65,41 @@ test.describe('個別配慮プロファイル SOT-2732', () => {
       'false',
     )
     await expect(panel.getByTestId('care-profile-updated-at')).toHaveCount(0)
+  })
+
+  test('お子さまが1名なら自動選択され、登録すると一覧に反映されて行タップで編集に戻れる', async ({ page }) => {
+    await installApiMocks(page, {
+      authed: true,
+      children: [{ id: 9, name: 'そうた', created_at: NOW }],
+    })
+    await login(page)
+    await page.goto('/settings')
+
+    const panel = page.getByTestId('care-profile-panel')
+    // 1名だけなので自動選択され、フォーム（保存ボタン）が最初から出る。
+    await expect(panel.getByRole('button', { name: '保存', exact: true })).toBeVisible()
+
+    // 未登録なので一覧は空メッセージ。
+    const summary = panel.getByTestId('care-profile-summary')
+    await expect(summary).toContainText('まだ登録がありません')
+
+    // 卵を選んで保存（=新規登録）。
+    await panel.getByRole('button', { name: '卵', exact: true }).click()
+    await panel.getByRole('button', { name: '保存', exact: true }).click()
+    await expect(panel.getByText('保存しました')).toBeVisible()
+
+    // 一覧に「そうた」と「卵」チップが反映される。
+    await expect(summary).toContainText('そうた')
+    await expect(summary.getByText('卵', { exact: true })).toBeVisible()
+
+    // 選択を外してから一覧の行をタップすると、その子の編集に戻れる（卵が押下状態）。
+    await panel.getByTestId('care-profile-child-select').selectOption('')
+    await expect(panel.getByRole('button', { name: '保存' })).toHaveCount(0)
+    await summary.getByRole('button', { name: /そうた/ }).click()
+    await expect(panel.getByRole('button', { name: '卵', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
   })
 
   test('保存 API がエラーのときはエラーメッセージを表示する', async ({ page }) => {

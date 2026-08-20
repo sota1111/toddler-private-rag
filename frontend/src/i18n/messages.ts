@@ -76,6 +76,13 @@ export const messages: Record<Lang, Messages> = {
     'careProfile.care.animal_contact': '動物接触',
     'careProfile.care.loud_noise': '大きな音',
     'careProfile.care.motion_sickness': '乗り物酔い',
+    // SOT-2746: 登録済みプロファイルの一覧（設定内容の確認）。
+    'careProfile.registeredTitle': '登録済み一覧',
+    'careProfile.registeredHint': '行をタップすると、そのお子さまの編集に移動します。',
+    'careProfile.registeredEmpty': 'まだ登録がありません。下でお子さまを選んで登録してください。',
+    'careProfile.registeredNoAttrs': 'アレルゲン・配慮カテゴリ未設定',
+    'careProfile.registeredAllergensLabel': 'アレルゲン',
+    'careProfile.registeredCareLabel': '配慮',
     // 写真アップ・リスト追加で紐づけるお子さまの選択 (SOT-1368)
     'child.fieldLabel': 'お子さま',
     'child.none': '指定なし',
@@ -148,6 +155,12 @@ export const messages: Record<Lang, Messages> = {
     'menu.allergyTitle': 'アレルギー注意',
     'menu.allergyNote': '献立の表記から推定した、含まれる可能性のあるアレルゲンです（特定原材料8品目）。実際の使用は園にご確認ください。',
     'menu.allergyAlertShort': 'アレルギー注意',
+    // SOT-2746: 献立カレンダー上部の「監視中のアレルゲン」バナー（設定→検出のつながりを明示）。
+    'menu.monitorTitle': '監視中のアレルゲン',
+    'menu.monitorDescription': '登録済みプロファイルのアレルゲンを献立から自動チェックしています。⚠️ の日は含まれる可能性があります。',
+    'menu.monitorEmpty': '個別配慮プロファイルを設定すると、献立から危険（アレルゲン）を自動で見つけます。',
+    'menu.monitorSettingsLink': 'プロファイルを設定',
+    'menu.monitorEditLink': 'プロファイルを編集',
 
     // tasks (SOT-1313)
     'tasks.listTitle': 'やることリスト',
@@ -598,6 +611,13 @@ export const messages: Record<Lang, Messages> = {
     'careProfile.care.animal_contact': 'Animal contact',
     'careProfile.care.loud_noise': 'Loud noise',
     'careProfile.care.motion_sickness': 'Motion sickness',
+    // SOT-2746: List of registered profiles (review what has been set).
+    'careProfile.registeredTitle': 'Registered profiles',
+    'careProfile.registeredHint': 'Tap a row to edit that child.',
+    'careProfile.registeredEmpty': 'No profiles yet. Select a child below to register one.',
+    'careProfile.registeredNoAttrs': 'No allergens or care categories set',
+    'careProfile.registeredAllergensLabel': 'Allergens',
+    'careProfile.registeredCareLabel': 'Care',
     // Child selector on photo upload / task add (SOT-1368)
     'child.fieldLabel': 'Child',
     'child.none': 'Not specified',
@@ -670,6 +690,12 @@ export const messages: Record<Lang, Messages> = {
     'menu.allergyTitle': 'Allergy warning',
     'menu.allergyNote': 'Allergens (8 major items) that may be present, inferred from the menu text. Please confirm actual use with the nursery.',
     'menu.allergyAlertShort': 'Allergy warning',
+    // SOT-2746: "Monitored allergens" banner atop the menu calendar (links setup to detection).
+    'menu.monitorTitle': 'Monitored allergens',
+    'menu.monitorDescription': 'Allergens from your registered profiles are checked against the menu automatically. Days marked ⚠️ may contain them.',
+    'menu.monitorEmpty': 'Set up a care profile and the menu calendar will automatically flag allergens for you.',
+    'menu.monitorSettingsLink': 'Set up profile',
+    'menu.monitorEditLink': 'Edit profiles',
 
     // tasks (SOT-1313)
     'tasks.listTitle': 'Task list',

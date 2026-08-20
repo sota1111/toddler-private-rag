@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getInfoList, getChildren, getMenuCalendar, getCareProfiles } from '../api';
 import type { NurseryInfo, MenuDay } from '../types';
@@ -7,6 +8,7 @@ import DatedInfoList from '../components/DatedInfoList';
 import MenuDetailModal from '../components/MenuDetailModal';
 import { pickMenuProtein } from '../utils/menuProtein';
 import { detectMenuAllergens, matchedAllergens } from '../utils/menuAllergens';
+import { ALLERGEN_KEYS } from './careProfileOptions';
 import { getChildColorClasses } from './infoFormOptions';
 
 // SOT-1306: 日付つきの予定（event_date あり）を月カレンダーで可視化し、
@@ -61,6 +63,11 @@ const SchedulePage: React.FC = () => {
   const profileAllergens = useMemo<Set<string>>(
     () => new Set((careProfiles ?? []).flatMap((p) => p.allergens ?? [])),
     [careProfiles],
+  );
+  // SOT-2746: 「監視中のアレルゲン」バナー用に、8品目の並び順で監視対象を列挙する。
+  const monitoredAllergens = useMemo<string[]>(
+    () => ALLERGEN_KEYS.filter((k) => profileAllergens.has(k)),
+    [profileAllergens],
   );
 
   // 日付つきの予定のみを対象にする。
@@ -173,6 +180,54 @@ const SchedulePage: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* SOT-2746: 献立モードで、登録済みプロファイルのアレルゲンを献立から監視していることを明示する。
+          未設定時は設定への導線（CTA）を出し、設定→検出のつながりを分かるようにする。 */}
+      {mode === 'menu' && (
+        <div
+          data-testid="menu-allergen-monitor"
+          className="mb-4 rounded-2xl border border-border bg-surface p-3 sm:p-4 shadow-card"
+        >
+          {monitoredAllergens.length > 0 ? (
+            <>
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-sm font-bold text-brand-strong">
+                  <span aria-hidden>🛡️</span>
+                  {t('menu.monitorTitle')}
+                </span>
+                <Link
+                  to="/settings"
+                  className="shrink-0 text-xs font-semibold text-brand-strong underline hover:no-underline focus:outline-none focus:ring-2 focus:ring-brand/40 rounded"
+                >
+                  {t('menu.monitorEditLink')}
+                </Link>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">{t('menu.monitorDescription')}</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {monitoredAllergens.map((key) => (
+                  <span
+                    key={key}
+                    className="rounded-full border border-red-300 bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800"
+                  >
+                    {t(`careProfile.allergen.${key}`)}
+                  </span>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-muted-foreground">{t('menu.monitorEmpty')}</p>
+              <Link
+                to="/settings"
+                className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-strong focus:outline-none focus:ring-2 focus:ring-brand/40"
+              >
+                {t('menu.monitorSettingsLink')}
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
       {/* カレンダー（PCではカレンダーと予定一覧を左右に並べる / モバイルは縦積み） */}
       <div className="bg-surface rounded-2xl shadow-card hover:shadow-card-hover transition-shadow border border-border overflow-hidden mb-6 lg:mb-0">
