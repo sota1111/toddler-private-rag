@@ -14,6 +14,9 @@ import type {
   MenuCalendarResponse,
   AttentionItem,
   AttentionReviewStatus,
+  CareProfile,
+  CareProfileCreate,
+  CareProfileUpdate,
 } from '../types';
 
 const api = axios.create({
@@ -337,6 +340,32 @@ export const reviewAttentionItem = async (
     review_status: reviewStatus,
   });
   return response.data;
+};
+
+// SOT-2732 / SOT-2729: 個別配慮プロファイル(care_profile) の CRUD。設定画面の登録・編集・削除で利用。
+// child_id を渡すと特定の子どものプロファイルに絞り込む（1子=最大1プロファイルの運用）。
+export const getCareProfiles = async (childId?: string | number): Promise<CareProfile[]> => {
+  const response = await api.get<CareProfile[]>('/care-profiles', {
+    params: childId != null ? { child_id: String(childId) } : undefined,
+  });
+  return response.data;
+};
+
+export const createCareProfile = async (data: CareProfileCreate): Promise<CareProfile> => {
+  const response = await api.post<CareProfile>('/care-profiles', data);
+  return response.data;
+};
+
+export const updateCareProfile = async (
+  id: number | string,
+  data: CareProfileUpdate,
+): Promise<CareProfile> => {
+  const response = await api.put<CareProfile>(`/care-profiles/${id}`, data);
+  return response.data;
+};
+
+export const deleteCareProfile = async (id: number | string): Promise<void> => {
+  await api.delete(`/care-profiles/${id}`);
 };
 
 export const getToday = async (): Promise<NurseryInfo[]> => {

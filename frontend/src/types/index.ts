@@ -63,6 +63,39 @@ export interface AttentionItem {
   created_at: string
 }
 
+// SOT-2732 / SOT-2729: 子どもごとの個別配慮プロファイル。型付き属性（アレルゲン/配慮カテゴリ）＋
+// 自由記述＋重症度メモ＋最終更新日を保持する。allergens/care_categories は正規形の安定キー
+// （egg, milk … / animal_contact … : SOT-2730 の辞書）で保存し、表示ラベルはフロントで解決する。
+export interface CareProfile {
+  id: number | string
+  child_id: string
+  allergens: string[]
+  care_categories: string[]
+  free_text?: string | null
+  severity_note?: string | null
+  created_at: string
+  // 最終更新日（保持・表示）。未更新時は null になりうる。
+  updated_at?: string | null
+  // SOT-2736: 最終更新から一定期間超で「情報が古い可能性・見直しを」警告文を載せる（無ければ null）。
+  stale_warning?: string | null
+}
+
+export interface CareProfileCreate {
+  child_id: string
+  allergens: string[]
+  care_categories: string[]
+  free_text?: string | null
+  severity_note?: string | null
+}
+
+// 部分更新。指定フィールドのみ更新（未指定は現状維持）。
+export interface CareProfileUpdate {
+  allergens?: string[]
+  care_categories?: string[]
+  free_text?: string | null
+  severity_note?: string | null
+}
+
 export interface NurseryInfo {
   id: number | string
   title: string
