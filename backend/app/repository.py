@@ -255,6 +255,30 @@ class ChildRepository(abc.ABC):
         pass
 
 
+class CareProfileRepository(abc.ABC):
+    """SOT-2729: 子どもごとの個別配慮プロファイルの CRUD（owner スコープ）。"""
+
+    @abc.abstractmethod
+    def list(self, child_id: Optional[str] = None) -> List[Any]:
+        pass
+
+    @abc.abstractmethod
+    def get(self, profile_id: Union[int, str]) -> Optional[Any]:
+        pass
+
+    @abc.abstractmethod
+    def create(self, data: schemas.CareProfileCreate) -> Any:
+        pass
+
+    @abc.abstractmethod
+    def update(self, profile_id: Union[int, str], data: schemas.CareProfileUpdate) -> Optional[Any]:
+        pass
+
+    @abc.abstractmethod
+    def delete(self, profile_id: Union[int, str]) -> bool:
+        pass
+
+
 # --- SQLite Implementation ---
 
 def _sqlite_registered_only():
@@ -629,6 +653,73 @@ class SqliteChildRepository(ChildRepository):
         if not db_child:
             return False
         self.db.delete(db_child)
+        self.db.commit()
+        return True
+
+
+class SqliteCareProfileRepository(CareProfileRepository):
+    """SOT-2729: care_profile の CRUD。owner が設定されていれば owner 絞り込みを適用する。"""
+
+    def __init__(self, db: Session, owner_id: Optional[str] = None):
+        self.db = db
+        self.owner_id = _normalize_owner(owner_id)
+
+    def _scoped(self, query):
+        if self.owner_id is not None:
+            query = query.filter(_sqlite_owner_filter(models.CareProfile, self.owner_id))
+        return query
+
+    def list(self, child_id: Optional[str] = None) -> List[models.CareProfile]:
+        query = self._scoped(self.db.query(models.CareProfile))
+        if child_id is not None:
+            query = query.filter(models.CareProfile.child_id == str(child_id))
+        return query.order_by(models.CareProfile.created_at.asc()).all()
+
+    def get(self, profile_id: Union[int, str]) -> Optional[models.CareProfile]:
+        query = self._scoped(
+            self.db.query(models.CareProfile).filter(models.CareProfile.id == int(profile_id))
+        )
+        return query.first()
+
+    def create(self, data: schemas.CareProfileCreate) -> models.CareProfile:
+        db_profile = models.CareProfile(
+            owner_id=self.owner_id,
+            child_id=str(data.child_id),
+            allergens=list(data.allergens or []),
+            care_categories=list(data.care_categories or []),
+            free_text=data.free_text,
+            severity_note=data.severity_note,
+        )
+        self.db.add(db_profile)
+        self.db.commit()
+        self.db.refresh(db_profile)
+        return db_profile
+
+    def update(
+        self, profile_id: Union[int, str], data: schemas.CareProfileUpdate
+    ) -> Optional[models.CareProfile]:
+        db_profile = self.get(profile_id)
+        if not db_profile:
+            return None
+        # 指定されたフィールドのみ更新する（未指定=現状維持）。
+        fields = data.model_dump(exclude_unset=True)
+        if "allergens" in fields:
+            db_profile.allergens = list(fields["allergens"] or [])
+        if "care_categories" in fields:
+            db_profile.care_categories = list(fields["care_categories"] or [])
+        if "free_text" in fields:
+            db_profile.free_text = fields["free_text"]
+        if "severity_note" in fields:
+            db_profile.severity_note = fields["severity_note"]
+        self.db.commit()
+        self.db.refresh(db_profile)
+        return db_profile
+
+    def delete(self, profile_id: Union[int, str]) -> bool:
+        db_profile = self.get(profile_id)
+        if not db_profile:
+            return False
+        self.db.delete(db_profile)
         self.db.commit()
         return True
 
@@ -1382,6 +1473,111 @@ class FirestoreChildRepository(ChildRepository):
         return True
 
 
+@dataclass
+class FirestoreCareProfile:
+    id: str
+    child_id: str
+    allergens: List[str]
+    care_categories: List[str]
+    free_text: Optional[str]
+    severity_note: Optional[str]
+    created_at: datetime.datetime
+    updated_at: Optional[datetime.datetime] = None
+
+
+class FirestoreCareProfileRepository(CareProfileRepository):
+    """SOT-2729: care_profile の Firestore 実装。owner スコープは _owner_of で判定する。"""
+
+    def __init__(self, owner_id: Optional[str] = None):
+        self.project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+        self.database_id = os.getenv("FIRESTORE_DATABASE", "(default)")
+        self._db = None
+        self.owner_id = _normalize_owner(owner_id)
+
+    @property
+    def db(self):
+        if self._db is None:
+            from google.cloud import firestore
+            self._db = firestore.Client(project=self.project_id, database=self.database_id)
+        return self._db
+
+    def _to_entity(self, doc_id: str, data: dict) -> FirestoreCareProfile:
+        return FirestoreCareProfile(
+            id=doc_id,
+            child_id=str(data.get("child_id", "")),
+            allergens=list(data.get("allergens") or []),
+            care_categories=list(data.get("care_categories") or []),
+            free_text=data.get("free_text"),
+            severity_note=data.get("severity_note"),
+            created_at=data.get("created_at") or datetime.datetime.now(datetime.timezone.utc),
+            updated_at=data.get("updated_at"),
+        )
+
+    def _owned(self, snap) -> bool:
+        return self.owner_id is None or _owner_of(snap.to_dict()) == self.owner_id
+
+    def list(self, child_id: Optional[str] = None) -> List[FirestoreCareProfile]:
+        profiles = [
+            self._to_entity(doc.id, doc.to_dict())
+            for doc in self.db.collection("care_profile").stream()
+            if self._owned(doc)
+            and (child_id is None or str(doc.to_dict().get("child_id", "")) == str(child_id))
+        ]
+        profiles.sort(key=lambda p: p.created_at)
+        return profiles
+
+    def get(self, profile_id: Union[int, str]) -> Optional[FirestoreCareProfile]:
+        snap = self.db.collection("care_profile").document(str(profile_id)).get()
+        if not snap.exists or not self._owned(snap):
+            return None
+        return self._to_entity(snap.id, snap.to_dict())
+
+    def create(self, data: schemas.CareProfileCreate) -> FirestoreCareProfile:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        doc_data = {
+            "owner_id": self.owner_id,
+            "child_id": str(data.child_id),
+            "allergens": list(data.allergens or []),
+            "care_categories": list(data.care_categories or []),
+            "free_text": data.free_text,
+            "severity_note": data.severity_note,
+            "created_at": now,
+            "updated_at": now,
+        }
+        _, doc_ref = self.db.collection("care_profile").add(doc_data)
+        return self._to_entity(doc_ref.id, doc_data)
+
+    def update(
+        self, profile_id: Union[int, str], data: schemas.CareProfileUpdate
+    ) -> Optional[FirestoreCareProfile]:
+        doc_ref = self.db.collection("care_profile").document(str(profile_id))
+        snap = doc_ref.get()
+        if not snap.exists or not self._owned(snap):
+            return None
+        fields = data.model_dump(exclude_unset=True)
+        patch: dict = {}
+        if "allergens" in fields:
+            patch["allergens"] = list(fields["allergens"] or [])
+        if "care_categories" in fields:
+            patch["care_categories"] = list(fields["care_categories"] or [])
+        if "free_text" in fields:
+            patch["free_text"] = fields["free_text"]
+        if "severity_note" in fields:
+            patch["severity_note"] = fields["severity_note"]
+        patch["updated_at"] = datetime.datetime.now(datetime.timezone.utc)
+        doc_ref.update(patch)
+        return self._to_entity(profile_id if isinstance(profile_id, str) else str(profile_id),
+                               {**snap.to_dict(), **patch})
+
+    def delete(self, profile_id: Union[int, str]) -> bool:
+        doc_ref = self.db.collection("care_profile").document(str(profile_id))
+        snap = doc_ref.get()
+        if not snap.exists or not self._owned(snap):
+            return False
+        doc_ref.delete()
+        return True
+
+
 # --- Factory functions ---
 
 def get_database_type() -> str:
@@ -1417,6 +1613,14 @@ def get_child_repository(
     if get_database_type() == "firestore":
         return FirestoreChildRepository(owner_id=owner_id)
     return SqliteChildRepository(db, owner_id=owner_id)
+
+def get_care_profile_repository(
+    db: Session = Depends(database.get_db),
+    owner_id: str = Depends(get_current_user),
+) -> CareProfileRepository:
+    if get_database_type() == "firestore":
+        return FirestoreCareProfileRepository(owner_id=owner_id)
+    return SqliteCareProfileRepository(db, owner_id=owner_id)
 
 def get_attachment_repo_standalone() -> Any:
     """Helper for background tasks where Depends() cannot be used."""
