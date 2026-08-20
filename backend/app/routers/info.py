@@ -9,7 +9,7 @@ import tempfile
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File, Body
 from fastapi.responses import StreamingResponse
 from typing import List, Optional, Union
-from .. import schemas, storage, ocr, tagging, extraction, reminders, clock, submission_agent
+from .. import schemas, storage, ocr, tagging, extraction, reminders, clock, submission_agent, safety_guard
 from ..privacy import redact_pii
 from ..repository import InfoRepository, get_info_repository
 from ..routers.auth import get_current_user
@@ -148,6 +148,8 @@ def ask_info(
     return schemas.RagAnswer(
         answer=result.answer,
         sources=[_to_rag_source(s) for s in result.sources],
+        # SOT-2736: 責任境界・免責を回答に必ず添える。
+        disclaimer=safety_guard.RESPONSIBILITY_DISCLAIMER,
     )
 
 
@@ -176,14 +178,23 @@ def ask_info_stream(
         yield "event: sources\ndata: " + json.dumps(
             sources_payload, ensure_ascii=False
         ) + "\n\n"
+        # SOT-2736: 安全断定の中和は文全体でないと確実に効かないため、生成をサーバ側で
+        # バッファしてから出力ガードを適用し、中和後の本文だけをクライアントへ流す。
+        # （誤った安心をトークン単位で先出ししないための安全側の設計。）
+        buffered: List[str] = []
         with time_block("ask_stream_generate", top_k=payload.top_k):
             for piece in chunks:
-                if not piece:
-                    continue
-                yield "event: token\ndata: " + json.dumps(
-                    {"text": piece}, ensure_ascii=False
-                ) + "\n\n"
-        yield "event: done\ndata: {}\n\n"
+                if piece:
+                    buffered.append(piece)
+        guarded = safety_guard.apply_output_guard("".join(buffered))
+        if guarded:
+            yield "event: token\ndata: " + json.dumps(
+                {"text": guarded}, ensure_ascii=False
+            ) + "\n\n"
+        # done イベントに責任境界・免責を添える。
+        yield "event: done\ndata: " + json.dumps(
+            {"disclaimer": safety_guard.RESPONSIBILITY_DISCLAIMER}, ensure_ascii=False
+        ) + "\n\n"
 
     return StreamingResponse(_event_stream(), media_type="text/event-stream")
 

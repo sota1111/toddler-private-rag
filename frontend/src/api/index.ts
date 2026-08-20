@@ -409,6 +409,8 @@ export const askInfoStream = async (
   let buffer = '';
   let answer = '';
   let sources: RagAnswer['sources'] = [];
+  // SOT-2736: done イベントで責任境界・免責が届く。
+  let disclaimer: string | null = null;
 
   const handleEvent = (event: string, data: string) => {
     if (event === 'sources') {
@@ -425,6 +427,12 @@ export const askInfoStream = async (
         if (text) handlers.onToken?.(text);
       } catch {
         /* ignore malformed token frame */
+      }
+    } else if (event === 'done') {
+      try {
+        disclaimer = JSON.parse(data).disclaimer ?? null;
+      } catch {
+        /* ignore malformed done frame */
       }
     }
   };
@@ -448,7 +456,7 @@ export const askInfoStream = async (
     }
   }
 
-  return { answer, sources };
+  return { answer, sources, disclaimer };
 };
 
 // SOT-1039 / 提案3: 登録時AI自動タグ付け

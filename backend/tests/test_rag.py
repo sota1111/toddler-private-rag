@@ -377,3 +377,33 @@ def test_vector_search_endpoint():
     data = resp.json()
     assert data["query"] == "給食 献立 アレルギー"
     assert data["sources"][0]["info_id"] == id1
+
+
+# --- SOT-2736: 断定禁止ガード & 責任境界/免責の /ask 結線 ---
+
+def test_ask_endpoint_neutralizes_safety_assertion_from_context():
+    """OCR 由来のコンテキストに安全断定が含まれても、/ask 回答では中和される。"""
+    from app import safety_guard
+
+    _seed_with_ocr(
+        "給食のおしらせ",
+        "連絡",
+        "このメニューは安全です。お子さんが食べても大丈夫です。",
+    )
+    resp = client.post("/api/info/ask", json={"query": "この給食は食べて平気？", "top_k": 3})
+    assert resp.status_code == 200
+    data = resp.json()
+    # FakeLLMProvider はコンテキストをそのまま反映するが、出力ガードで断定は消える。
+    assert not safety_guard.contains_banned_assertion(data["answer"]), data["answer"]
+    assert "要確認" in data["answer"]
+
+
+def test_ask_endpoint_returns_responsibility_disclaimer():
+    from app import safety_guard
+
+    _seed_with_ocr("遠足のお知らせ", "行事", "来週の遠足では お弁当 水筒 を持参してください")
+    resp = client.post("/api/info/ask", json={"query": "遠足の持ち物は？", "top_k": 3})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["disclaimer"] == safety_guard.RESPONSIBILITY_DISCLAIMER
+    assert "保護者" in data["disclaimer"]

@@ -125,6 +125,8 @@ class CareProfileResponse(CareProfileBase):
     id: Union[int, str]
     created_at: datetime.datetime
     updated_at: Optional[datetime.datetime] = None
+    # SOT-2736: 最終更新から一定期間超で「情報が古い可能性・見直しを」警告文を載せる（無ければ None）。
+    stale_warning: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -312,6 +314,8 @@ class RagSearchResponse(BaseModel):
 class RagAnswer(BaseModel):
     answer: str
     sources: List[RagSource] = []
+    # SOT-2736: 責任境界・免責。UI で「サービス=支援 / 最終判断=保護者 / 専門判断=医療者・園」を明示する。
+    disclaimer: Optional[str] = None
 
 
 # --- 登録時AI自動タグ付け (SOT-1039 / 提案3) ---
