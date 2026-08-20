@@ -5,8 +5,12 @@ import { installApiMocks, login, type MockAttentionItem } from './support/mockAp
 // 確認済/非該当分類の一連を検証する。すべて `/api/**` をモックして決定的にする。
 
 const NOW = '2026-06-01T00:00:00Z'
+// SOT-2746: 掲示板の「要確認」は直近1週間の項目のみ表示するため、表示させたい項目は
+// 実クロック基準で最近（数日前）の created_at にする。
+const isoDaysAgo = (days: number): string =>
+  new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
 
-function eggAttention(): MockAttentionItem {
+function eggAttention(createdAt: string = isoDaysAgo(1)): MockAttentionItem {
   return {
     id: 501,
     child_id: '7',
@@ -27,7 +31,7 @@ function eggAttention(): MockAttentionItem {
     llm_notes: null,
     review_status: 'unreviewed',
     reviewed_at: null,
-    created_at: NOW,
+    created_at: createdAt,
   }
 }
 
@@ -68,6 +72,17 @@ test.describe('要確認（Attention Item） SOT-2734', () => {
 
   test('要確認が無いときはレーンを表示しない', async ({ page }) => {
     await installApiMocks(page, { authed: true })
+    await login(page)
+    await expect(page.getByTestId('attention-items-panel')).toHaveCount(0)
+  })
+
+  test('SOT-2746: 1週間より前の要確認は表示しない', async ({ page }) => {
+    await installApiMocks(page, {
+      authed: true,
+      children: [{ id: 7, name: 'たろう', created_at: NOW }],
+      // 8日前に生成された項目は直近1週間フィルタで除外され、レーンごと非表示になる。
+      attentionItems: [eggAttention(isoDaysAgo(8))],
+    })
     await login(page)
     await expect(page.getByTestId('attention-items-panel')).toHaveCount(0)
   })

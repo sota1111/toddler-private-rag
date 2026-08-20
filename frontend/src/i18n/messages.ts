@@ -145,6 +145,9 @@ export const messages: Record<Lang, Messages> = {
     'menu.protein': 'たんぱく質',
     'menu.fat': '脂質',
     'menu.close': '閉じる',
+    'menu.allergyTitle': 'アレルギー注意',
+    'menu.allergyNote': '献立の表記から推定した、含まれる可能性のあるアレルゲンです（特定原材料8品目）。実際の使用は園にご確認ください。',
+    'menu.allergyAlertShort': 'アレルギー注意',
 
     // tasks (SOT-1313)
     'tasks.listTitle': 'やることリスト',
@@ -664,6 +667,9 @@ export const messages: Record<Lang, Messages> = {
     'menu.protein': 'Protein',
     'menu.fat': 'Fat',
     'menu.close': 'Close',
+    'menu.allergyTitle': 'Allergy warning',
+    'menu.allergyNote': 'Allergens (8 major items) that may be present, inferred from the menu text. Please confirm actual use with the nursery.',
+    'menu.allergyAlertShort': 'Allergy warning',
 
     // tasks (SOT-1313)
     'tasks.listTitle': 'Task list',

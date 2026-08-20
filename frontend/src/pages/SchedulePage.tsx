@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getInfoList, getChildren, getMenuCalendar } from '../api';
+import { getInfoList, getChildren, getMenuCalendar, getCareProfiles } from '../api';
 import type { NurseryInfo, MenuDay } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import DatedInfoList from '../components/DatedInfoList';
 import MenuDetailModal from '../components/MenuDetailModal';
 import { pickMenuProtein } from '../utils/menuProtein';
+import { detectMenuAllergens, matchedAllergens } from '../utils/menuAllergens';
 import { getChildColorClasses } from './infoFormOptions';
 
 // SOT-1306: 日付つきの予定（event_date あり）を月カレンダーで可視化し、
@@ -49,6 +50,18 @@ const SchedulePage: React.FC = () => {
   });
   const menuByDate = menuData?.days ?? {};
   const hasAnyMenu = Object.keys(menuByDate).length > 0;
+
+  // SOT-2746: 献立モードで、登録済み個別配慮プロファイルのアレルゲンと突き合わせて
+  // 「アレルギー注意」を出すため、全児のアレルゲンの和集合を取得する。
+  const { data: careProfiles } = useQuery({
+    queryKey: ['careProfiles', 'all'],
+    queryFn: () => getCareProfiles(),
+    enabled: mode === 'menu',
+  });
+  const profileAllergens = useMemo<Set<string>>(
+    () => new Set((careProfiles ?? []).flatMap((p) => p.allergens ?? [])),
+    [careProfiles],
+  );
 
   // 日付つきの予定のみを対象にする。
   const events = useMemo<NurseryInfo[]>(
@@ -219,16 +232,28 @@ const SchedulePage: React.FC = () => {
                   cls += ' ring-2 ring-brand ring-offset-1 ring-offset-surface';
                 }
                 if (hasMenu && menu) {
-                  // 主菜のたんぱく源を「体をつくる（赤）」列から選び、肉/魚/豆でアイコン化する。
+                  // 主菜の料理名を出し、そのたんぱく源を肉/魚/豆でアイコン化する（SOT-2746）。
                   const { icon, label } = pickMenuProtein(menu);
+                  // SOT-2746: 登録済みアレルゲンが献立に含まれ得る日は「アレルギー注意」を出す。
+                  const alerts = matchedAllergens(detectMenuAllergens(menu), profileAllergens);
+                  const hasAllergyAlert = alerts.length > 0;
                   return (
                     <button
                       key={dateStr}
                       type="button"
                       onClick={() => setMenuDay(menu)}
                       className={cls}
-                      aria-label={`${dateStr} ${label}`}
+                      aria-label={`${dateStr} ${label}${hasAllergyAlert ? ` ${t('menu.allergyAlertShort')}` : ''}`}
                     >
+                      {hasAllergyAlert && (
+                        <span
+                          aria-hidden
+                          title={t('menu.allergyAlertShort')}
+                          className="absolute top-0.5 right-0.5 text-[10px] leading-none"
+                        >
+                          ⚠️
+                        </span>
+                      )}
                       <span className="font-semibold leading-none">{d.getDate()}</span>
                       <span aria-hidden className="text-[10px] leading-none mt-0.5">{icon}</span>
                       <span className="w-full truncate text-center text-[9px] leading-tight text-muted-foreground">
@@ -347,7 +372,13 @@ const SchedulePage: React.FC = () => {
       </div>
 
       {/* menu-calendar: 献立の日付をタップしたときの詳細モーダル。 */}
-      {menuDay && <MenuDetailModal day={menuDay} onClose={() => setMenuDay(null)} />}
+      {menuDay && (
+        <MenuDetailModal
+          day={menuDay}
+          profileAllergens={profileAllergens}
+          onClose={() => setMenuDay(null)}
+        />
+      )}
     </div>
   );
 };

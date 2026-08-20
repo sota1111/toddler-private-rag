@@ -51,14 +51,15 @@ test.describe('menu calendar', () => {
     // 既定は「予定」モード。献立タブへ切替える。
     await page.getByRole('tab', { name: '献立' }).click()
 
-    // 主菜のたんぱく源が「体をつくる（赤）」列から表示される（料理名ではない）。
-    await expect(page.getByRole('button', { name: new RegExp(dstr(10)) })).toContainText('豚もも')
-    await expect(page.getByRole('button', { name: new RegExp(date) })).toContainText('さけ')
-    await expect(page.getByRole('button', { name: new RegExp(dstr(20)) })).toContainText('豆腐')
-    // 肉/魚/豆のアイコンがそれぞれ出る。
+    // SOT-2746: セルには給食の主菜「料理名」が出る（たんぱく源の食材名ではない）。
+    await expect(page.getByRole('button', { name: new RegExp(dstr(10)) })).toContainText('豚のしょうが焼き')
+    await expect(page.getByRole('button', { name: new RegExp(date) })).toContainText('鮭のマヨ焼き')
+    await expect(page.getByRole('button', { name: new RegExp(dstr(20)) })).toContainText('麻婆豆腐')
+    // 肉/魚/豆のアイコンが主菜のたんぱく源から判定されて出る（ご飯🍚は出さない）。
     await expect(page.getByRole('button', { name: new RegExp(dstr(10)) })).toContainText('🍖')
     await expect(page.getByRole('button', { name: new RegExp(date) })).toContainText('🐟')
     await expect(page.getByRole('button', { name: new RegExp(dstr(20)) })).toContainText('🫘')
+    await expect(page.getByRole('button', { name: new RegExp(dstr(10)) })).not.toContainText('🍚')
 
     // 献立のある日をタップ → 詳細モーダル。
     await page.getByRole('button', { name: new RegExp(date) }).click()
@@ -71,6 +72,47 @@ test.describe('menu calendar', () => {
     // 閉じられる。
     await dialog.getByRole('button', { name: '閉じる' }).click()
     await expect(page.getByRole('dialog')).toHaveCount(0)
+  })
+
+  test('登録アレルゲンが献立に含まれる日はカレンダーに注意が出て、詳細でアレルゲンが分かる', async ({ page }) => {
+    const now = new Date()
+    const y = now.getFullYear()
+    const m = now.getMonth() + 1
+    const dstr = (d: number) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    const date = dstr(12)
+
+    await installApiMocks(page, {
+      authed: true,
+      children: [{ id: 7, name: 'たろう', created_at: '2026-01-01T00:00:00Z' }],
+      // 乳アレルギーを登録。献立の「チーズ」が該当する。
+      careProfiles: [
+        { id: 1, child_id: '7', allergens: ['milk'], care_categories: [], created_at: '2026-01-01T00:00:00Z' },
+      ],
+      menuDays: [
+        {
+          date,
+          weekday: '金',
+          lunch: ['ごはん', 'チーズオムレツ'],
+          morning_snack: [],
+          afternoon_snack: [],
+          main_ingredients: { red: ['チーズ', '卵'], yellow: ['米'], green: [], other: [] },
+          nutrition: {},
+        },
+      ],
+    })
+    await login(page)
+    await page.goto('/schedule')
+    await page.getByRole('tab', { name: '献立' }).click()
+
+    // 該当日のセルにアレルギー注意（⚠️）が出る。
+    const cell = page.getByRole('button', { name: new RegExp(date) })
+    await expect(cell).toContainText('⚠️')
+
+    // 詳細モーダルに「アレルギー注意」と、登録済みの乳（強調）が出る。
+    await cell.click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByText('アレルギー注意')).toBeVisible()
+    await expect(dialog).toContainText('乳')
   })
 
   test('予定モードでは献立を取得せず、予定一覧が見える', async ({ page }) => {
