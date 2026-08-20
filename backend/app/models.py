@@ -93,6 +93,34 @@ class Child(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class CareProfile(Base):
+    """SOT-2729: 子どもごとの個別配慮プロファイル。
+
+    子ども一人ひとりの個別配慮情報（アレルゲン・配慮カテゴリ・自由記述・重症度メモ）を保持し、
+    後続のおたより照合層（SOT-2733）の第一級データ資産とする。既存 ``Child`` へは additive で、
+    新規テーブルなので ``Base.metadata.create_all`` で自動作成される（既存行非破壊）。
+
+    ``child_id`` は既存 ``NurseryInfo.child_id`` と同じく String 保持（SQLite/Firestore の
+    双方で id 型が異なるためバックエンド非依存にし、FK 硬制約は既存方針どおり付けない）。
+    """
+    __tablename__ = "care_profile"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # データ所有者(マルチテナント分離, SOT-1431 と同方式)。nullable/index。
+    owner_id = Column(String(64), nullable=True, index=True)
+    # 紐づく子ども(children.id)。String 保持(NurseryInfo.child_id と同方式)。
+    child_id = Column(String(50), nullable=False, index=True)
+    # 型付き属性: アレルゲン一覧・配慮カテゴリ一覧(JSON 配列)。未設定は空配列。
+    allergens = Column(JSON, nullable=True, default=list)
+    care_categories = Column(JSON, nullable=True, default=list)
+    # 自由記述と重症度メモ。
+    free_text = Column(Text, nullable=True)
+    severity_note = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # 最終更新日。更新のたびに現在時刻へ更新する。
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+
 class SeededOwner(Base):
     """SOT-1507: 初回ログイン時に初期データをコピー配布したオーナーを記録する冪等マーカー。
 

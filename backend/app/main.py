@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 import logging
 from .database import engine, SessionLocal
-from .routers import info, attachments, worker, children, feedback, menu
+from .routers import info, attachments, worker, children, feedback, menu, care_profiles
 from .routers import auth as auth_router
 from .seed import seed_data
 from . import models
@@ -80,6 +80,7 @@ app.include_router(auth_router.router, prefix="/api/auth", tags=["auth"])
 app.include_router(attachments.router, prefix="/api")
 app.include_router(info.router, prefix="/api")
 app.include_router(children.router, prefix="/api")
+app.include_router(care_profiles.router, prefix="/api")
 app.include_router(feedback.router, prefix="/api")
 app.include_router(menu.router, prefix="/api")
 # SOT-1322: internal AI-worker endpoint (no /api prefix) called by the upload service.
