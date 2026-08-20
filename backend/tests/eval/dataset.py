@@ -337,3 +337,184 @@ AGENT_EVAL_CASES = [
         "expect_empty": True,
     },
 ]
+
+
+# ---------------------------------------------------------------------------
+# SOT-2735: 個別配慮照合（care-matching）eval-gate 用 golden dataset
+# ---------------------------------------------------------------------------
+#
+# SOT-2733 の照合エンジン ``app.care_matching.match_notice`` を、プロダクト価値の観点
+# （「この子に関係する要確認をちゃんと拾う / 無関係でうるさくしない / 断定しない」）で
+# 回帰計測するための golden。Expected Experience 型の5類型を網羅する:
+#
+#   1. menu_allergen     献立 ``menu_json`` の原材料 × プロファイルのアレルゲン
+#   2. event_care        おたより本文の行事 × プロファイルの配慮カテゴリ
+#   3. irrelevant        無関係な文書 → 要確認を湧かせない（無関係抑制）
+#   4. info_insufficient 情報不足文書 → 断定せず棄権（abstain）を明示する
+#   5. conflict          相反情報（「使用しません」「対応済み」等）でも安全側で要確認を残す
+#
+# 各ケースの宣言フィールド:
+#   - profile            : ``match_notice`` に渡す個別配慮プロファイル（dict でも動く）
+#   - notice_text        : おたより本文（None 可）
+#   - menu_json          : 献立 JSON（None 可）
+#   - expected_attention : 検出されるべき (kind, canonical) の集合（発見率 Recall の分子）
+#   - expected_suppressed: 出てはいけない (kind, canonical)（無関係抑制の分子）
+#   - expect_abstain     : status=abstain（情報不足のため要確認）が必要か（安全棄権）
+#
+# kind は care_matching の安定キー "allergen" / "care_category"。
+# 決定論のみで評価する（``use_llm=False``）ため CI でネットワーク不要・安定。
+
+
+def _cm_menu(date, *, morning_snack=None, lunch=None, afternoon_snack=None,
+             red=None, yellow=None, green=None, other=None):
+    """care-matching golden 用の 1日献立 ``menu_json`` を組み立てる小ヘルパ。"""
+    return {
+        "month": date[:7],
+        "days": [
+            {
+                "date": date,
+                "morning_snack": morning_snack or [],
+                "lunch": lunch or [],
+                "afternoon_snack": afternoon_snack or [],
+                "main_ingredients": {
+                    "red": red or [],
+                    "yellow": yellow or [],
+                    "green": green or [],
+                    "other": other or [],
+                },
+            }
+        ],
+    }
+
+
+CARE_MATCHING_EVAL_CASES = [
+    # === 1. 献立 × アレルゲン（陽性検出 + 無関係抑制） ===========================
+    {
+        "id": "menu_allergen_egg_with_buckwheat_distractor",
+        "archetype": "menu_allergen",
+        "profile": {"allergens": ["たまご", "そば"], "care_categories": [], "free_text": ""},
+        "notice_text": "9月の献立表をお配りします。ご確認ください。",
+        "menu_json": _cm_menu("2026-09-01", lunch=["親子丼"], red=["鶏卵", "鶏肉"]),
+        # 献立に鶏卵→egg を第一根拠(high)で拾う。そばは献立に無い→抑制。
+        "expected_attention": [("allergen", "egg")],
+        "expected_suppressed": [("allergen", "buckwheat")],
+        "expect_abstain": False,
+    },
+    {
+        "id": "menu_allergen_milk_and_wheat",
+        "archetype": "menu_allergen",
+        "profile": {"allergens": ["牛乳", "小麦"], "care_categories": [], "free_text": ""},
+        "notice_text": "今月の給食献立のご案内です。",
+        "menu_json": _cm_menu("2026-09-02", lunch=["クリームシチュー"], red=["牛乳"], yellow=["小麦粉"]),
+        "expected_attention": [("allergen", "milk"), ("allergen", "wheat")],
+        "expected_suppressed": [],
+        "expect_abstain": False,
+    },
+    {
+        "id": "menu_allergen_egg_composite_substring",
+        "archetype": "menu_allergen",
+        "profile": {"allergens": ["卵"], "care_categories": [], "free_text": ""},
+        "notice_text": None,
+        # 辞書完全一致しない「厚焼き玉子」でも部分一致で egg を拾える（安全側）。
+        "menu_json": _cm_menu("2026-09-03", lunch=["厚焼き玉子", "みそ汁"]),
+        "expected_attention": [("allergen", "egg")],
+        "expected_suppressed": [],
+        "expect_abstain": False,
+    },
+
+    # === 2. 行事 × 配慮カテゴリ（陽性検出 + 無関係抑制） =========================
+    {
+        "id": "event_care_animal_contact_with_noise_distractor",
+        "archetype": "event_care",
+        "profile": {"allergens": [], "care_categories": ["動物接触", "大音量"], "free_text": ""},
+        "notice_text": "9/18に犬とのふれあい体験を予定しています。楽しみにしていてください。",
+        "menu_json": None,
+        "expected_attention": [("care_category", "animal_contact")],
+        "expected_suppressed": [("care_category", "loud_noise")],
+        "expect_abstain": False,
+    },
+    {
+        "id": "event_care_loud_noise",
+        "archetype": "event_care",
+        "profile": {"allergens": [], "care_categories": ["大音量"], "free_text": ""},
+        "notice_text": "運動会の予行練習でピストルの号砲を鳴らします。",
+        "menu_json": None,
+        "expected_attention": [("care_category", "loud_noise")],
+        "expected_suppressed": [],
+        "expect_abstain": False,
+    },
+    {
+        "id": "event_care_motion_sickness",
+        "archetype": "event_care",
+        "profile": {"allergens": [], "care_categories": ["乗り物酔い"], "free_text": ""},
+        "notice_text": "秋の遠足は大型バスで移動します。酔いやすいお子様はご相談ください。",
+        "menu_json": None,
+        "expected_attention": [("care_category", "motion_sickness")],
+        "expected_suppressed": [],
+        "expect_abstain": False,
+    },
+
+    # === 3. 無関係文書（要確認を湧かせない = 無関係抑制） =======================
+    {
+        "id": "irrelevant_general_with_nonmatching_menu",
+        "archetype": "irrelevant",
+        "profile": {"allergens": ["卵", "牛乳"], "care_categories": ["動物接触"], "free_text": ""},
+        "notice_text": "今日は良い天気で、園庭で元気に遊びました。またのご参加をお待ちしています。",
+        # 献立はあるが該当食材なし → has_menu=True で棄権も湧かない。
+        "menu_json": _cm_menu("2026-09-04", lunch=["カレーライス"], green=["にんじん", "たまねぎ"]),
+        "expected_attention": [],
+        "expected_suppressed": [
+            ("allergen", "egg"), ("allergen", "milk"), ("care_category", "animal_contact"),
+        ],
+        "expect_abstain": False,
+    },
+    {
+        "id": "irrelevant_admin_notice_no_food_event",
+        "archetype": "irrelevant",
+        "profile": {"allergens": ["えび"], "care_categories": [], "free_text": ""},
+        # 食に関する予定キーワードが無い → 情報不足でもなく、棄権も湧かない純粋な無関係。
+        "notice_text": "保護者会を開催します。ご都合のつく範囲でご出席ください。",
+        "menu_json": None,
+        "expected_attention": [],
+        "expected_suppressed": [("allergen", "shrimp")],
+        "expect_abstain": False,
+    },
+
+    # === 4. 情報不足文書（断定せず棄権 = 安全棄権） =============================
+    {
+        "id": "info_insufficient_food_event_without_menu",
+        "archetype": "info_insufficient",
+        "profile": {"allergens": ["卵", "落花生"], "care_categories": [], "free_text": ""},
+        # 食に関する予定はあるが献立の原材料情報が無い → 断定できず棄権（要確認）。
+        "notice_text": "来週のクッキング保育を行います。持ち物は追ってお知らせします。",
+        "menu_json": None,
+        "expected_attention": [],
+        "expected_suppressed": [],
+        "expect_abstain": True,
+    },
+
+    # === 5. 相反情報（安全側で要確認を残す・断定しない） ========================
+    {
+        "id": "conflict_allergen_in_menu_but_notice_claims_handled",
+        "archetype": "conflict",
+        "profile": {"allergens": ["卵"], "care_categories": [], "free_text": ""},
+        # 本文は「対応済み」と言うが、献立に鶏卵がある → 断定せず要確認を残す。
+        "notice_text": "アレルギー対応として除去食をご用意しますのでご安心ください。",
+        "menu_json": _cm_menu("2026-09-05", lunch=["オムレツ"], red=["鶏卵"]),
+        "expected_attention": [("allergen", "egg")],
+        "expected_suppressed": [],
+        "expect_abstain": False,
+    },
+    {
+        "id": "conflict_negation_peanut_still_flagged",
+        "archetype": "conflict",
+        "profile": {"allergens": ["落花生"], "care_categories": [], "free_text": ""},
+        # 本文は「使用していません」だが、言及がある以上は安全側で要確認（過検出許容）。
+        "notice_text": "本日のおやつにピーナッツは使用していません。ご安心ください。",
+        # 献立を添えて has_menu=True にし、食イベント棄権(棄権1)は湧かせない（相反=断定しないの純検証）。
+        "menu_json": _cm_menu("2026-09-06", afternoon_snack=["クッキー"]),
+        "expected_attention": [("allergen", "peanut")],
+        "expected_suppressed": [],
+        "expect_abstain": False,
+    },
+]
