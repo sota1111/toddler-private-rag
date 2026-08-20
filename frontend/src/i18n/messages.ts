@@ -230,6 +230,8 @@ export const messages: Record<Lang, Messages> = {
     'attention.title': '要確認（この子向け）',
     'attention.subtitle': 'おたよりと個別配慮の照合で見つかった、確認が必要な項目です。最終判断は保護者が行ってください。',
     'attention.empty': '確認が必要な項目はありません',
+    // SOT-2746: 掲示板の要確認は直近1週間のみ表示していることを可視化する。
+    'attention.recentWindow': '直近1週間のみ表示',
     'attention.why': 'なぜ',
     'attention.whyHide': '根拠を隠す',
     'attention.evidenceSpan': '該当箇所',
@@ -765,6 +767,8 @@ export const messages: Record<Lang, Messages> = {
     'attention.title': 'Attention (for this child)',
     'attention.subtitle': 'Items found by matching notices against this child’s care profile that need your check. The final decision is yours.',
     'attention.empty': 'No items need checking',
+    // SOT-2746: surface that the board only shows attention items from the last 7 days.
+    'attention.recentWindow': 'Last 7 days only',
     'attention.why': 'Why',
     'attention.whyHide': 'Hide details',
     'attention.evidenceSpan': 'Passage',
