@@ -195,6 +195,39 @@ def normalize_care_categories(terms) -> List[str]:
     return result
 
 
+def scan_allergens(text: Optional[str]) -> List[str]:
+    """自由文（おたより本文・献立の品目名等）を走査し、含まれるアレルゲン正規形を検出する。
+
+    照合エンジン(SOT-2733)が、辞書に完全一致しない品目名（例「厚焼き玉子」に含まれる「玉子」）からも
+    アレルゲンを拾うための決定論ヘルパ。``normalize_allergen`` が「1語の完全一致」なのに対し、これは
+    別名を **部分文字列** として走査する。アレルギーは安全側（見落としより過検出）に倒すべき対象なので、
+    部分一致による過検出は許容し、最終的な確定は LLM クロスチェックと人間の確認（=「要確認」）に委ねる。
+
+    アレルゲン定義順で返し、重複は排除する。1つも一致しなければ空リスト（未知テキストを誤検出しない）。
+
+    >>> scan_allergens("本日のおやつは厚焼き玉子とバナナです")
+    ['egg']
+    >>> scan_allergens("果物の盛り合わせ") == []
+    True
+    """
+    if not text:
+        return []
+    haystack = _canonical_key(text)
+    found: List[str] = []
+    seen = set()
+    # アレルゲン定義順で走査（正規形自身も別名として含めて部分一致を見る）。
+    for canonical, aliases in _ALLERGEN_ALIASES.items():
+        if canonical in seen:
+            continue
+        for surface in (canonical,) + tuple(aliases):
+            key = _canonical_key(surface)
+            if key and key in haystack:
+                seen.add(canonical)
+                found.append(canonical)
+                break
+    return found
+
+
 def scan_care_categories(text: Optional[str]) -> List[str]:
     """自由文（おたより本文等）を走査し、含まれるキーワードから配慮カテゴリ正規形を検出する。
 
