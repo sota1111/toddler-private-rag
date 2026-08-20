@@ -169,8 +169,15 @@ const reviewOrder = (s: AttentionReviewStatus): number =>
 
 // SOT-2746: 掲示板の「要確認」は直近1週間の項目のみ表示する（古い照合結果で掲示板を埋めない）。
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+// SOT-2746: バックエンド(SQLite 経路)はタイムゾーン指定の無い ISO 文字列で created_at を返すため、
+// そのまま new Date() に渡すと**ローカル時刻**として解釈され、7日境界がタイムゾーン差ぶんズレる。
+// タイムゾーン指定（Z / ±hh:mm）が無い場合は UTC とみなして絶対時刻の比較を正確化する。
+const parseTimestampMs = (value: string): number => {
+  const hasTz = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(value.trim());
+  return new Date(hasTz ? value : `${value}Z`).getTime();
+};
 const isWithinLastWeek = (createdAt: string): boolean => {
-  const t = new Date(createdAt).getTime();
+  const t = parseTimestampMs(createdAt);
   if (Number.isNaN(t)) return true; // 日付が壊れている項目は落とさず表示する（フェイルオープン）。
   return Date.now() - t <= ONE_WEEK_MS;
 };
@@ -199,6 +206,13 @@ const AttentionItemsPanel: React.FC = () => {
       <div className="bg-red-50 text-red-700 flex items-center gap-2 px-4 py-3 font-bold">
         <span aria-hidden className="text-lg">⚠️</span>
         <span className="whitespace-nowrap">{t('attention.title')}</span>
+        {/* SOT-2746: 直近1週間フィルタが効いていることを常時可視化し、動作を確認できるようにする。 */}
+        <span
+          className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-white/70 text-red-700 border border-red-200 whitespace-nowrap"
+          data-testid="attention-recent-window"
+        >
+          {t('attention.recentWindow')}
+        </span>
         <span className="ml-auto text-xs font-normal text-red-500 hidden sm:inline">
           {t('attention.subtitle')}
         </span>
