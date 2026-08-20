@@ -115,6 +115,44 @@ test.describe('menu calendar', () => {
     await expect(dialog).toContainText('乳')
   })
 
+  test('献立モードで、監視中アレルゲンのバナーが出る（未設定は設定への導線）', async ({ page }) => {
+    await installApiMocks(page, { authed: true })
+    await login(page)
+    await page.goto('/schedule')
+    await page.getByRole('tab', { name: '献立' }).click()
+
+    // SOT-2746: 未設定時は「設定すると自動検出」＋設定CTAが出る（設定→検出のつながりを明示）。
+    const banner = page.getByTestId('menu-allergen-monitor')
+    await expect(banner).toBeVisible()
+    await expect(banner.getByRole('link', { name: 'プロファイルを設定' })).toBeVisible()
+  })
+
+  test('献立モードで、登録済みプロファイルのアレルゲンがバナーに列挙される', async ({ page }) => {
+    await installApiMocks(page, {
+      authed: true,
+      children: [{ id: 7, name: 'たろう', created_at: '2026-01-01T00:00:00Z' }],
+      careProfiles: [
+        {
+          id: 1,
+          child_id: '7',
+          allergens: ['milk', 'egg'],
+          care_categories: [],
+          created_at: '2026-01-01T00:00:00Z',
+        },
+      ],
+    })
+    await login(page)
+    await page.goto('/schedule')
+    await page.getByRole('tab', { name: '献立' }).click()
+
+    // SOT-2746: 監視中のアレルゲン（乳・卵）がバナーに出る。
+    const banner = page.getByTestId('menu-allergen-monitor')
+    await expect(banner).toContainText('監視中のアレルゲン')
+    await expect(banner).toContainText('乳')
+    await expect(banner).toContainText('卵')
+    await expect(banner.getByRole('link', { name: 'プロファイルを編集' })).toBeVisible()
+  })
+
   test('予定モードでは献立を取得せず、予定一覧が見える', async ({ page }) => {
     await installApiMocks(page, { authed: true })
     await login(page)

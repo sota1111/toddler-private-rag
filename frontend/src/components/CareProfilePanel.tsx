@@ -34,6 +34,10 @@ const CareProfilePanel: React.FC<CareProfilePanelProps> = ({ children }) => {
   const [selectedChildId, setSelectedChildId] = React.useState('');
   const [profile, setProfile] = React.useState<CareProfile | null>(null);
 
+  // SOT-2746: 設定内容の確認（一覧化）用に、全児の登録済みプロファイルを保持する。
+  // 行タップでそのお子さまの編集に入れる。保存/削除のたびに再取得して同期する。
+  const [allProfiles, setAllProfiles] = React.useState<CareProfile[]>([]);
+
   // フォーム状態。allergens/care_categories は正規形キーの集合。
   const [allergens, setAllergens] = React.useState<Set<string>>(new Set());
   const [careCategories, setCareCategories] = React.useState<Set<string>>(new Set());
@@ -88,6 +92,31 @@ const CareProfilePanel: React.FC<CareProfilePanelProps> = ({ children }) => {
     [resetForm, t],
   );
 
+  // SOT-2746: 登録済み一覧を取得（child_id なし = 全児）。失敗は致命的でないので黙って空のまま。
+  const reloadAllProfiles = React.useCallback(() => {
+    getCareProfiles()
+      .then((list) => setAllProfiles(list))
+      .catch(() => {
+        /* 一覧取得失敗は致命的でない。 */
+      });
+  }, []);
+
+  React.useEffect(() => {
+    reloadAllProfiles();
+  }, [reloadAllProfiles]);
+
+  // SOT-2746: お子さまが1名だけなら自動選択して即編集できるようにする（設定しやすく）。
+  const autoSelectedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (autoSelectedRef.current || selectedChildId) return;
+    if (children.length === 1) {
+      autoSelectedRef.current = true;
+      // 同期 setState を避けるためマイクロタスクへ逃がす（react-hooks/set-state-in-effect）。
+      const id = String(children[0].id);
+      queueMicrotask(() => handleSelectChild(id));
+    }
+  }, [children, selectedChildId, handleSelectChild]);
+
   const toggle = (set: Set<string>, setter: (s: Set<string>) => void, key: string) => {
     const next = new Set(set);
     if (next.has(key)) next.delete(key);
@@ -113,6 +142,7 @@ const CareProfilePanel: React.FC<CareProfilePanelProps> = ({ children }) => {
         : await createCareProfile({ child_id: selectedChildId, ...payload });
       resetForm(result);
       setSaved(true);
+      reloadAllProfiles();
     } catch {
       setError(t('careProfile.saveError'));
     } finally {
@@ -129,6 +159,7 @@ const CareProfilePanel: React.FC<CareProfilePanelProps> = ({ children }) => {
       resetForm(null);
       setConfirmingDelete(false);
       setSaved(false);
+      reloadAllProfiles();
     } catch {
       setError(t('careProfile.deleteError'));
     } finally {
@@ -138,6 +169,23 @@ const CareProfilePanel: React.FC<CareProfilePanelProps> = ({ children }) => {
 
   const lastUpdated = formatDate(profile?.updated_at ?? profile?.created_at);
 
+  // SOT-2746: 現存するお子さまに紐づく登録済みプロファイルだけを一覧に出す（子の順序に揃える）。
+  const childName = React.useCallback(
+    (childId: string): string => {
+      const c = children.find((ch) => String(ch.id) === String(childId));
+      if (!c) return childId;
+      return c.group_name ? `${c.name}（${c.group_name}）` : c.name;
+    },
+    [children],
+  );
+  const knownProfiles = React.useMemo(
+    () =>
+      children
+        .map((c) => allProfiles.find((p) => String(p.child_id) === String(c.id)))
+        .filter((p): p is CareProfile => Boolean(p)),
+    [children, allProfiles],
+  );
+
   return (
     <div
       data-testid="care-profile-panel"
@@ -145,6 +193,64 @@ const CareProfilePanel: React.FC<CareProfilePanelProps> = ({ children }) => {
     >
       <h2 className="text-base font-bold text-foreground mb-1">{t('careProfile.title')}</h2>
       <p className="text-sm text-muted-foreground mb-4">{t('careProfile.description')}</p>
+
+      {/* SOT-2746: 登録済み一覧（設定内容の確認）。全児の登録内容をチップで俯瞰し、
+          行タップでそのお子さまの編集に入れる。子が未登録のときは出さない。 */}
+      {children.length > 0 && (
+        <div data-testid="care-profile-summary" className="mb-5">
+          <h3 className="text-sm font-semibold text-foreground mb-1">
+            {t('careProfile.registeredTitle')}
+          </h3>
+          {knownProfiles.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t('careProfile.registeredEmpty')}</p>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground mb-2">{t('careProfile.registeredHint')}</p>
+              <ul className="space-y-2">
+                {knownProfiles.map((p) => {
+                  const name = childName(p.child_id);
+                  const hasAttrs = p.allergens.length > 0 || p.care_categories.length > 0;
+                  return (
+                    <li key={p.id}>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectChild(String(p.child_id))}
+                        className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-left hover:bg-muted focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      >
+                        <span className="text-sm font-semibold text-foreground">{name}</span>
+                        {hasAttrs ? (
+                          <span className="mt-1 flex flex-wrap gap-1.5">
+                            {p.allergens.map((key) => (
+                              <span
+                                key={`a-${key}`}
+                                className="rounded-full border border-red-300 bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800"
+                              >
+                                {t(`careProfile.allergen.${key}`)}
+                              </span>
+                            ))}
+                            {p.care_categories.map((key) => (
+                              <span
+                                key={`c-${key}`}
+                                className="rounded-full border border-brand/30 bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand-strong"
+                              >
+                                {t(`careProfile.care.${key}`)}
+                              </span>
+                            ))}
+                          </span>
+                        ) : (
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            {t('careProfile.registeredNoAttrs')}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
 
       {/* 子選択 */}
       <label className="block text-sm font-semibold text-foreground mb-2">
