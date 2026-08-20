@@ -82,6 +82,53 @@ class ChildResponse(ChildBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# --- 個別配慮プロファイル (SOT-2729: 子どもごとの care_profile) ---
+
+class CareProfileBase(BaseModel):
+    # 紐づく子ども(children.id)。作成時必須。
+    child_id: str
+    # 型付き属性: アレルゲン一覧・配慮カテゴリ一覧。未指定は空配列。
+    allergens: List[str] = []
+    care_categories: List[str] = []
+    # 自由記述・重症度メモ。任意。空文字は None に正規化する。
+    free_text: Optional[str] = None
+    severity_note: Optional[str] = None
+
+    _normalize_texts = field_validator("free_text", "severity_note", mode="before")(
+        _empty_str_to_none
+    )
+
+    @field_validator("allergens", "care_categories", mode="before")
+    @classmethod
+    def _none_to_empty_list(cls, value):
+        # DB では nullable JSON なので既存/未設定行は None になりうる。空配列に倒す。
+        return [] if value is None else value
+
+
+class CareProfileCreate(CareProfileBase):
+    pass
+
+
+class CareProfileUpdate(BaseModel):
+    """部分更新。指定されたフィールドのみ更新する（未指定は現状維持）。"""
+    allergens: Optional[List[str]] = None
+    care_categories: Optional[List[str]] = None
+    free_text: Optional[str] = None
+    severity_note: Optional[str] = None
+
+    _normalize_texts = field_validator("free_text", "severity_note", mode="before")(
+        _empty_str_to_none
+    )
+
+
+class CareProfileResponse(CareProfileBase):
+    id: Union[int, str]
+    created_at: datetime.datetime
+    updated_at: Optional[datetime.datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class NurseryInfoBase(BaseModel):
     # SOT-1431: データ所有者。背景OCR経路で親写真レコードの owner を子タスクへ継承させるための
     # 任意フィールド。リクエスト経路ではリポジトリが current user の owner を強制するため、

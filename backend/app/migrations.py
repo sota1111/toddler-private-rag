@@ -69,6 +69,23 @@ def ensure_sqlite_schema(engine: Engine) -> None:
                     f"ALTER TABLE children ADD COLUMN {column.name} {column.type.compile()}"
                 )
 
+        # SOT-2729: care_profile は新規テーブルなので通常は create_all で作成されるが、
+        # 既存デプロイに後からカラムを足す場合に備えて additive/nullable カラムを追記する
+        # (children/attachments と同方式)。既存 children 行には一切触れない(非破壊)。
+        care_profile_exists = conn.exec_driver_sql(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'care_profile'"
+        ).scalar()
+        if care_profile_exists:
+            cp_columns = {
+                row[1] for row in conn.exec_driver_sql("PRAGMA table_info(care_profile)")
+            }
+            for column in models.CareProfile.__table__.columns:
+                if column.primary_key or column.name in cp_columns:
+                    continue
+                conn.exec_driver_sql(
+                    f"ALTER TABLE care_profile ADD COLUMN {column.name} {column.type.compile()}"
+                )
+
         # SOT-1431: 既存(owner 未設定)データを現行の主ユーザー(既定 owner)に一括割当する。
         # 非破壊(NULL 行のみ更新)。マルチテナント分離導入前のデータが主ユーザーのものとして残る。
         conn.exec_driver_sql(
