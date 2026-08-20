@@ -33,6 +33,36 @@ export interface Child {
   created_at: string
 }
 
+// SOT-2734: 要確認（この子向け）Attention Item。おたより登録時に照合エンジン(SOT-2733)が出す
+// 根拠付き候補を永続化したもの。既存の注意事項カテゴリとは別レーンで併記する。
+export interface AttentionEvidence {
+  // 根拠3要素＋位置情報。
+  source?: string // menu_json | notice_text | llm
+  span?: string // 該当文書箇所
+  profile_item?: string // 対応プロファイル項目（ラベル）
+  confidence?: string // high | medium | low
+  locator?: Record<string, unknown>
+}
+
+export type AttentionReviewStatus = 'unreviewed' | 'confirmed' | 'not_applicable'
+
+export interface AttentionItem {
+  id: number | string
+  child_id?: string | null
+  source_info_id?: string | null
+  kind: string // allergen | care_category
+  status: string // attention | abstain（情報不足のため要確認）
+  canonical?: string | null
+  confidence: string // high | medium | low
+  message: string
+  evidence?: AttentionEvidence | null
+  profile_item?: Record<string, unknown> | null
+  llm_notes?: string[] | null
+  review_status: AttentionReviewStatus
+  reviewed_at?: string | null
+  created_at: string
+}
+
 export interface NurseryInfo {
   id: number | string
   title: string

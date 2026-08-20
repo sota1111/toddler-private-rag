@@ -120,10 +120,30 @@ export interface MockChild {
   created_at: string
 }
 
+// SOT-2734: 要確認（この子向け）Attention Item のモック。
+export interface MockAttentionItem {
+  id: number | string
+  child_id?: string | null
+  source_info_id?: string | null
+  kind: string
+  status: string
+  canonical?: string | null
+  confidence: string
+  message: string
+  evidence?: Record<string, unknown> | null
+  profile_item?: Record<string, unknown> | null
+  llm_notes?: string[] | null
+  review_status: 'unreviewed' | 'confirmed' | 'not_applicable'
+  reviewed_at?: string | null
+  created_at: string
+}
+
 export interface MockApiOptions {
   authed?: boolean
   records?: MockRecord[]
   children?: MockChild[]
+  // SOT-2734: 要確認（Attention Item）のシード。既定は空（レーン非表示）で既存スペックは不変。
+  attentionItems?: MockAttentionItem[]
   // SOT-1595: 写真削除ダイアログの「関連タスクも削除」チェックボックスは
   // linked-task-count > 0 のときだけ出る。テストで件数を固定するためのフック。
   linkedTaskCount?: number
@@ -140,6 +160,7 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
   const menuDays = opts.menuDays ?? []
   // SOT-1435: 子どもストア。既定は空配列（従来どおり「お子さま未登録」）で、既存スペックの挙動は不変。
   const childStore: MockChild[] = opts.children ?? []
+  const attentionStore: MockAttentionItem[] = opts.attentionItems ?? []
   let nextId = Math.max(0, ...store.map(r => r.id)) + 1
   let nextAttId = 1000
   let nextChildId = Math.max(0, ...childStore.map(c => Number(c.id) || 0)) + 1
@@ -188,6 +209,36 @@ export async function installApiMocks(page: Page, opts: MockApiOptions = {}) {
       const idx = childStore.findIndex(c => String(c.id) === childIdMatch[1])
       if (idx !== -1) childStore.splice(idx, 1)
       return json(route, 200, { deleted: true })
+    }
+
+    // --- 要確認（Attention Item, SOT-2734） ---
+    if (path === '/attention-items' || path === '/attention-items/') {
+      if (method === 'GET') {
+        const url = new URL(req.url())
+        const childId = url.searchParams.get('child_id')
+        const sourceInfoId = url.searchParams.get('source_info_id')
+        const reviewStatus = url.searchParams.get('review_status')
+        const items = attentionStore.filter(a =>
+          (!childId || String(a.child_id) === childId) &&
+          (!sourceInfoId || String(a.source_info_id) === sourceInfoId) &&
+          (!reviewStatus || a.review_status === reviewStatus),
+        )
+        return json(route, 200, items)
+      }
+    }
+    const attentionReviewMatch = path.match(/^\/attention-items\/(\w+)\/review$/)
+    if (attentionReviewMatch && method === 'PATCH') {
+      const item = attentionStore.find(a => String(a.id) === attentionReviewMatch[1])
+      if (!item) return json(route, 404, {})
+      const data = JSON.parse(req.postData() || '{}')
+      item.review_status = data.review_status
+      item.reviewed_at = data.review_status === 'unreviewed' ? null : NOW
+      return json(route, 200, item)
+    }
+    const attentionIdMatch = path.match(/^\/attention-items\/(\w+)$/)
+    if (attentionIdMatch && method === 'GET') {
+      const item = attentionStore.find(a => String(a.id) === attentionIdMatch[1])
+      return item ? json(route, 200, item) : json(route, 404, {})
     }
 
     // --- 添付 ---

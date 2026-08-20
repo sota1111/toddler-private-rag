@@ -4,6 +4,7 @@ import { getInfoList, createInfo, getChildren } from '../api';
 import type { NurseryInfo } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import DatedInfoList from '../components/DatedInfoList';
+import AttentionItemsPanel from '../components/AttentionItemsPanel';
 import { INFO_TYPES, STATUS_TYPES } from './infoFormOptions';
 
 // SOT-1313: カレンダー画面（SchedulePage）の「カレンダーの下の予定一覧」と同じ内容を、
@@ -105,6 +106,8 @@ const TasksPage: React.FC = () => {
 
   return (
     <div className="w-full lg:max-w-4xl lg:mx-auto">
+      {/* SOT-2734: やること UI にも「⚠ 要確認（この子向け）」を別レーンで併記する。 */}
+      <AttentionItemsPanel />
       {formOpen && (
         <form
           onSubmit={handleSubmit}
