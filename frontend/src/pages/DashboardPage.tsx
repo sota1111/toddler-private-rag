@@ -6,6 +6,7 @@ import type { Child, NurseryInfo, ReminderItem, ReminderUrgency } from '../types
 import { useI18n } from '../i18n/useI18n';
 import { getStatusDateChipClass, getStatusFilterPillClass, getChildColorClasses } from './infoFormOptions';
 import FavoriteStar from '../components/FavoriteStar';
+import AttentionItemsPanel from '../components/AttentionItemsPanel';
 
 // SOT-1080 / 提案5-A: 緊急度ごとの配色（受動表示ではなく能動的に目を引く）。
 const URGENCY_STYLES: Record<ReminderUrgency, { row: string; chip: string }> = {
@@ -237,6 +238,8 @@ const DashboardPage: React.FC = () => {
 
   return (
     <div className="w-full lg:max-w-6xl lg:mx-auto">
+      {/* SOT-2734: 「⚠ 要確認（この子向け）」を既存の注意事項/リマインドとは別レーンで最上部に併記。 */}
+      <AttentionItemsPanel />
       <ProactiveReminders />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-[1.125rem]">

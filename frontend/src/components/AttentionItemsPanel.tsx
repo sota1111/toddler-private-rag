@@ -1,0 +1,208 @@
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getAttentionItems, reviewAttentionItem, getChildren } from '../api';
+import type { AttentionItem, AttentionReviewStatus, Child } from '../types';
+import { useI18n } from '../i18n/useI18n';
+import { getChildColorClasses } from '../pages/infoFormOptions';
+
+// SOT-2734: 「⚠ 要確認（この子向け）」レーン。おたより登録時に照合エンジン(SOT-2733)が生成した
+// 根拠付き項目を、既存の注意事項カテゴリとは**別レーン**で併記する。保護者が根拠（なぜ）を確認し、
+// 確認済/非該当（誤検出）を分類できる（人間が最終判断）。断定表現は出さない（要確認/情報不足のみ）。
+
+const CONFIDENCE_CHIP: Record<string, string> = {
+  high: 'bg-red-100 text-red-800',
+  medium: 'bg-amber-100 text-amber-800',
+  low: 'bg-slate-100 text-slate-700',
+};
+
+const ChildNameChip: React.FC<{ childId: string | null | undefined; children: Child[] }> = ({
+  childId,
+  children,
+}) => {
+  if (!childId) return null;
+  const child = children.find((c) => String(c.id) === String(childId));
+  if (!child) return null;
+  return (
+    <span
+      className={`text-xs px-2 py-1 rounded-full max-w-[6rem] truncate ${getChildColorClasses(childId, children).chip}`}
+    >
+      {child.name}
+    </span>
+  );
+};
+
+const AttentionCard: React.FC<{ item: AttentionItem; children: Child[] }> = ({ item, children }) => {
+  const { t } = useI18n();
+  const queryClient = useQueryClient();
+  const [showWhy, setShowWhy] = useState(false);
+
+  const mutation = useMutation({
+    mutationFn: (reviewStatus: AttentionReviewStatus) => reviewAttentionItem(item.id, reviewStatus),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['attentionItems'] });
+    },
+  });
+
+  const reviewed = item.review_status !== 'unreviewed';
+  const notApplicable = item.review_status === 'not_applicable';
+  const ev = item.evidence ?? {};
+  const confKey = `attention.confidence.${item.confidence}`;
+  const confLabel = t(confKey) === confKey ? item.confidence : t(confKey);
+  const sourceKey = ev.source ? `attention.source.${ev.source}` : '';
+  const sourceLabel = sourceKey && t(sourceKey) !== sourceKey ? t(sourceKey) : ev.source ?? '';
+
+  // 状態バッジ（要確認 / 情報不足のため要確認）。断定はしない。
+  const statusKey = `attention.status.${item.status}`;
+  const statusLabel = t(statusKey) === statusKey ? t('attention.status.attention') : t(statusKey);
+
+  return (
+    <li
+      className={`rounded-lg border-l-4 px-3 py-2 ${
+        notApplicable ? 'border-slate-300 bg-slate-50 opacity-70' : 'border-red-500 bg-red-50'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span aria-hidden>⚠️</span>
+            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-white/70 text-red-700 border border-red-200">
+              {statusLabel}
+            </span>
+            <span
+              className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                CONFIDENCE_CHIP[item.confidence] ?? 'bg-slate-100 text-slate-700'
+              }`}
+            >
+              {t('attention.evidenceConfidence')}: {confLabel}
+            </span>
+            {reviewed && (
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                {t(`attention.reviewed.${item.review_status}`)}
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-sm font-medium text-foreground break-words">{item.message}</p>
+        </div>
+        <ChildNameChip childId={item.child_id} children={children} />
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setShowWhy((v) => !v)}
+          aria-expanded={showWhy}
+          className="text-xs font-medium px-2 py-1 rounded-md border border-red-200 text-red-700 hover:bg-white/60"
+        >
+          {showWhy ? t('attention.whyHide') : t('attention.why')}
+        </button>
+        <span className="flex-1" />
+        {!reviewed ? (
+          <>
+            <button
+              type="button"
+              disabled={mutation.isPending}
+              onClick={() => mutation.mutate('confirmed')}
+              className="text-xs font-medium px-3 py-1 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {t('attention.confirm')}
+            </button>
+            <button
+              type="button"
+              disabled={mutation.isPending}
+              onClick={() => mutation.mutate('not_applicable')}
+              className="text-xs font-medium px-3 py-1 rounded-md border border-border text-foreground hover:bg-surface-muted disabled:opacity-50"
+            >
+              {t('attention.notApplicable')}
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            disabled={mutation.isPending}
+            onClick={() => mutation.mutate('unreviewed')}
+            className="text-xs font-medium px-3 py-1 rounded-md border border-border text-muted-foreground hover:bg-surface-muted disabled:opacity-50"
+          >
+            {t('attention.reset')}
+          </button>
+        )}
+      </div>
+
+      {showWhy && (
+        <dl className="mt-2 rounded-md bg-white/70 border border-red-100 p-2 text-xs text-foreground space-y-1">
+          {ev.span && (
+            <div className="flex gap-2">
+              <dt className="font-semibold text-muted-foreground shrink-0">{t('attention.evidenceSpan')}:</dt>
+              <dd className="break-words">{ev.span}</dd>
+            </div>
+          )}
+          {ev.profile_item && (
+            <div className="flex gap-2">
+              <dt className="font-semibold text-muted-foreground shrink-0">{t('attention.evidenceProfile')}:</dt>
+              <dd className="break-words">{ev.profile_item}</dd>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <dt className="font-semibold text-muted-foreground shrink-0">{t('attention.evidenceConfidence')}:</dt>
+            <dd>{confLabel}</dd>
+          </div>
+          {sourceLabel && (
+            <div className="flex gap-2">
+              <dt className="font-semibold text-muted-foreground shrink-0">{t('attention.evidenceSource')}:</dt>
+              <dd>{sourceLabel}</dd>
+            </div>
+          )}
+          {item.llm_notes && item.llm_notes.length > 0 && (
+            <div className="flex gap-2">
+              <dt className="font-semibold text-muted-foreground shrink-0">{t('attention.source.llm')}:</dt>
+              <dd className="break-words">{item.llm_notes.join(' / ')}</dd>
+            </div>
+          )}
+        </dl>
+      )}
+    </li>
+  );
+};
+
+// 未確認を先に、次に非該当以外の確認済、最後に非該当（誤検出）を薄く後ろに並べる。
+const reviewOrder = (s: AttentionReviewStatus): number =>
+  s === 'unreviewed' ? 0 : s === 'confirmed' ? 1 : 2;
+
+const AttentionItemsPanel: React.FC = () => {
+  const { t } = useI18n();
+  const attentionQuery = useQuery({ queryKey: ['attentionItems'], queryFn: () => getAttentionItems() });
+  const childrenQuery = useQuery({ queryKey: ['children'], queryFn: getChildren });
+  const childList = childrenQuery.data ?? [];
+
+  const items = attentionQuery.data ?? [];
+
+  // 項目が無いときは（読み込み後は）レーンごと非表示にして掲示板を汚さない。
+  if (attentionQuery.isLoading || items.length === 0) return null;
+
+  const sorted = [...items].sort(
+    (a, b) => reviewOrder(a.review_status) - reviewOrder(b.review_status),
+  );
+
+  return (
+    <div
+      className="bg-surface rounded-2xl shadow-card overflow-hidden mb-6 ring-1 ring-red-100"
+      data-testid="attention-items-panel"
+    >
+      <div className="bg-red-50 text-red-700 flex items-center gap-2 px-4 py-3 font-bold">
+        <span aria-hidden className="text-lg">⚠️</span>
+        <span className="whitespace-nowrap">{t('attention.title')}</span>
+        <span className="ml-auto text-xs font-normal text-red-500 hidden sm:inline">
+          {t('attention.subtitle')}
+        </span>
+      </div>
+      <div className="p-4">
+        <ul className="space-y-2">
+          {sorted.map((item) => (
+            <AttentionCard key={item.id} item={item} children={childList} />
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+};
+
+export default AttentionItemsPanel;

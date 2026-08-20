@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse, Response
 import os
 import logging
 from typing import Optional, Union
-from .. import schemas, storage, ocr, extraction, clock, submission_agent, menu_extraction
+from .. import schemas, storage, ocr, extraction, clock, submission_agent, menu_extraction, care_attention
 from ..upload_security import validate_and_sanitize_upload
 from ..concurrency import run_parallel
 from ..timing import time_block
@@ -13,8 +13,12 @@ from ..repository import (
     get_attachment_repository,
     get_attachment_repo_standalone,
     get_info_repo_standalone,
+    get_care_profile_repo_standalone,
+    get_attention_item_repo_standalone,
     SqliteAttachmentRepository,
     SqliteInfoRepository,
+    SqliteCareProfileRepository,
+    SqliteAttentionItemRepository,
 )
 from ..routers.auth import get_current_user
 
@@ -314,6 +318,18 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja", mun
                 ),
             )
 
+        # SOT-2734: 登録(本登録昇格)完了時に、対象の子の個別配慮プロファイルと照合して
+        # 「要確認（この子向け）」項目を生成・永続化する。best-effort: 失敗しても登録は成功とみなす。
+        # 子ども未紐付け(parent_child_id None)/プロファイル無しのときは何も作らない。
+        if parent_child_id:
+            _generate_attention_items(
+                info_id=info_id,
+                child_id=parent_child_id,
+                owner_id=parent_owner_id,
+                notice_text=safe_text,
+                menu_json=menu_json,
+            )
+
         # draft 昇格で content が確定したので、ここでベクトル化して永続化する (SOT-1294)。
         # best-effort: 失敗しても昇格処理は成功とみなす。
         try:
@@ -334,6 +350,37 @@ def _promote_processing_draft(info_id, safe_text, structured, language="ja", mun
             db = getattr(info_repo, "db", None)
             if db is not None:
                 db.close()
+
+def _generate_attention_items(*, info_id, child_id, owner_id, notice_text, menu_json):
+    """SOT-2734: 背景(登録昇格)経路から要確認(Attention Item)を生成する best-effort ラッパ。
+
+    照合エンジンの生成ロジックは ``care_attention.generate_attention_items`` に委譲し、ここでは
+    背景経路で必要な standalone リポジトリの用意と後始末(SQLite セッション close)のみを担う。
+    親写真の owner を継承してリクエスト経路と分離を揃える。例外は握りつぶす(登録フローを止めない)。
+    """
+    care_repo = None
+    attention_repo = None
+    try:
+        care_repo = get_care_profile_repo_standalone(owner_id=owner_id)
+        attention_repo = get_attention_item_repo_standalone(owner_id=owner_id)
+        care_attention.generate_attention_items(
+            info_id=info_id,
+            child_id=child_id,
+            owner_id=owner_id,
+            notice_text=notice_text,
+            menu_json=menu_json,
+            care_repo=care_repo,
+            attention_repo=attention_repo,
+        )
+    except Exception as e:  # noqa: BLE001 - 生成失敗は登録を止めない
+        logger.warning(f"Attention item generation failed for info {info_id}: {e}")
+    finally:
+        for repo in (care_repo, attention_repo):
+            if isinstance(repo, (SqliteCareProfileRepository, SqliteAttentionItemRepository)):
+                db = getattr(repo, "db", None)
+                if db is not None:
+                    db.close()
+
 
 @router.post("/info/{info_id}/attachments", response_model=schemas.AttachmentResponse)
 async def upload_attachment(

@@ -12,6 +12,8 @@ import type {
   HybridSearchResponse,
   ReminderFeed,
   MenuCalendarResponse,
+  AttentionItem,
+  AttentionReviewStatus,
 } from '../types';
 
 const api = axios.create({
@@ -312,6 +314,28 @@ export const getAttachmentTranscription = async (
     `/attachments/${attId}/transcription`,
     { params: { language } },
   );
+  return response.data;
+};
+
+// SOT-2734: 要確認（この子向け）Attention Item。おたより登録時に生成された根拠付き項目を取得する。
+// child_id / source_info_id / review_status で絞り込める（UI のレーン表示・根拠導線で利用）。
+export const getAttentionItems = async (params?: {
+  child_id?: string;
+  source_info_id?: string;
+  review_status?: AttentionReviewStatus;
+}): Promise<AttentionItem[]> => {
+  const response = await api.get<AttentionItem[]>('/attention-items', { params });
+  return response.data;
+};
+
+// SOT-2734: 保護者が「確認済 / 非該当（誤検出） / 未確認へ戻す」を分類する（人間が最終判断）。
+export const reviewAttentionItem = async (
+  id: number | string,
+  reviewStatus: AttentionReviewStatus,
+): Promise<AttentionItem> => {
+  const response = await api.patch<AttentionItem>(`/attention-items/${id}/review`, {
+    review_status: reviewStatus,
+  });
   return response.data;
 };
 
