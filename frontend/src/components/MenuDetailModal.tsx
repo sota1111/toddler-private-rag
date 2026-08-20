@@ -2,13 +2,17 @@ import React from 'react';
 import type { MenuDay } from '../types';
 import { useI18n } from '../i18n/useI18n';
 import { pickMenuProtein } from '../utils/menuProtein';
+import { detectMenuAllergens } from '../utils/menuAllergens';
 
 // menu-calendar: カレンダーの「献立」モードで日付をタップしたときに、その日の献立を
 // すべて表示するモーダル。カレンダーのセルは省スペースのため主菜1品のみを出し、詳細は
 // ここで（給食・午前/午後おやつ・主要食材3色・栄養価）を表示する。
+// SOT-2746: 併せて、その日の献立に含まれ得るアレルゲン（特定原材料8品目）を表示する。
 
 interface Props {
   day: MenuDay;
+  // 登録済み個別配慮プロファイルのアレルゲン（正規形キー）の和集合。一致分を強調する。
+  profileAllergens?: ReadonlySet<string>;
   onClose: () => void;
 }
 
@@ -22,7 +26,7 @@ const List: React.FC<{ label: string; items?: string[] }> = ({ label, items }) =
   );
 };
 
-const MenuDetailModal: React.FC<Props> = ({ day, onClose }) => {
+const MenuDetailModal: React.FC<Props> = ({ day, profileAllergens, onClose }) => {
   const { t } = useI18n();
   const mi = day.main_ingredients;
   const under3 = day.nutrition?.under3;
@@ -30,6 +34,10 @@ const MenuDetailModal: React.FC<Props> = ({ day, onClose }) => {
   const hasIngredients =
     mi && (mi.red.length || mi.yellow.length || mi.green.length || mi.other.length);
   const hasNutrition = Boolean(under3 || over3);
+
+  // SOT-2746: その日の献立に含まれ得るアレルゲン。登録済みプロファイルと一致するものは強調する。
+  const detectedAllergens = detectMenuAllergens(day);
+  const profile = profileAllergens ?? new Set<string>();
 
   const fmtNum = (v?: number | null): string =>
     v === null || v === undefined ? '—' : String(v);
@@ -67,6 +75,34 @@ const MenuDetailModal: React.FC<Props> = ({ day, onClose }) => {
           <List label={t('menu.morningSnack')} items={day.morning_snack} />
           <List label={t('menu.lunch')} items={day.lunch} />
           <List label={t('menu.afternoonSnack')} items={day.afternoon_snack} />
+
+          {detectedAllergens.length > 0 ? (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800">
+                <span aria-hidden>⚠️</span>
+                <span>{t('menu.allergyTitle')}</span>
+              </div>
+              <p className="mt-0.5 text-[11px] text-amber-700">{t('menu.allergyNote')}</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {detectedAllergens.map((key) => {
+                  const isMatch = profile.has(key);
+                  return (
+                    <span
+                      key={key}
+                      className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
+                        isMatch
+                          ? 'bg-red-100 text-red-800 border-red-300'
+                          : 'bg-white text-amber-800 border-amber-300'
+                      }`}
+                    >
+                      {isMatch ? '⚠️ ' : ''}
+                      {t(`careProfile.allergen.${key}`)}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
 
           {hasIngredients ? (
             <div className="mt-3 border-t border-border pt-3">

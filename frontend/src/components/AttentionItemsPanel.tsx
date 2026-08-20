@@ -167,13 +167,22 @@ const AttentionCard: React.FC<{ item: AttentionItem; children: Child[] }> = ({ i
 const reviewOrder = (s: AttentionReviewStatus): number =>
   s === 'unreviewed' ? 0 : s === 'confirmed' ? 1 : 2;
 
+// SOT-2746: 掲示板の「要確認」は直近1週間の項目のみ表示する（古い照合結果で掲示板を埋めない）。
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const isWithinLastWeek = (createdAt: string): boolean => {
+  const t = new Date(createdAt).getTime();
+  if (Number.isNaN(t)) return true; // 日付が壊れている項目は落とさず表示する（フェイルオープン）。
+  return Date.now() - t <= ONE_WEEK_MS;
+};
+
 const AttentionItemsPanel: React.FC = () => {
   const { t } = useI18n();
   const attentionQuery = useQuery({ queryKey: ['attentionItems'], queryFn: () => getAttentionItems() });
   const childrenQuery = useQuery({ queryKey: ['children'], queryFn: getChildren });
   const childList = childrenQuery.data ?? [];
 
-  const items = attentionQuery.data ?? [];
+  // SOT-2746: 直近1週間に生成された項目のみに絞り込む。
+  const items = (attentionQuery.data ?? []).filter((item) => isWithinLastWeek(item.created_at));
 
   // 項目が無いときは（読み込み後は）レーンごと非表示にして掲示板を汚さない。
   if (attentionQuery.isLoading || items.length === 0) return null;
