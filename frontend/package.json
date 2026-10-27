@@ -35,5 +35,8 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.62.1",
     "vite": "^8.0.12"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "^1.14.6"
   }
 }

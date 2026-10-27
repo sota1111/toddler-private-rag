@@ -1,5 +1,5 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -19,6 +19,8 @@ RUN npm run build
 
 # Production stage
 FROM nginx:alpine
+# Pull OS security patches newer than the base image (openssl, curl, expat, ...).
+RUN apk upgrade --no-cache
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/templates/default.conf.template
 COPY start-nginx.sh /start-nginx.sh
