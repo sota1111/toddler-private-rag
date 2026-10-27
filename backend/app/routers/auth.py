@@ -234,10 +234,11 @@ def _issue_session_response(
     """allowlist を確認し、検証済みメールから署名付きセッション cookie を発行する。
 
     email/password と Google 認証で共通のセッション発行ロジック（SOT-1431 / SOT-1487）。
-    ``enforce_allowlist=False`` のときは allowlist 判定を省略する（SOT-1497: Google 認証は
-    検証済みメールを持つ任意のユーザーに使用を許可するため）。
+    ``enforce_allowlist=False`` のときは allowlist 判定を省略する（ゲスト(デモ)ログイン専用）。
+    メールは大文字小文字を区別せずに照合する。
     """
-    if enforce_allowlist and allowed_emails and email not in allowed_emails:
+    allowed = {e.strip().lower() for e in allowed_emails}
+    if enforce_allowlist and allowed and (email or "").strip().lower() not in allowed:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="このメールアドレスは許可されていません",
@@ -305,15 +306,12 @@ def create_google_session(request: GoogleSessionRequest):
     パスキー要件は Google 認証で充足する、という方針に基づく。フロントエンドは Firebase の
     Google サインインで得た ID トークンを送り、サーバ側で検証してからセッションを発行する。
 
-    SOT-1497: Google 認証の場合は allowlist（``ALLOWED_USER_EMAILS``）による制限を行わず、
-    検証済みメールを持つ任意の Google アカウントに使用を許可する（``enforce_allowlist=False``）。
-    メール/パスワード認証は従来どおり allowlist で制限される。
+    Google 認証もメール/パスワード認証と同じく allowlist（``ALLOWED_USER_EMAILS``）で制限する
+    （SOT-1497 の「任意の Google アカウントを許可」は廃止。利用者を許可済みアカウントに限定する）。
     """
     auth_secret, api_key, allowed_emails = _require_auth_config()
     email = _verify_google_id_token(request.id_token, api_key)
-    return _issue_session_response(
-        email, auth_secret, allowed_emails, enforce_allowlist=False
-    )
+    return _issue_session_response(email, auth_secret, allowed_emails)
 
 
 @router.get("/demo/available")
