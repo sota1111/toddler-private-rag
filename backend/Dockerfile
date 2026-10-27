@@ -7,8 +7,11 @@ RUN apt-get update && apt-get upgrade -y \
     tesseract-ocr-jpn \
     poppler-utils \
     && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir -r requirements.txt
+# Packaging tools (pip/setuptools/wheel and ensurepip's bundled wheels) are only needed at
+# build time; drop them so their vendored copies (urllib3, msgpack, ...) don't ship.
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip uninstall -y pip setuptools wheel \
+    && rm -rf /usr/local/lib/python3.11/ensurepip/_bundled
 COPY . .
 # SQLite (DATABASE_TYPE=sqlite, default) writes to ./data/app.db relative to WORKDIR=/app.
 # Create the directory so Base.metadata.create_all() can open the DB file on Cloud Run.
